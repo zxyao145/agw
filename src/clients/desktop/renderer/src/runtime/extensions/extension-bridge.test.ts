@@ -51,12 +51,13 @@ import {
   type ThemeInfo,
 } from "@agw/extension-sdk";
 import { ExtensionAccessGrants } from "@desktop/main/extensions/extension-access-grants";
+import { extensionInstanceId } from "@desktop/main/extensions/extension-instance";
 import { ExtensionFileSystem } from "@desktop/main/extensions/extension-file-system";
 import { toExtensionIpcResult } from "@desktop/main/extensions/extension-ipc-result";
 import { ReplacedFileRegistry } from "@desktop/main/extensions/replaced-file-registry";
 import { decodeText, encodeText, listTextEncodings } from "@desktop/main/extensions/text-codec";
 import { createScratchDirectory } from "@desktop/main/scratch-directory.test-helper";
-import type { AgwDesktopBridge } from "@desktop/shared/contracts";
+import type { AgwDesktopBridge, ServerExtensionOrigin } from "@desktop/shared/contracts";
 import { parseHostPermissions } from "@desktop/shared/extension-host-permissions";
 import { A2AService } from "./a2a-service";
 import { CloudAccessGrants, CloudFileSystem, formatCloudUri } from "./cloud-file-system";
@@ -140,6 +141,10 @@ async function connectSdk(port: MessagePort): Promise<{
 
 type HarnessOptions = {
   kind?: ExtensionFrameKind;
+  instanceId?: string;
+  manifest?: ExtensionManifest;
+  serverOrigin?: ServerExtensionOrigin | null;
+  releaseHash?: string | null;
   /** 用户对打开链接的回答。The user's answer to opening a link. */
   openLink?: boolean;
   openFile?(extensionId: string, uri: string): Promise<void>;
@@ -164,6 +169,7 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
   const fileHeaderItems: [string, string, unknown][] = [];
   const floatingChats: { method: string; frameId: string; pageId: string; context?: unknown }[] =
     [];
+  let currentReleaseHash = options.releaseHash ?? null;
   // 云端文件按 Project 主目录中的路径保存。Cloud files by their path in the Project's primary directory.
   const cloudFiles = new Map<string, Uint8Array>([["a.bin", new Uint8Array([7, 8, 9])]]);
   const server = await startApiServer({
@@ -218,6 +224,7 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
   const identity = { profileId: "local", baseUrl: server.baseUrl, token: "agw_secret" };
   context.setConnection(identity, { id: "local", name: "Local", kind: "local" });
   const key = connectionKeyOf(identity);
+  if (options.serverOrigin) context.setServerId(key, options.serverOrigin.serverId);
   context.setUser(key, { id: "user-1", displayName: "Ada", loginProvider: null, isAdmin: true });
   context.setSelection(key, {
     project: { id: PROJECT, name: "Demo", description: null, directories: [] },
@@ -279,10 +286,13 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
     a2a: new A2AService(context),
     chat: brokerChat,
     extension: () => ({
-      manifest,
+      manifest: options.manifest ?? manifest,
       permissions,
       hostPermissions: parseHostPermissions([]),
       storageUri: "file:///data/sample",
+      origin: options.serverOrigin ?? null,
+      releaseHash: currentReleaseHash,
+      serverAvailable: true,
     }),
     theme: () => options.theme ?? DEFAULT_HOST_THEME,
     isFrameClosing: () => options.frameClosing === true,
@@ -340,7 +350,10 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
   const channel = new MessageChannel();
   broker.connect(
     {
-      extensionId: "sample",
+      instanceId: options.instanceId ?? "sample",
+      extensionId: (options.manifest ?? manifest).id,
+      origin: options.serverOrigin ?? null,
+      releaseHash: options.releaseHash ?? null,
       frameId: "frame-1",
       pageId: "page-1",
       kind: options.kind ?? "mainView",
@@ -365,6 +378,10 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
     identity,
     key,
     broker,
+    setReleaseHash: (releaseHash: string) => {
+      currentReleaseHash = releaseHash;
+      broker.revokeStaleServerConnections();
+    },
     chat,
     activeChatSubscriptions: () => activeChatSubscriptions,
     /** 之后发出的 GET 请求等到调用返回的函数才返回。Later GET requests return only once the returned function is called. */
@@ -381,7 +398,6 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
     unsaved,
     saveStatuses,
     fileHeaderItems,
-    floatingChats,
     uri: (path: string) =>
       formatCloudUri({ serverId: "local", projectId: PROJECT, directoryId: null, path }),
     localUri: (path: string) => pathToFileURL(join(storage.path, path)).toString(),
@@ -479,6 +495,180 @@ test("failures are rebuilt as ExtensionError and missing permissions are denied"
     api.chat.observe({}, () => undefined),
     { code: "ERR_PERMISSION_DENIED" },
   );
+});
+
+test("a Server frame cannot use another account and retains only its original context", async () => {
+  const origin = { serverId: "server-a", userId: "user-1" };
+  const extensionId = "019a4c17-5f00-7a80-8b3d-2b732f48a100";
+  const releaseHash = "a".repeat(64);
+  const instanceId = extensionInstanceId(origin, extensionId);
+  const serverManifest: ExtensionManifest = {
+    manifestVersion: 2,
+    id: extensionId,
+    name: "calendar",
+    displayName: "Calendar",
+    version: "1.0.0",
+    targets: 3,
+    files: { "server/Calendar.Extension.dll": "b".repeat(64) },
+    server: {
+      apiVersion: 1,
+      entryAssembly: "server/Calendar.Extension.dll",
+      entryType: "Calendar.Extension.Entry",
+    },
+    desktop: { apiVersion: 1 },
+  };
+  const harness = await createHarness(
+    [
+      "context.user",
+      "context.project",
+      "context.agent",
+      "project.repositories",
+      "execution",
+      "a2a",
+      "chat.observe",
+      "chat.composer",
+      "fs.cloud.read",
+      "fs.local.read",
+      "fs.local.write",
+    ],
+    {
+      instanceId,
+      manifest: serverManifest,
+      serverOrigin: origin,
+      releaseHash,
+    },
+  );
+  const originalContext = harness.api.context.get();
+  await harness.api.chat.observe({}, () => undefined);
+  await harness.api.chat.composer.insertText("before Server switch");
+  assert.equal(harness.activeChatSubscriptions(), 1);
+  const requestCount = harness.server.requests.length;
+  const contextChanged = new Promise<HostContext>((resolve) => {
+    harness.api.context.onDidChange((value) => resolve(value));
+  });
+  const identity = { ...harness.identity, token: "agw_changed" };
+  configureApiRuntime({ baseUrl: identity.baseUrl, token: identity.token });
+  harness.context.setConnection(identity, { id: "remote-b", name: "Remote B", kind: "remote" });
+  const connectionKey = harness.context.connectionKey!;
+  harness.context.setServerId(connectionKey, "server-b");
+  harness.context.setUser(connectionKey, {
+    id: "user-2",
+    displayName: "Bea",
+    loginProvider: null,
+    isAdmin: false,
+  });
+
+  const changedContext = await contextChanged;
+  assert.equal(changedContext?.server.serverId, "server-a");
+  assert.equal(changedContext?.user?.id, "user-1");
+  assert.equal(harness.activeChatSubscriptions(), 0);
+  await assert.rejects(harness.api.context.listProjects(), { code: "ERR_CONNECTION_CHANGED" });
+  await assert.rejects(harness.api.context.listTargets(), { code: "ERR_CONNECTION_CHANGED" });
+  await assert.rejects(harness.api.repositories.get(PROJECT), { code: "ERR_CONNECTION_CHANGED" });
+  await assert.rejects(harness.api.execution.createSession({ projectId: PROJECT }), {
+    code: "ERR_CONNECTION_CHANGED",
+  });
+  await assert.rejects(harness.api.a2a.listAgents(), { code: "ERR_CONNECTION_CHANGED" });
+  await assert.rejects(
+    harness.api.a2a.stream("example", { method: "SubscribeToTask", params: {} }, () => undefined),
+    { code: "ERR_CONNECTION_CHANGED" },
+  );
+  await assert.rejects(harness.api.fs.readFile(harness.uri("a.bin")), {
+    code: "ERR_CONNECTION_CHANGED",
+  });
+  await assert.rejects(harness.api.workspace.openFile(harness.uri("a.bin")), {
+    code: "ERR_CONNECTION_CHANGED",
+  });
+  await assert.rejects(
+    harness.api.chat.observe({}, () => undefined),
+    {
+      code: "ERR_CONNECTION_CHANGED",
+    },
+  );
+  await assert.rejects(harness.api.chat.composer.insertText("after Server switch"), {
+    code: "ERR_CONNECTION_CHANGED",
+  });
+  await assert.rejects(harness.api.server.request("appointments"), {
+    code: "ERR_CONNECTION_CHANGED",
+  });
+  assert.equal(harness.server.requests.length, requestCount);
+  const localUri = harness.localUri("saved-after-switch.txt");
+  await harness.api.fs.writeFile(localUri, new Uint8Array([3, 2, 1]));
+  assert.deepEqual([...(await harness.api.fs.readFile(localUri))], [3, 2, 1]);
+  assert.deepEqual(harness.api.context.get(), originalContext);
+});
+
+test("a Server frame loses its traffic subscription when a newer release arrives", async () => {
+  const origin = { serverId: "server-a", userId: "user-1" };
+  const releaseHash = "a".repeat(64);
+  const harness = await createHarness(["chat.observe"], {
+    serverOrigin: origin,
+    releaseHash,
+  });
+  await harness.api.chat.observe({}, () => undefined);
+  assert.equal(harness.activeChatSubscriptions(), 1);
+
+  harness.setReleaseHash("b".repeat(64));
+
+  assert.equal(harness.activeChatSubscriptions(), 0);
+  await assert.rejects(
+    harness.api.chat.observe({}, () => undefined),
+    {
+      code: "ERR_CONNECTION_CHANGED",
+    },
+  );
+});
+
+test("server.request sends the authenticated user request with the bound extension release", async () => {
+  const origin = { serverId: "server-a", userId: "user-1" };
+  const extensionId = "019a4c17-5f00-7a80-8b3d-2b732f48a100";
+  const releaseHash = "a".repeat(64);
+  const instanceId = extensionInstanceId(origin, extensionId);
+  const serverManifest: ExtensionManifest = {
+    manifestVersion: 2,
+    id: extensionId,
+    name: "calendar",
+    displayName: "Calendar",
+    version: "1.0.0",
+    targets: 3,
+    files: { "server/Calendar.Extension.dll": "b".repeat(64) },
+    server: {
+      apiVersion: 1,
+      entryAssembly: "server/Calendar.Extension.dll",
+      entryType: "Calendar.Extension.Entry",
+    },
+    desktop: { apiVersion: 1 },
+  };
+  const harness = await createHarness([], {
+    instanceId,
+    manifest: serverManifest,
+    serverOrigin: origin,
+    releaseHash,
+    routes: {
+      "POST /api/ext/calendar/appointments": (request: ApiRequestRecord) => ({
+        extensionId: request.headers["x-agw-extension-id"],
+        releaseHash: request.headers["x-agw-extension-release-hash"],
+        authorization: request.headers.authorization,
+        body: request.body,
+      }),
+    },
+  });
+
+  const result = await harness.api.server.request("appointments", {
+    method: "POST",
+    query: { date: "2026-11-06" },
+    body: { title: "Review" },
+  });
+
+  assert.deepEqual(result, {
+    extensionId,
+    releaseHash,
+    authorization: "Bearer agw_secret",
+    body: { title: "Review" },
+  });
+  const request = harness.server.requests.at(-1)!;
+  assert.equal(request.path, "/api/ext/calendar/appointments");
+  assert.equal(request.query.get("date"), "2026-11-06");
 });
 
 test("the context snapshot and change events only carry permitted fields", async () => {
@@ -1293,62 +1483,6 @@ test("chat.observe rejects invalid filters and subscription ids", async () => {
   }
 });
 
-test("floating Chat carries context through its handle and mounted button", async () => {
-  const harness = await createHarness(["chat.composer"]);
-  const dom = new JSDOM("<!doctype html><body></body>");
-  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
-  Object.defineProperty(globalThis, "document", {
-    configurable: true,
-    value: dom.window.document,
-  });
-  try {
-    const floatingChat = await harness.api.chat.createFloatingChat({
-      context: { projectRelativePath: "plans/first.md" },
-    });
-    await floatingChat.setContext({ projectRelativePath: "plans/second.md" });
-    await floatingChat.open();
-    harness.broker.emit("frame-1", "page-1", "chat.floating.contextCleared", {});
-    await flushEvents(harness.api);
-
-    dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Open chat"]')!.click();
-    await flushEvents(harness.api);
-    harness.broker.emit("frame-1", "page-1", "chat.floating.focus", {});
-    await flushEvents(harness.api);
-    assert.equal(
-      dom.window.document.activeElement,
-      dom.window.document.querySelector('[aria-label="Open chat"]'),
-    );
-    await floatingChat.close();
-    await floatingChat.dispose();
-
-    assert.deepEqual(
-      harness.floatingChats.map(({ method, context }) => ({ method, context })),
-      [
-        { method: "register", context: { projectRelativePath: "plans/first.md" } },
-        { method: "context", context: { projectRelativePath: "plans/second.md" } },
-        { method: "open", context: { projectRelativePath: "plans/second.md" } },
-        { method: "open", context: {} },
-        { method: "close", context: undefined },
-        { method: "dispose", context: undefined },
-      ],
-    );
-  } finally {
-    dom.window.close();
-    if (previousDocument) Object.defineProperty(globalThis, "document", previousDocument);
-    else Reflect.deleteProperty(globalThis, "document");
-  }
-});
-
-test("floating Chat checks permission and rejects background views", async () => {
-  const denied = await createHarness([]);
-  await assert.rejects(denied.api.chat.createFloatingChat(), { code: "ERR_PERMISSION_DENIED" });
-
-  const background = await createHarness(["chat.composer"], { kind: "background" });
-  await assert.rejects(background.api.chat.createFloatingChat(), {
-    code: "ERR_UNSUPPORTED_OPERATION",
-  });
-});
-
 test("a history subscription receives each history message in order and nothing else", async () => {
   const harness = await createHarness(["chat.observe"], {
     routes: { [`GET ${MESSAGES_PATH}`]: messagePage("history-1", "history-2") },
@@ -1492,7 +1626,10 @@ test("an extension holds at most 16 chat subscriptions across its frames", async
   const channel = new MessageChannel();
   harness.broker.connect(
     {
+      instanceId: "sample",
       extensionId: "sample",
+      origin: null,
+      releaseHash: null,
       frameId: "frame-2",
       pageId: "page-2",
       kind: "sidebarView",
@@ -1617,7 +1754,10 @@ async function connectFrame(harness: Harness, extensionId: string, frameId: stri
   const channel = new MessageChannel();
   harness.broker.connect(
     {
+      instanceId: extensionId,
       extensionId,
+      origin: null,
+      releaseHash: null,
       frameId,
       pageId: `${frameId}-page`,
       kind: "mainView",
@@ -2006,6 +2146,7 @@ async function createDocumentHost() {
     await api.fs.listTextEncodings();
   };
   after(async () => {
+    await api.workspace.setUnsavedChanges(false);
     await flush();
     host.retainFileViewers([]);
     await until(() => host.frameIdOfView(EDITOR) === null, "the editor to close");

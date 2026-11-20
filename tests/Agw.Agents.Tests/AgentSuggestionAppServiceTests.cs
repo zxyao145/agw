@@ -4,6 +4,7 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Controllers;
 using Agw.Agents.ExternalAgents;
+using Agw.Extensions.Contracts;
 using Agw.Files;
 using Agw.Files.Abstracts;
 using Agw.Projects.Contracts.Runtime;
@@ -27,11 +28,22 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
-public class AgentSuggestionAppServiceTests : IDisposable
+public class AgentSuggestionAppServiceTests : IAsyncLifetime
 {
     private readonly TestAgentDatabase _database = new();
+    private readonly List<ServiceProvider> _serviceProviders = [];
 
-    public void Dispose() => _database.Dispose();
+    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+
+    public async ValueTask DisposeAsync()
+    {
+        foreach (ServiceProvider serviceProvider in _serviceProviders)
+        {
+            await serviceProvider.DisposeAsync();
+        }
+
+        _database.Dispose();
+    }
 
     [Fact]
     public async Task GetSuggestionsAsync_SystemAgent_MergesDirectProjectAndAgentCapabilities()
@@ -344,8 +356,17 @@ public class AgentSuggestionAppServiceTests : IDisposable
             skill.CreateBy ??= "tester";
         }
 
-        var configuration = new ConfigurationBuilder().Build();
-        var workspaceRoot = Path.Combine(AppContext.BaseDirectory, ".scratch", "agent-suggestion-workspace");
+        var workspaceRoot = Path.Combine(
+            AppContext.BaseDirectory,
+            ".scratch",
+            "agent-suggestion-workspace",
+            Guid.CreateVersion7().ToString("N")
+        );
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?> { ["Extensions:Directory"] = Path.Combine(workspaceRoot, "extensions") }
+            )
+            .Build();
         var services = new ServiceCollection();
         services.AddHttpClient();
         services.AddSingleton(
@@ -356,15 +377,19 @@ public class AgentSuggestionAppServiceTests : IDisposable
             )
         );
         services.AddFiles(configuration);
-        using var serviceProvider = services.BuildServiceProvider();
+        services.AddTestExtensions(configuration);
+        var serviceProvider = services.BuildServiceProvider();
+        _serviceProviders.Add(serviceProvider);
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
+            serviceProvider.GetRequiredService<IExtensionGenerationCatalog>(),
+            contextualTools:
             [
                 new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>()),
                 new ShellContextualTool(configuration, serviceProvider.GetRequiredService<IProjectWorkspaceAccess>()),
             ],
-            new ToolBlockRegistry([
+            toolBlockRegistry: new ToolBlockRegistry([
                 new TodoToolBlock(),
                 new ModeToolBlock(),
                 new FileReadonlyAccessToolBlock(new UnusedFileSystemResolver()),

@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { extensionDisplayName } from "@desktop/shared/extension-manifest";
+
 import {
   Badge,
   Button,
@@ -256,7 +258,9 @@ function InstallErrorsDialog({
     <Dialog open={preview !== null} onOpenChange={(open) => (open ? undefined : onClose())}>
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>{manifest ? `Install ${manifest.name}` : "Install extension"}</DialogTitle>
+          <DialogTitle>
+            {manifest ? `Install ${extensionDisplayName(manifest)}` : "Install extension"}
+          </DialogTitle>
           <DialogDescription>
             {manifest
               ? `Version ${manifest.version} cannot be installed.`
@@ -297,7 +301,8 @@ function UninstallDialog({
       <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>
-            Uninstall {extension?.installed.manifest?.name ?? extension?.id}?
+            Uninstall{" "}
+            {extensionDisplayName(extension?.installed.manifest) ?? extension?.extensionId}?
           </DialogTitle>
           <DialogDescription>The extension is removed from Agw Desktop.</DialogDescription>
         </DialogHeader>
@@ -339,7 +344,9 @@ function ExtensionCard({
   const returnTo = useSearchParams().get("returnTo");
   // 激活期间可以停用（立即完成）；停用期间等待完成。Disabling is allowed while activating; wait while deactivating.
   const busy = extension.status === "deactivating";
-  const canEnable = installed.validation === "valid";
+  const canEnable =
+    installed.validation === "valid" &&
+    (installed.source !== "server" || installed.serverAvailable !== false || installed.enabled);
   const themes = themeTitles(manifest);
   const categories = extensionCategories(extension);
   return (
@@ -351,7 +358,9 @@ function ExtensionCard({
         <div className="min-w-0 flex-1">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-medium">{manifest?.name ?? extension.id}</h2>
+              <h2 className="font-medium">
+                {extensionDisplayName(manifest) ?? extension.extensionId}
+              </h2>
               {manifest ? (
                 <span className="text-xs text-muted-foreground">{manifest.version}</span>
               ) : null}
@@ -360,6 +369,11 @@ function ExtensionCard({
               >
                 {STATUS_LABELS[extension.status]}
               </Badge>
+              {extension.pendingUpdate ? (
+                <Badge variant="outline" data-testid="extension-pending-update">
+                  Update pending
+                </Badge>
+              ) : null}
               {installed.permissionApprovalRequired ? (
                 <Badge variant="outline">Permission approval required</Badge>
               ) : null}
@@ -403,7 +417,7 @@ function ExtensionCard({
           ) : null}
         </div>
         <Switch
-          aria-label={`Enable ${manifest?.name ?? extension.id}`}
+          aria-label={`Enable ${extensionDisplayName(manifest) ?? extension.extensionId}`}
           checked={installed.enabled && canEnable}
           disabled={!canEnable || busy}
           onCheckedChange={(checked) => {
@@ -415,12 +429,12 @@ function ExtensionCard({
       <div className="mt-3 flex flex-wrap justify-end gap-2">
         <TooltipIconButton
           label="Reload"
-          disabled={!canEnable}
+          disabled={!canEnable || installed.serverAvailable === false}
           onClick={() => run(() => host.reload(extension.id))}
         >
           <RotateCw />
         </TooltipIconButton>
-        {manifest?.contributes?.settings ? (
+        {installed.serverAvailable !== false && manifest?.contributes?.settings ? (
           <TooltipIconButton label="Settings" asChild>
             <Link
               href={buildSettingsHref(
@@ -438,9 +452,11 @@ function ExtensionCard({
         >
           <FolderOpen />
         </TooltipIconButton>
-        <TooltipIconButton label="Uninstall" onClick={() => onUninstall(extension)}>
-          <Trash2 />
-        </TooltipIconButton>
+        {installed.source !== "server" ? (
+          <TooltipIconButton label="Uninstall" onClick={() => onUninstall(extension)}>
+            <Trash2 />
+          </TooltipIconButton>
+        ) : null}
       </div>
       {manifest ? (
         <Collapsible className="mt-3">
@@ -531,7 +547,7 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
       await host.prepareReplace(preview.manifest.id);
       const installed = await bridge.commitExtensionInstall(preview.installId);
       await host.afterInstall(installed.id);
-      toast.success(`${installed.manifest?.name ?? installed.id} installed.`);
+      toast.success(`${extensionDisplayName(installed.manifest) ?? installed.id} installed.`);
     });
 
   return (
@@ -584,6 +600,15 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
           </TooltipIconButton>
         </div>
       </header>
+
+      {snapshot.serverSyncError ? (
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/30 p-3 text-sm text-destructive"
+        >
+          Server extensions could not synchronize: {snapshot.serverSyncError}
+        </p>
+      ) : null}
 
       {snapshot.safeMode ? (
         <div

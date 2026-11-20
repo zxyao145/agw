@@ -19,6 +19,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../src/server/Agw.Files/Agw.Files.csproj" />
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Extensions/Agw.Extensions.csproj" />
     <ProjectReference Include="../../src/server/Agw.Tools/Agw.Tools.csproj" />
     <ProjectReference
       Include="../../src/server/Agw.Tools.Generators/Agw.Tools.Generators.csproj"

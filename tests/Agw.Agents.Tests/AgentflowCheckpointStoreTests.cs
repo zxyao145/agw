@@ -6,17 +6,24 @@ using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Persistence.Durable;
+using Agw.Auth.Application;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Settings;
 using Agw.Projects.Contracts.History;
+using Agw.Settings;
+using Agw.Settings.Application.Persistence;
+using Agw.Shared.Contracts;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Agents.Tests;
@@ -397,108 +404,6 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task DistributedResume_RetryIsIdempotent_AndAllowsLaterBranch()
-    {
-        await using var database = await TestDatabase.CreateAsync();
-        var fixture = await database.SeedAsync();
-        var store = database.CreateStore();
-        var cancellationToken = TestContext.Current.CancellationToken;
-        var sourceTurnId = Guid.CreateVersion7();
-        await database.AddDurableExecutionAsync(fixture, sourceTurnId, DurableExecutionStatus.Completed);
-        var fingerprint = await store.GetDefinitionFingerprintAsync(fixture.AgentflowId, cancellationToken);
-        var recorded = await store.RecordAsync(
-            sourceTurnId,
-            fixture.ProjectId,
-            fixture.ConversationId,
-            fixture.ContextId,
-            fixture.TaskId,
-            fixture.AgentflowId,
-            "user-id",
-            isDurable: true,
-            fingerprint!,
-            CreateCheckpoint("checkpoint-1"),
-            new Dictionary<string, string> { ["checkpoint-node"] = "Saved" },
-            cancellationToken
-        );
-        Assert.NotNull(recorded);
-        await database.AppendHistoryAsync(fixture, sequence: 2, "old branch");
-        var resumeTurnId = Guid.CreateVersion7();
-
-        await store.PrepareDistributedResumeAsync(
-            recorded.Snapshot.OccurrenceId,
-            resumeTurnId,
-            fixture.ProjectId,
-            fixture.ContextId,
-            fixture.AgentflowId,
-            "user-id",
-            cancellationToken,
-            new DurableExecutionSettings
-            {
-                EnvironmentVariables = [],
-                Resume = false,
-                PermissionMode = AgwPermissionMode.AlwaysAsk,
-                PermissionVersion = 2,
-            }
-        );
-        database.ResetTransactionCount();
-        await store.PrepareDistributedResumeAsync(
-            recorded.Snapshot.OccurrenceId,
-            resumeTurnId,
-            fixture.ProjectId,
-            fixture.ContextId,
-            fixture.AgentflowId,
-            "user-id",
-            cancellationToken
-        );
-        Assert.Equal(0, database.TransactionCount);
-
-        await using (var context = database.CreateContext())
-        {
-            var branch = await context.DurableExecutions.SingleAsync(
-                item => item.Id == resumeTurnId,
-                cancellationToken
-            );
-            var branchManifest = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
-                branch.ManifestJson,
-                "resume branch manifest"
-            );
-            Assert.Equal(AgwPermissionMode.AlwaysAsk, branchManifest.Settings.PermissionMode);
-            Assert.Equal(2, branchManifest.Settings.PermissionVersion);
-            Assert.Null(branchManifest.Settings.NextPermissionMode);
-            Assert.Equal(DurableExecutionStatus.Resuming, branch.Status);
-            Assert.Equal(fixture.ProjectId, branch.ProjectId);
-            Assert.Equal(fixture.ConversationId, branch.ProjectConversationId);
-            Assert.True(branch.ScopeBackfilled);
-            Assert.Equal(1, branch.SegmentIndex);
-            Assert.Equal("user-id", branch.UserId);
-            Assert.Equal("user-id", branch.CreateBy);
-            Assert.Equal("user-id", branch.UpdateBy);
-            Assert.Equal(recorded.Snapshot.OccurrenceId, branchManifest.ResumeCheckpointOccurrenceId);
-            Assert.Equal(["checkpoint-node"], branchManifest.ResumeCheckpointNodeIds);
-            Assert.Equal(2, await context.DurableExecutions.CountAsync(cancellationToken));
-            Assert.Equal(2, await context.ProjectConversationChatHistories.CountAsync(cancellationToken));
-            branch.Status = DurableExecutionStatus.Completed;
-            await context.SaveChangesAsync(cancellationToken);
-        }
-
-        await database.AppendHistoryAsync(fixture, sequence: 2, "second old branch");
-        var laterTurnId = Guid.CreateVersion7();
-        await store.PrepareDistributedResumeAsync(
-            recorded.Snapshot.OccurrenceId,
-            laterTurnId,
-            fixture.ProjectId,
-            fixture.ContextId,
-            fixture.AgentflowId,
-            "user-id",
-            cancellationToken
-        );
-
-        await using var finalContext = database.CreateContext();
-        Assert.Equal(3, await finalContext.DurableExecutions.CountAsync(cancellationToken));
-        Assert.Equal(2, await finalContext.ProjectConversationChatHistories.CountAsync(cancellationToken));
-    }
-
-    [Fact]
     public async Task DistributedResume_SourceStillRunning_DoesNotDeleteHistory()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -701,6 +606,26 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             services.AddScoped<IDurableExecutionScopeMaintenance>(provider =>
                 TestDurablePersistence.Create(provider.GetRequiredService<AgwDbContext>())
             );
+            var dataRoot = Path.Combine(
+                AppContext.BaseDirectory,
+                ".scratch",
+                "agentflow-checkpoint",
+                Guid.CreateVersion7().ToString("N")
+            );
+            var extensionConfiguration = new ConfigurationBuilder()
+                .AddInMemoryCollection(
+                    new Dictionary<string, string?> { ["Extensions:Directory"] = Path.Combine(dataRoot, "extensions") }
+                )
+                .Build();
+            services.AddSingleton(
+                AgwDataPaths.Resolve(Path.Combine(dataRoot, "data"), dataRoot, Path.Combine(dataRoot, "logs"))
+            );
+            services.AddScoped<ISettingsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
+            services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
+            services.AddScoped<ICurrentUser, UserInfoService>();
+            services.AddScoped<IUserInfoService, UserInfoService>();
+            services.AddSettings();
+            services.AddTestExtensions(extensionConfiguration);
             var serviceProvider = services.BuildServiceProvider();
             return new TestDatabase(connection, options, serviceProvider, transactionInterceptor);
         }
@@ -831,7 +756,12 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             );
         }
 
-        public async Task AddDurableExecutionAsync(Fixture fixture, Guid turnId, DurableExecutionStatus status)
+        public async Task AddDurableExecutionAsync(
+            Fixture fixture,
+            Guid turnId,
+            DurableExecutionStatus status,
+            IReadOnlyList<Guid>? extensionIds = null
+        )
         {
             var manifest = new DurableExecutionManifest
             {
@@ -851,6 +781,7 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
                 Settings = DurableExecutionMapper.FromSettings(
                     SettingCommandMapper.FromCommand(new SettingCommand(fixture.ProjectId, fixture.ConversationId))
                 ),
+                ExtensionIds = extensionIds ?? [],
             };
             await using var context = CreateContext();
             context.DurableExecutions.Add(

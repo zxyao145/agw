@@ -2,10 +2,12 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
+using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
+using Agw.Extensions.Contracts;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
@@ -362,6 +364,7 @@ public sealed class AgentflowCheckpointStore
         await using var historyLock = await _applicationLock
             .AcquireAsync(GetHistoryLockName(projectId, contextId), cancellationToken)
             .ConfigureAwait(false);
+        IReadOnlyList<Guid> extensionIds = [];
         if (resumeTurnId.HasValue)
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
@@ -397,6 +400,16 @@ public sealed class AgentflowCheckpointStore
                     cancellationToken
                 )
                 .ConfigureAwait(false);
+            var source =
+                await dbContext
+                    .DurableExecutions.AsNoTracking()
+                    .SingleOrDefaultAsync(
+                        item => item.Id == target.Record.SourceTurnId && item.UserId == userId,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false)
+                ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
+            extensionIds = ReadExecutionManifest(source).ExtensionIds;
             if (
                 await persistence
                     .RepairAndCheckActiveExecutionsAsync(
@@ -415,97 +428,125 @@ public sealed class AgentflowCheckpointStore
             }
         }
 
-        return await persistence
-            .ExecuteAsync(
-                async (session, token) =>
+        var extensionLeases = new List<IExtensionGenerationLease>(extensionIds.Count);
+        try
+        {
+            if (resumeTurnId.HasValue)
+            {
+                var generations = scope.ServiceProvider.GetRequiredService<IExtensionGenerationCatalog>();
+                foreach (var extensionId in extensionIds.Order())
                 {
-                    var validated = await LoadValidatedResumeCheckpointAsync(
-                            session.Agents,
-                            occurrenceId,
-                            projectId,
-                            contextId,
-                            agentflowId,
-                            userId,
-                            resumeTurnId.HasValue,
-                            token
-                        )
-                        .ConfigureAwait(false);
-                    var record = validated.Record;
-                    var snapshot = validated.Snapshot;
+                    extensionLeases.Add(
+                        await generations.AcquireCurrentAsync(extensionId, cancellationToken).ConfigureAwait(false)
+                    );
+                }
+            }
 
-                    if (resumeTurnId.HasValue)
+            return await persistence
+                .ExecuteAsync(
+                    async (session, token) =>
                     {
-                        var existingResume = await session
-                            .Agents.DurableExecutions.AsNoTracking()
-                            .SingleOrDefaultAsync(item => item.Id == resumeTurnId.Value, token)
-                            .ConfigureAwait(false);
-                        if (existingResume != null)
-                        {
-                            EnsureExistingResumeMatches(existingResume, record.Id, userId);
-                            return new AgentflowCheckpointPersistenceResult<AgentflowCheckpointSnapshot>(
-                                snapshot,
-                                Commit: false
-                            );
-                        }
-
-                        if (
-                            await session
-                                .Agents.DurableExecutions.InConversation(
-                                    projectId,
-                                    record.ProjectConversationId,
-                                    userId
-                                )
-                                .Where(DurableExecutionQueries.Active)
-                                .AnyAsync(token)
-                                .ConfigureAwait(false)
-                        )
-                        {
-                            throw new AgwException(
-                                ErrorCodes.DurableExecutionConflict,
-                                "Stop the active Agentflow execution before resuming a checkpoint."
-                            );
-                        }
-
-                        await RegisterResumeExecutionAsync(
+                        var validated = await LoadValidatedResumeCheckpointAsync(
                                 session.Agents,
-                                record,
-                                resumeTurnId.Value,
+                                occurrenceId,
+                                projectId,
+                                contextId,
+                                agentflowId,
                                 userId,
-                                token,
-                                permissionSettings
+                                resumeTurnId.HasValue,
+                                token
                             )
                             .ConfigureAwait(false);
-                    }
+                        var record = validated.Record;
+                        var snapshot = validated.Snapshot;
 
-                    await session
-                        .DeleteConversationHistoryAfterAsync(
-                            record.ProjectConversationId,
-                            record.BoundarySequence,
-                            token
-                        )
-                        .ConfigureAwait(false);
-                    await session
-                        .Agents.AgentflowCheckpoints.Where(item =>
-                            item.ProjectConversationId == record.ProjectConversationId
-                            && item.BoundarySequence > record.BoundarySequence
-                        )
-                        .ExecuteDeleteAsync(token)
-                        .ConfigureAwait(false);
-                    if (resumeTurnId.HasValue)
-                    {
-                        // 恢复分支是一个新的 Turn：Turn 行与序号 1 的开始事件随执行记录一起提交。
-                        // The resume branch is a new turn: its turn row and the start event with sequence 1 commit with the execution record.
-                        await session.AcceptResumeTurnAsync(resumeTurnId.Value, record, token).ConfigureAwait(false);
-                        AddResumeStartEvent(session.Agents, resumeTurnId.Value, record, userId);
-                    }
-                    return new AgentflowCheckpointPersistenceResult<AgentflowCheckpointSnapshot>(
-                        snapshot,
-                        Commit: true
-                    );
-                },
-                cancellationToken
-            )
-            .ConfigureAwait(false);
+                        if (resumeTurnId.HasValue)
+                        {
+                            var existingResume = await session
+                                .Agents.DurableExecutions.AsNoTracking()
+                                .SingleOrDefaultAsync(item => item.Id == resumeTurnId.Value, token)
+                                .ConfigureAwait(false);
+                            if (existingResume != null)
+                            {
+                                EnsureExistingResumeMatches(existingResume, record.Id, userId);
+                                return new AgentflowCheckpointPersistenceResult<AgentflowCheckpointSnapshot>(
+                                    snapshot,
+                                    Commit: false
+                                );
+                            }
+
+                            if (
+                                await session
+                                    .Agents.DurableExecutions.InConversation(
+                                        projectId,
+                                        record.ProjectConversationId,
+                                        userId
+                                    )
+                                    .Where(DurableExecutionQueries.Active)
+                                    .AnyAsync(token)
+                                    .ConfigureAwait(false)
+                            )
+                            {
+                                throw new AgwException(
+                                    ErrorCodes.DurableExecutionConflict,
+                                    "Stop the active Agentflow execution before resuming a checkpoint."
+                                );
+                            }
+
+                            if (extensionIds.Count > 0)
+                            {
+                                await scope
+                                    .ServiceProvider.GetRequiredService<IExtensionAdmissionValidator>()
+                                    .ValidateEnabledAsync(extensionIds, token)
+                                    .ConfigureAwait(false);
+                            }
+                            await RegisterResumeExecutionAsync(
+                                    session.Agents,
+                                    record,
+                                    resumeTurnId.Value,
+                                    userId,
+                                    token,
+                                    permissionSettings
+                                )
+                                .ConfigureAwait(false);
+                        }
+
+                        await session
+                            .DeleteConversationHistoryAfterAsync(
+                                record.ProjectConversationId,
+                                record.BoundarySequence,
+                                token
+                            )
+                            .ConfigureAwait(false);
+                        await session
+                            .Agents.AgentflowCheckpoints.Where(item =>
+                                item.ProjectConversationId == record.ProjectConversationId
+                                && item.BoundarySequence > record.BoundarySequence
+                            )
+                            .ExecuteDeleteAsync(token)
+                            .ConfigureAwait(false);
+                        if (resumeTurnId.HasValue)
+                        {
+                            // 恢复分支是一个新的 Turn：Turn 行与序号 1 的开始事件随执行记录一起提交。
+                            // The resume branch is a new turn: its turn row and the start event with sequence 1 commit with the execution record.
+                            await session
+                                .AcceptResumeTurnAsync(resumeTurnId.Value, record, token)
+                                .ConfigureAwait(false);
+                            AddResumeStartEvent(session.Agents, resumeTurnId.Value, record, userId);
+                        }
+                        return new AgentflowCheckpointPersistenceResult<AgentflowCheckpointSnapshot>(
+                            snapshot,
+                            Commit: true
+                        );
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            await ExtensionCapabilityCatalog.DisposeLeasesAsync(extensionLeases).ConfigureAwait(false);
+        }
     }
 
     private static async Task<ValidatedResumeCheckpoint> LoadValidatedResumeCheckpointAsync(
@@ -669,6 +710,7 @@ public sealed class AgentflowCheckpointStore
         var selected = permissionSettings ?? manifest.Settings;
         manifest = manifest with
         {
+            ExtensionIds = manifest.ExtensionIds,
             Settings = manifest.Settings with
             {
                 PermissionMode = selected.NextPermissionMode ?? selected.PermissionMode,

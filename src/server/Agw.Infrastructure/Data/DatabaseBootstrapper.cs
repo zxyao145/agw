@@ -1,3 +1,4 @@
+using Agw.Auth.Contracts;
 using Agw.Files.Abstracts;
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data.Encryption;
@@ -17,6 +18,7 @@ public sealed class DatabaseBootstrapper : IDatabaseBootstrapper
     private readonly TimeProvider _timeProvider;
     private readonly AgwDataPaths _paths;
     private readonly IProjectWorkspaceAccess _workspaceAccess;
+    private readonly IServerAuthStatePersistence _authentication;
     private readonly IOptionsMonitor<DatabaseSettings> _databaseSettings;
     private readonly IEncryptedDataProtector _encryptedDataProtector;
     private readonly EntityCreatorInterceptor _entityCreatorInterceptor;
@@ -29,6 +31,7 @@ public sealed class DatabaseBootstrapper : IDatabaseBootstrapper
         TimeProvider timeProvider,
         AgwDataPaths paths,
         IProjectWorkspaceAccess workspaceAccess,
+        IServerAuthStatePersistence authentication,
         IOptionsMonitor<DatabaseSettings> databaseSettings,
         IEncryptedDataProtector encryptedDataProtector,
         EntityCreatorInterceptor entityCreatorInterceptor,
@@ -41,6 +44,7 @@ public sealed class DatabaseBootstrapper : IDatabaseBootstrapper
         _timeProvider = timeProvider;
         _paths = paths;
         _workspaceAccess = workspaceAccess;
+        _authentication = authentication;
         _databaseSettings = databaseSettings;
         _encryptedDataProtector = encryptedDataProtector;
         _entityCreatorInterceptor = entityCreatorInterceptor;
@@ -71,6 +75,7 @@ public sealed class DatabaseBootstrapper : IDatabaseBootstrapper
             _timeProvider,
             _paths,
             _workspaceAccess,
+            _authentication,
             _skillRegistrations
         );
         await seeder.SeedAsync();

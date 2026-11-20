@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Agw.Tools.Contracts;
@@ -72,6 +73,14 @@ public record ToolInfo
     /// Gets whether this tool requires user confirmation before execution.
     /// </summary>
     public bool RequiresConfirmation { get; init; }
+
+    public bool AllowInPlanMode { get; init; }
+
+    public Guid? ExtensionId { get; init; }
+
+    public string? ExtensionToolId { get; init; }
+
+    public JsonElement? InputSchema { get; init; }
 
     /// <summary>
     /// Gets the execution timeout in milliseconds.

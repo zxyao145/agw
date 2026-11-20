@@ -13,6 +13,7 @@ using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Summaries;
 using Agw.Auth.Contracts;
+using Agw.Extensions.Contracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Exceptions;
@@ -202,7 +203,10 @@ public sealed class AgentflowRuntimeFactory
         AgentflowExecutionTraceContext? executionTraceContext = null,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         bool deferHumanInteractions = false,
-        IReadOnlySet<Guid>? ancestors = null
+        IReadOnlySet<Guid>? ancestors = null,
+        IReadOnlyList<ExtensionExecutionPin>? extensionPins = null,
+        ExtensionCapabilitySnapshot? acceptedExtensionCapabilities = null,
+        IReadOnlyList<Guid>? extensionIds = null
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -243,7 +247,10 @@ public sealed class AgentflowRuntimeFactory
                         environmentVariables,
                         deferHumanInteractions,
                         cancellationToken: cancellationToken,
-                        permissionMode: sessionScope?.PermissionState.Current
+                        permissionMode: sessionScope?.PermissionState.Current,
+                        extensionPins: extensionPins,
+                        acceptedExtensionCapabilities: acceptedExtensionCapabilities,
+                        extensionIds: extensionIds
                     );
                     aiAgent = nodeAgent?.Agent;
                     if (nodeAgent != null)
@@ -276,7 +283,10 @@ public sealed class AgentflowRuntimeFactory
                         executionTraceContext,
                         environmentVariables,
                         deferHumanInteractions,
-                        path
+                        path,
+                        extensionPins,
+                        acceptedExtensionCapabilities,
+                        extensionIds
                     );
                     if (flowNode == null)
                     {

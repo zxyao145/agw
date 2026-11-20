@@ -30,6 +30,8 @@ public sealed class DurableExecutionAuditTests
         using (TurnPersistenceTestKit.EnterUser("owner"))
         {
             var task = await kit.SeedConversationAsync("owner");
+            var agentId = Guid.CreateVersion7();
+            await kit.SeedAgentAsync(agentId, "owner");
             var accepted = await kit.CreateAcceptance(
                     projectTasks: null,
                     new AgentExecutionFacadeTests.WorkspaceProjects(),
@@ -39,7 +41,7 @@ public sealed class DurableExecutionAuditTests
                     new TurnAcceptanceRequest(
                         "owner",
                         TurnId: null,
-                        new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
+                        new ExecutionTarget(agentId, AgentRuntimeType.Agent),
                         task.ProjectConversationId,
                         TurnPersistenceTestKit.CreateInput("run"),
                         TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ProjectConversationId),

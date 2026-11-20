@@ -5,8 +5,10 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agentflows.Turns;
+using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Turns;
 using Agw.Agents.Execution.Commands;
@@ -23,11 +25,15 @@ using Agw.Auth.Application;
 using Agw.Files;
 using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Settings;
 using Agw.Projects.Application;
 using Agw.Projects.Application.Facades;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
+using Agw.Settings;
+using Agw.Settings.Application.Persistence;
+using Agw.Shared.Contracts;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
@@ -80,11 +86,36 @@ public class ExecutionConnectionTests
         services.AddScoped<IProjectDefaultResolver, ProjectDefaultResolver>();
         services.AddScoped<ExecutionPermissionService>();
         services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
-        var dataRoot = Path.Combine(AppContext.BaseDirectory, ".scratch", "execution-connection");
+        var dataRoot = Path.Combine(
+            AppContext.BaseDirectory,
+            ".scratch",
+            "execution-connection",
+            Guid.CreateVersion7().ToString("N")
+        );
         services.AddSingleton(
             AgwDataPaths.Resolve(Path.Combine(dataRoot, "data"), dataRoot, Path.Combine(dataRoot, "logs"))
         );
         services.AddFiles(new ConfigurationBuilder().Build());
+        var extensionConfiguration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?> { ["Extensions:Directory"] = Path.Combine(dataRoot, "extensions") }
+            )
+            .Build();
+        services.AddScoped<ISettingsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
+        services.AddScoped<ICurrentUser, UserInfoService>();
+        services.AddSettings();
+        services.AddTestExtensions(extensionConfiguration);
+        services.AddScoped<IExtensionExecutionSelectionResolver>(provider =>
+        {
+            var dbContext = provider.GetRequiredService<AgwDbContext>();
+            var userInfo = provider.GetRequiredService<IUserInfoService>();
+            return new ExtensionExecutionSelectionResolver(
+                TurnPersistenceTestKit.CreateAgentAppService(dbContext, userInfo, InMemoryApplicationLock.Shared),
+                new AgentflowDefinitionReader(provider.GetRequiredService<IAgentsDbContext>()),
+                provider.GetRequiredService<IExtensionCapabilityCatalog>()
+            );
+        });
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<AgentflowCheckpointStore>();
         services.AddSingleton<IProjectTaskFacade>(provider => new FakeProjectTaskFacade(
@@ -267,7 +298,10 @@ public class ExecutionConnectionTests
             IReadOnlyDictionary<string, string>? environmentVariables,
             bool deferHumanInteractions,
             CancellationToken cancellationToken = default,
-            AgwPermissionMode? permissionMode = null
+            AgwPermissionMode? permissionMode = null,
+            IReadOnlyList<Agw.Extensions.Contracts.ExtensionExecutionPin>? extensionPins = null,
+            Agw.Agents.Execution.Agents.Composition.ExtensionCapabilitySnapshot? acceptedExtensionCapabilities = null,
+            IReadOnlyList<Guid>? extensionIds = null
         ) => throw new NotSupportedException();
 
         public Task SetModeAsync(AgentRuntime runtime, string mode, CancellationToken cancellationToken = default) =>
@@ -332,7 +366,10 @@ public class ExecutionConnectionTests
     {
         await using var fixture = await CreateFixtureAsync();
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(
+            await fixture.CreateExecCommandAsync(),
+            TestContext.Current.CancellationToken
+        );
         await fixture.Context.WhenIdleAsync();
         var removed = false;
 
@@ -347,7 +384,10 @@ public class ExecutionConnectionTests
     {
         await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(
+            await fixture.CreateExecCommandAsync(),
+            TestContext.Current.CancellationToken
+        );
         await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -366,7 +406,10 @@ public class ExecutionConnectionTests
     {
         await using var fixture = await CreateFixtureAsync(requestsApproval: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(
+            await fixture.CreateExecCommandAsync(),
+            TestContext.Current.CancellationToken
+        );
         await fixture.Sink.InteractionRequested.Task.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -382,7 +425,10 @@ public class ExecutionConnectionTests
     {
         await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(
+            await fixture.CreateExecCommandAsync(),
+            TestContext.Current.CancellationToken
+        );
         await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         var agent = Assert.Single(fixture.Runtimes.Agents);
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -423,7 +469,10 @@ public class ExecutionConnectionTests
     {
         await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(
+            await fixture.CreateExecCommandAsync(),
+            TestContext.Current.CancellationToken
+        );
         await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         var agent = Assert.Single(fixture.Runtimes.Agents);
         await using var registry = new ExecutionConnectionRegistry(
@@ -487,7 +536,7 @@ public class ExecutionConnectionTests
         var token = TestContext.Current.CancellationToken;
         await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), token);
+        await fixture.Context.StartTurnAsync(await fixture.CreateExecCommandAsync(), token);
         await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, token);
         var agent = Assert.Single(fixture.Runtimes.Agents);
         await using var registry = new ExecutionConnectionRegistry(
@@ -520,7 +569,7 @@ public class ExecutionConnectionTests
         var token = TestContext.Current.CancellationToken;
         await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), token);
+        await fixture.Context.StartTurnAsync(await fixture.CreateExecCommandAsync(), token);
         await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, token);
         var agent = Assert.Single(fixture.Runtimes.Agents);
         await using (var db = fixture.Persistence.CreateContext())
@@ -557,7 +606,7 @@ public class ExecutionConnectionTests
         var token = TestContext.Current.CancellationToken;
         await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), token);
+        await fixture.Context.StartTurnAsync(await fixture.CreateExecCommandAsync(), token);
         await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, token);
         var agent = Assert.Single(fixture.Runtimes.Agents);
         await using var registry = new ExecutionConnectionRegistry(
@@ -591,7 +640,7 @@ public class ExecutionConnectionTests
         var token = TestContext.Current.CancellationToken;
         await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), token);
+        await fixture.Context.StartTurnAsync(await fixture.CreateExecCommandAsync(), token);
         await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, token);
         var agent = Assert.Single(fixture.Runtimes.Agents);
         await using var registry = new ExecutionConnectionRegistry(
@@ -617,7 +666,10 @@ public class ExecutionConnectionTests
     {
         await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(
+            await fixture.CreateExecCommandAsync(),
+            TestContext.Current.CancellationToken
+        );
         await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         await using var registry = new ExecutionConnectionRegistry(
             null!,
@@ -728,7 +780,7 @@ public class ExecutionConnectionTests
         string? forReloadedPage;
         try
         {
-            await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), token);
+            await fixture.Context.StartTurnAsync(await fixture.CreateExecCommandAsync(), token);
             await sink.FirstFinish.WaitAsync(TurnTimeout, token);
             var projectId = fixture.Context.ProjectId!.Value;
             var conversationId = fixture.Context.ConversationId!.Value;
@@ -886,10 +938,11 @@ public class ExecutionConnectionTests
     {
         public TestAgentRuntimeFactory Runtimes => Kit.Runtimes;
 
-        public ExecCommand CreateExecCommand()
+        public async Task<ExecCommand> CreateExecCommandAsync()
         {
             var command = ExecutionConnectionTests.CreateExecCommand();
             Agents.Add(command.AgentId!.Value);
+            await Persistence.SeedAgentAsync(command.AgentId.Value);
             return command;
         }
 

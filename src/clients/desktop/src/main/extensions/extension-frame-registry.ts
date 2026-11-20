@@ -1,11 +1,16 @@
 import { randomUUID } from "node:crypto";
 
 import type { ExtensionFrameKind } from "@agw/extension-sdk";
+import type { ExtensionGrants, ServerExtensionOrigin } from "../../shared/contracts";
 import { ExtensionOperationError } from "./extension-ipc-result";
 
 export type RegisteredFrame = {
   frameId: string;
+  instanceId: string;
   extensionId: string;
+  origin: ServerExtensionOrigin | null;
+  releaseHash: string | null;
+  approvedGrants: ExtensionGrants | null;
   kind: ExtensionFrameKind;
   viewId: string | null;
   webContentsId: number;
@@ -66,11 +71,22 @@ export class ExtensionFrameRegistry {
   }
 
   public register(
-    frame: Pick<RegisteredFrame, "frameId" | "extensionId" | "kind" | "viewId" | "webContentsId">,
+    frame: Pick<
+      RegisteredFrame,
+      | "frameId"
+      | "instanceId"
+      | "extensionId"
+      | "origin"
+      | "releaseHash"
+      | "kind"
+      | "viewId"
+      | "webContentsId"
+    >,
   ): RegisteredFrame {
     if (this.frames.has(frame.frameId)) throw new Error(`Frame ${frame.frameId} already exists.`);
     const registered: RegisteredFrame = {
       ...frame,
+      approvedGrants: null,
       pageId: null,
       pageDocument: 0,
       commits: 0,
@@ -98,12 +114,48 @@ export class ExtensionFrameRegistry {
     return frameId === undefined ? undefined : this.frames.get(frameId);
   }
 
-  public framesOf(extensionId: string): RegisteredFrame[] {
-    return [...this.frames.values()].filter((frame) => frame.extensionId === extensionId);
+  public framesOf(instanceId: string): RegisteredFrame[] {
+    return [...this.frames.values()].filter((frame) => frame.instanceId === instanceId);
   }
 
   public all(): RegisteredFrame[] {
     return [...this.frames.values()];
+  }
+
+  public approveGrants(frameId: string, grants: ExtensionGrants): void {
+    const frame = this.frames.get(frameId);
+    if (!frame) throw new ExtensionOperationError("ERR_FRAME_GONE", "The frame no longer exists.");
+    frame.approvedGrants = {
+      permissions: [...grants.permissions],
+      hostPermissions: [...grants.hostPermissions],
+    };
+  }
+
+  public revokeGrants(instanceId: string): void {
+    for (const frame of this.framesOf(instanceId)) frame.approvedGrants = null;
+  }
+
+  public requireGrants(
+    caller: {
+      instanceId: string;
+      extensionId: string;
+      frameId: string;
+      pageId: string;
+    },
+    enabled: boolean,
+  ): ExtensionGrants {
+    if (!enabled && !this.frames.get(caller.frameId)?.approvedGrants)
+      throw new ExtensionOperationError(
+        "ERR_EXTENSION_DISABLED",
+        `Extension ${caller.extensionId} is not enabled.`,
+      );
+    const frame = this.validateCaller(caller);
+    if (!frame.approvedGrants)
+      throw new ExtensionOperationError(
+        "ERR_EXTENSION_DISABLED",
+        "The frame permissions are no longer approved.",
+      );
+    return frame.approvedGrants;
   }
 
   /** 顶层文档的跨文档导航已经提交。A top-level cross-document navigation committed. */
@@ -133,12 +185,18 @@ export class ExtensionFrameRegistry {
 
   /** 能力请求必须来自该 extension 当前存活 frame 的当前页面。Capability requests must come from a live frame's current page. */
   public validateCaller(caller: {
+    instanceId: string;
     extensionId: string;
     frameId: string;
     pageId: string;
   }): RegisteredFrame {
     const frame = this.frames.get(caller.frameId);
-    if (!frame || frame.extensionId !== caller.extensionId || frame.pageId !== caller.pageId) {
+    if (
+      !frame ||
+      frame.instanceId !== caller.instanceId ||
+      frame.extensionId !== caller.extensionId ||
+      frame.pageId !== caller.pageId
+    ) {
       throw new ExtensionOperationError(
         "ERR_FRAME_GONE",
         "The calling frame or page no longer exists.",

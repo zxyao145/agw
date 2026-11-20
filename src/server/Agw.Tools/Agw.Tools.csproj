@@ -14,6 +14,7 @@
     <!--  UserMemory, Project    -->
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
     <ProjectReference Include="..\Agw.Files\Agw.Files.csproj" />
+    <ProjectReference Include="../Agw.Extensions.Contracts/Agw.Extensions.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Agw.Tools.Abstractions\Agw.Tools.Abstractions.csproj" />

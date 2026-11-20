@@ -35,22 +35,35 @@ export async function confirmationText(window: BrowserWindow): Promise<string> {
   )) as string;
 }
 
-/** 按文字点击确认窗口中的按钮，并等待窗口关闭。Clicks a confirmation button by its text and waits for the window to close. */
+/** 用原生鼠标事件点击确认按钮，并等待窗口关闭。Clicks a confirmation button with native mouse events and waits for the window to close. */
 export async function answerConfirmation(label: string, timeoutMs = 20_000): Promise<string> {
   const window = await waitForConfirmationWindow(timeoutMs);
+  const parent = window.getParentWindow();
   const text = await confirmationText(window);
-  const clicked = (await window.webContents.executeJavaScript(
+  const point = (await window.webContents.executeJavaScript(
     `(() => {
       const button = [...document.querySelectorAll("footer button")].find((item) => item.textContent === ${JSON.stringify(label)});
-      if (!button) return false;
-      button.click();
-      return true;
+      if (!button) return null;
+      const rect = button.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      return rect.width > 0 && rect.height > 0 && (hit === button || button.contains(hit)) ? { x, y } : null;
     })()`,
     true,
-  )) as boolean;
-  if (!clicked) throw new Error(`The confirmation has no "${label}" button: ${text}`);
+  )) as { x: number; y: number } | null;
+  if (!point) throw new Error(`The confirmation has no clickable "${label}" button: ${text}`);
+  window.focus();
+  const contents = window.webContents;
+  contents.focus();
+  const x = Math.round(point.x);
+  const y = Math.round(point.y);
+  contents.sendInputEvent({ type: "mouseMove", x, y });
+  contents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
+  contents.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1 });
   const deadline = Date.now() + timeoutMs;
   while (!window.isDestroyed() && Date.now() < deadline) await delay(50);
   if (!window.isDestroyed()) throw new Error("The confirmation window did not close.");
+  if (parent && !parent.isDestroyed()) parent.focus();
   return text;
 }

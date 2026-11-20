@@ -267,6 +267,12 @@ export function createExtensionApi(
         }
       },
     },
+    server: {
+      request: (path, options) => {
+        const { signal, ...rest } = options ?? {};
+        return call("server.request", { path, ...rest }, signal);
+      },
+    },
     http: {
       request: async (request) => {
         const { signal, ...rest } = request;

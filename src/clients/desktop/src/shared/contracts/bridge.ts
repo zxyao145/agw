@@ -21,6 +21,9 @@ import type {
   ExtensionIpcResult,
   ExtensionOpenDialogOptions,
   ExtensionRecoveryNotice,
+  ServerExtensionArchive,
+  ServerExtensionCatalog,
+  ServerExtensionOrigin,
   ExtensionSaveDialogOptions,
   ExtensionWatchRequest,
   InstalledExtension,
@@ -75,6 +78,21 @@ export type AgwDesktopBridge = {
   /* extension 管理通道 Extension management channels */
   attachExtensionHost(hostInstanceId: string): Promise<void>;
   listExtensions(): Promise<InstalledExtension[]>;
+  markServerExtensionsUnavailable(hostInstanceId: string): Promise<void>;
+  hasServerExtensionRelease(
+    origin: ServerExtensionOrigin,
+    extensionId: string,
+    releaseHash: string,
+  ): Promise<boolean>;
+  syncServerExtensionCatalog(
+    hostInstanceId: string,
+    request: {
+      origin: ServerExtensionOrigin;
+      catalog: ServerExtensionCatalog;
+      archives: ServerExtensionArchive[];
+      failures?: Array<{ extensionId: string; releaseHash: string; message: string }>;
+    },
+  ): Promise<boolean>;
   listExtensionRecoveryNotices(): Promise<ExtensionRecoveryNotice[]>;
   prepareExtensionInstall(request: {
     source: ExtensionInstallSource;

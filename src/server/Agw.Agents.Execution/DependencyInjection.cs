@@ -25,6 +25,7 @@ using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
+using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,6 +45,19 @@ public static class DependencyInjection
         bool AddTraceCollector = true,
         bool AddRuntime = true
     );
+
+    public static IServiceCollection AddExtensionCapabilities(this IServiceCollection services)
+    {
+        services.AddSingleton<
+            Agents.Composition.IExtensionCapabilityCatalog,
+            Agents.Composition.ExtensionCapabilityCatalog
+        >();
+        services.AddScoped<
+            Agents.Composition.IExtensionExecutionSelectionResolver,
+            Agents.Composition.ExtensionExecutionSelectionResolver
+        >();
+        return services;
+    }
 
     /// <summary>
     /// 根据配置注册 InProcess 或 Distributed execution 实现。
@@ -82,7 +96,12 @@ public static class DependencyInjection
             );
             services.AddSingleton<IConversationHistoryWriter, ConversationHistoryWriter>();
             services.AddScoped<AgentSessionStateStore>();
-            services.AddScoped<AgentCapabilityComposer>();
+            services.AddScoped(provider =>
+                ActivatorUtilities.CreateInstance<AgentCapabilityComposer>(
+                    provider,
+                    provider.GetRequiredService<IExtensionCapabilityCatalog>()
+                )
+            );
             services.AddScoped<AgentTurnExecutor>();
             services.AddScoped<ExternalProviderSessionBindings>();
             services.AddScoped<AgentRuntimeConfiguration>();
@@ -97,7 +116,13 @@ public static class DependencyInjection
                 services.AddScoped<InProcessExecutionCoordinatorFactory>();
         }
         services.AddSingleton<TurnBroadcastRegistry>();
-        services.AddScoped<TurnAcceptanceService>();
+        services.AddScoped(provider =>
+            ActivatorUtilities.CreateInstance<TurnAcceptanceService>(
+                provider,
+                provider.GetRequiredService<IExtensionCapabilityCatalog>(),
+                provider.GetRequiredService<IExtensionExecutionSelectionResolver>()
+            )
+        );
         services.AddScoped<AgentExecutionFacade>();
         services.AddScoped<IAgentExecutionFacade>(provider => provider.GetRequiredService<AgentExecutionFacade>());
         services.AddScoped<IDurableAgentExecutionFacade>(provider =>

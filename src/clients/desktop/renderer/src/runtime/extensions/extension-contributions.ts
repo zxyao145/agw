@@ -1,4 +1,5 @@
 import type { InstalledExtension } from "@desktop/shared/contracts";
+import { extensionDisplayName } from "@desktop/shared/extension-manifest";
 import type { ExtensionActionContribution, ExtensionManifest } from "@agw/extension-sdk";
 import { extensionViewId } from "./workspace-ids";
 import type {
@@ -28,15 +29,16 @@ export function extensionIcon(installed: InstalledExtension): WorkspaceIcon {
 export function extensionViews(installed: InstalledExtension): WorkspaceView[] {
   const manifest = installed.manifest;
   if (!manifest) return [];
+  const instanceId = installed.instanceId ?? installed.id;
   const base = {
-    extensionId: installed.id,
-    extensionName: manifest.name,
+    extensionId: instanceId,
+    extensionName: extensionDisplayName(manifest) ?? manifest.id,
     failure: null,
   };
   return [
     ...(manifest.contributes?.sidebarViews ?? []).map((view): WorkspaceView => ({
       ...base,
-      id: extensionViewId(installed.id, view.id),
+      id: extensionViewId(instanceId, view.id),
       location: "sidebar",
       title: view.title,
       icon: resolveIcon(view.icon, installed.icons),
@@ -46,7 +48,7 @@ export function extensionViews(installed: InstalledExtension): WorkspaceView[] {
     })),
     ...(manifest.contributes?.mainViews ?? []).map((view): WorkspaceView => ({
       ...base,
-      id: extensionViewId(installed.id, view.id),
+      id: extensionViewId(instanceId, view.id),
       location: "main",
       title: view.title,
       icon: resolveIcon(view.icon, installed.icons),
@@ -56,7 +58,7 @@ export function extensionViews(installed: InstalledExtension): WorkspaceView[] {
     })),
     ...(manifest.contributes?.fileViewers ?? []).map((viewer): WorkspaceView => ({
       ...base,
-      id: extensionViewId(installed.id, viewer.id),
+      id: extensionViewId(instanceId, viewer.id),
       location: "file",
       title: viewer.title,
       icon: resolveIcon(viewer.icon, installed.icons),
@@ -74,16 +76,17 @@ function entries(
   manifest: ExtensionManifest,
   items: readonly ExtensionActionContribution[] | undefined,
 ): WorkspaceEntry[] {
+  const instanceId = installed.instanceId ?? installed.id;
   return (items ?? []).map((item) => ({
-    id: `${installed.id}:${item.id}`,
-    extensionId: installed.id,
-    extensionName: manifest.name,
+    id: `${instanceId}:${item.id}`,
+    extensionId: instanceId,
+    extensionName: extensionDisplayName(manifest) ?? manifest.id,
     title: item.title,
     icon: resolveIcon(item.icon, installed.icons),
     action:
       item.action.type === "command"
         ? item.action
-        : { ...item.action, view: extensionViewId(installed.id, item.action.view) },
+        : { ...item.action, view: extensionViewId(instanceId, item.action.view) },
   }));
 }
 

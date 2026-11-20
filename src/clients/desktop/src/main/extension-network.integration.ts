@@ -1,15 +1,20 @@
 // extension 网络限制的集成测试：真实的 Extension session、出站代理与 WebContentsView。
 // Integration test for extension network limits with a real Extension session, egress proxy and WebContentsView.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createSocket } from "node:dgram";
 import { once } from "node:events";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { connect, createServer as createTcpServer, type Socket } from "node:net";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { pipeline } from "node:stream/promises";
 import { app, BrowserWindow, protocol, session } from "electron";
 import { WebSocketServer } from "ws";
+import yazl from "yazl";
 
 import type { ExtensionEvent } from "../shared/contracts";
 import { answerConfirmation } from "./confirmation/confirmation.integration-helper";
@@ -24,12 +29,16 @@ import { registerExtensionIpc } from "./extensions/extension-ipc";
 import { EXTENSION_SCHEME_PRIVILEGES } from "./extensions/extension-protocol";
 import { ExtensionRuntime } from "./extensions/extension-runtime";
 import { extensionPartition } from "./extensions/extension-session";
+import { extensionInstanceId } from "./extensions/extension-instance";
 import { DesktopSettingsStore } from "./settings/settings-store";
 
-const directory = resolve(".scratch/extension-network");
+const serverExtension = process.argv.includes("--server-extension");
+const directory = resolve(".scratch/extension-network", serverExtension ? "server" : "local");
 const userData = join(directory, "user-data");
 const HOST = "host-network-test";
 const EXTENSION = "01a173c2-a2d2-7731-8616-73338f39b8b2";
+const ORIGIN = { serverId: "01a173c2-a2d2-7731-8616-73338f39b8b3", userId: "network-test" };
+const INSTANCE = serverExtension ? extensionInstanceId(ORIGIN, EXTENSION) : EXTENSION;
 
 protocol.registerSchemesAsPrivileged([EXTENSION_SCHEME_PRIVILEGES, CONFIRMATION_SCHEME_PRIVILEGES]);
 app.setPath("userData", userData);
@@ -180,24 +189,48 @@ async function run(): Promise<void> {
     `ws://127.0.0.1:${allowedWsPort}`,
     `https://127.0.0.1:${allowedTcp.port}`,
   ];
-  const root = join(userData, "extensions", "packages", EXTENSION);
+  const root = serverExtension
+    ? join(directory, "server-source", EXTENSION)
+    : join(userData, "extensions", "packages", EXTENSION);
   await mkdir(root, { recursive: true });
-  await writeFile(
-    join(root, "manifest.json"),
-    JSON.stringify({
-      manifestVersion: 1,
-      id: EXTENSION,
-      name: "Network test",
-      version: "1.0.0",
-      contributes: { mainViews: [{ id: "app", title: "App", icon: "Box", entry: "index.html" }] },
-      hostPermissions,
-    }),
-  );
-  await writeFile(
-    join(root, "index.html"),
-    '<!doctype html><script type="module" src="./main.js"></script>',
-  );
-  await writeFile(join(root, "main.js"), 'import { connect } from "/__agw/sdk.js";\nconnect();\n');
+  const resources = {
+    "index.html": '<!doctype html><script type="module" src="./main.js"></script>',
+    "main.js": 'import { connect } from "/__agw/sdk.js";\nconnect();\n',
+  };
+  const contributes = {
+    mainViews: [{ id: "app", title: "App", icon: "Box", entry: "index.html" }],
+  };
+  const manifest = serverExtension
+    ? {
+        manifestVersion: 2,
+        id: EXTENSION,
+        name: "network-test",
+        displayName: "Network test",
+        version: "1.0.0",
+        targets: 2,
+        desktop: { apiVersion: 1, contributes, hostPermissions },
+        files: Object.fromEntries(
+          Object.entries(resources).map(([path, content]) => [
+            path,
+            createHash("sha256").update(content).digest("hex"),
+          ]),
+        ),
+      }
+    : {
+        manifestVersion: 1,
+        id: EXTENSION,
+        name: "Network test",
+        version: "1.0.0",
+        contributes,
+        hostPermissions,
+      };
+  const manifestBytes = JSON.stringify(manifest);
+  const releaseHash = serverExtension
+    ? createHash("sha256").update(manifestBytes).digest("hex")
+    : null;
+  await writeFile(join(root, "manifest.json"), manifestBytes);
+  for (const [path, content] of Object.entries(resources))
+    await writeFile(join(root, path), content);
 
   // 宿主窗口用生产 preload 收集推送事件。The host window collects pushed events through the production preload.
   const window = new BrowserWindow({
@@ -250,18 +283,63 @@ async function run(): Promise<void> {
       throw new Error("The runtime state is not used by this test.");
     },
   });
+  await runtime.attachHost(HOST);
+  const syncRelease = async (
+    version: string,
+    hosts: string[],
+    revision: number,
+  ): Promise<string> => {
+    const nextManifest = {
+      ...manifest,
+      version,
+      desktop: { apiVersion: 1, contributes, hostPermissions: hosts },
+    };
+    const bytesManifest = JSON.stringify(nextManifest);
+    const nextReleaseHash = createHash("sha256").update(bytesManifest).digest("hex");
+    await writeFile(join(root, "manifest.json"), bytesManifest);
+    const archivePath = join(directory, `server-package-${version}.zip`);
+    const archive = new yazl.ZipFile();
+    for (const file of ["manifest.json", ...Object.keys(resources)])
+      archive.addFile(join(root, file), file);
+    archive.end();
+    await pipeline(archive.outputStream, createWriteStream(archivePath));
+    const bytes = await readFile(archivePath);
+    await runtime.syncServerExtensionCatalog(HOST, {
+      origin: ORIGIN,
+      catalog: {
+        serverId: ORIGIN.serverId,
+        revision,
+        extensions: [
+          {
+            id: EXTENSION,
+            name: "network-test",
+            displayName: "Network test",
+            version,
+            releaseHash: nextReleaseHash,
+            packageHash: createHash("sha256").update(bytes).digest("hex"),
+            manifest: nextManifest,
+          },
+        ],
+      },
+      archives: [{ extensionId: EXTENSION, releaseHash: nextReleaseHash, bytes }],
+    });
+    return nextReleaseHash;
+  };
+  if (serverExtension) assert.equal(await syncRelease("1.0.0", hostPermissions, 1), releaseHash);
   // 启用的权限由确认窗口批准。The confirmation window approves the permissions for enabling.
-  const enabled = runtime.setEnabled(EXTENSION, true);
+  const enabled = runtime.setEnabled(INSTANCE, true);
   const approval = await answerConfirmation("Enable");
   assert.ok(approval.includes(hostPermissions[0]), approval);
   assert.equal(await enabled, true);
-  await runtime.attachHost(HOST);
-  await runtime.beginActivation(HOST, EXTENSION);
-  const extensionSession = session.fromPartition(extensionPartition(EXTENSION));
+  await runtime.beginActivation(HOST, INSTANCE);
+  const extensionSession = session.fromPartition(extensionPartition(INSTANCE));
   let swRegistrations = 0;
   extensionSession.serviceWorkers.on("registration-completed", () => (swRegistrations += 1));
   runtime.createFrame(HOST, {
+    instanceId: INSTANCE,
     extensionId: EXTENSION,
+    origin: serverExtension ? ORIGIN : null,
+    releaseHash,
     frameId: "frame-1",
     kind: "mainView",
     viewId: "app",
@@ -273,9 +351,16 @@ async function run(): Promise<void> {
     "the extension page handshake",
   );
   const contents = runtime.views.get("frame-1")!.view.webContents;
+  assert.equal(contents.session, extensionSession);
+  assert.equal(new URL(contents.getURL()).host, INSTANCE);
+  assert.match(
+    await extensionSession.resolveProxy(`http://127.0.0.1:${allowedHttp.port}/ping`),
+    /^PROXY 127\.0\.0\.1:/u,
+  );
   const page = <T>(code: string) => contents.executeJavaScript(code, true) as Promise<T>;
   const caller = () => ({
     hostInstanceId: HOST,
+    instanceId: INSTANCE,
     extensionId: EXTENSION,
     frameId: "frame-1",
     pageId: runtime.registry.get("frame-1")!.pageId!,
@@ -378,6 +463,77 @@ async function run(): Promise<void> {
     }),
     { code: "ERR_HOST_NOT_PERMITTED" },
   );
+
+  if (serverExtension) {
+    await page('localStorage.setItem("generation-test", "retained"); true');
+    const updatedHosts = [...hostPermissions, `http://127.0.0.1:${deniedHttp.port}`];
+    const updatedReleaseHash = await syncRelease("2.0.0", updatedHosts, 2);
+    assert.equal(
+      (await runtime.listExtensions()).find((entry) => entry.instanceId === INSTANCE)?.enabled,
+      false,
+    );
+    const savedPath = join(runtime.dataDirectory, INSTANCE, "retained.txt");
+    await runtime.fileSystem(caller(), {
+      operation: "writeFile",
+      uri: pathToFileURL(savedPath).toString(),
+      data: new TextEncoder().encode("saved"),
+      overwrite: false,
+      createParents: true,
+    });
+    assert.equal(await readFile(savedPath, "utf8"), "saved");
+    assert.equal(
+      (
+        await runtime.httpRequest(caller(), {
+          requestId: "retained-request",
+          url: `http://127.0.0.1:${allowedHttp.port}/ping`,
+        })
+      ).status,
+      200,
+    );
+    assert.match(
+      await page<string>(
+        'fetch(new URL("./index.html", location.href)).then(response => response.text())',
+      ),
+      /doctype/u,
+    );
+    const updatedEnablement = runtime.setEnabled(INSTANCE, true);
+    await answerConfirmation("Enable");
+    assert.equal(await updatedEnablement, true);
+    await assert.rejects(
+      runtime.httpRequest(caller(), {
+        requestId: "retained-denied",
+        url: `http://127.0.0.1:${deniedHttp.port}/x`,
+      }),
+      { code: "ERR_HOST_NOT_PERMITTED" },
+    );
+    runtime.createFrame(HOST, {
+      instanceId: INSTANCE,
+      extensionId: EXTENSION,
+      origin: ORIGIN,
+      releaseHash: updatedReleaseHash,
+      frameId: "updated-frame",
+      kind: "mainView",
+      viewId: "app",
+      entry: "index.html",
+      backgroundColor: "#ffffff",
+    });
+    await waitFor(
+      () => runtime.registry.get("updated-frame")?.pageId != null,
+      "the updated frame handshake",
+    );
+    const updatedContents = runtime.views.get("updated-frame")!.view.webContents;
+    assert.equal(updatedContents.session, contents.session);
+    assert.equal(new URL(updatedContents.getURL()).host, INSTANCE);
+    assert.equal(new URL(updatedContents.getURL()).protocol, "agw-extension:");
+    assert.equal(
+      await updatedContents.executeJavaScript('localStorage.getItem("generation-test")'),
+      "retained",
+    );
+    await runtime.destroyFrame(HOST, "updated-frame");
+    console.log(
+      "PASS retained Server frame permissions, local export, resources, and stable origin storage",
+    );
+  }
   console.log("PASS http.request reaches approved hosts and refuses redirects to undeclared hosts");
 
   // 上游代理。Upstream proxies.
@@ -477,7 +633,17 @@ async function run(): Promise<void> {
     `new Promise((resolve) => { window.__socket = new WebSocket("ws://127.0.0.1:${allowedWsPort}"); window.__socket.onopen = resolve; })`,
   );
   await waitFor(() => openWsClients.size > 0, "an open WebSocket tunnel");
-  runtime.destroyFrame(HOST, "frame-1");
+  await runtime.destroyFrame(HOST, "frame-1");
+  if (serverExtension) {
+    await assert.rejects(
+      readFile(join(userData, "extensions", "server-packages", releaseHash!, "release.json")),
+      { code: "ENOENT" },
+    );
+    assert.equal(
+      await readFile(join(runtime.dataDirectory, INSTANCE, "retained.txt"), "utf8"),
+      "saved",
+    );
+  }
   await delay(500);
   const afterDestroy = allowedHttp.requests.length;
   await delay(1000);
@@ -493,7 +659,7 @@ async function run(): Promise<void> {
       /:(\d+)/u,
     )?.[1],
   );
-  await runtime.releaseResources(HOST, EXTENSION);
+  await runtime.releaseResources(HOST, INSTANCE);
   await waitFor(() => openWsClients.size === 0, "tunnels closed after release");
   await assert.rejects(
     new Promise((resolvePromise, reject) => {

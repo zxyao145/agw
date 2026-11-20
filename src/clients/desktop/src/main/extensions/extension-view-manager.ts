@@ -16,15 +16,17 @@ import type { HostPermission } from "../../shared/extension-host-permissions";
 import type { ExtensionSessionFactory } from "./extension-session";
 import { type ExtensionFrameRegistry, type RegisteredFrame } from "./extension-frame-registry";
 import { FrameVisibility } from "./extension-frame-visibility";
+import { extensionSessionId } from "./extension-session-identity";
 import { EXTENSION_SCHEME, isNavigationAllowed } from "./extension-network-rules";
+import { serverExtensionOriginUrl, serverExtensionReleaseUrl } from "../../shared/extension-urls";
 
 export type ExtensionViewManagerOptions = {
   getMainWindow(): BrowserWindow | null;
   registry: ExtensionFrameRegistry;
   sessions: ExtensionSessionFactory;
   preloadPath: string;
-  manifestVersion(extensionId: string): number;
-  hostPermissions(extensionId: string): readonly HostPermission[];
+  apiVersion(instanceId: string, releaseHash: string | null): number;
+  hostPermissions(instanceId: string, webContentsId?: number): readonly HostPermission[];
   emit(event: ExtensionEvent): void;
   /** 旧页面被替换：主进程释放它的监听与请求。An old page was replaced: release its watchers and requests. */
   onPageReplaced(frame: RegisteredFrame, pageId: string): void;
@@ -32,7 +34,11 @@ export type ExtensionViewManagerOptions = {
 
 type FrameView = {
   frameId: string;
+  instanceId: string;
   extensionId: string;
+  origin: CreateExtensionFrameRequest["origin"];
+  releaseHash: string | null;
+  sessionId: string;
   kind: CreateExtensionFrameRequest["kind"];
   view: WebContentsView;
   visibility: FrameVisibility;
@@ -65,10 +71,11 @@ export class ExtensionViewManager {
     const isBackground = request.kind === "background";
     if (isBackground !== (request.entry === null))
       throw new Error("Only background frames have no entry.");
+    const sessionId = extensionSessionId(request.instanceId);
 
     const view = new WebContentsView({
       webPreferences: {
-        session: this.options.sessions.get(request.extensionId),
+        session: this.options.sessions.get(sessionId),
         preload: this.options.preloadPath,
         sandbox: true,
         contextIsolation: true,
@@ -86,7 +93,11 @@ export class ExtensionViewManager {
 
     const frame: FrameView = {
       frameId: request.frameId,
+      instanceId: request.instanceId,
       extensionId: request.extensionId,
+      origin: request.origin,
+      releaseHash: request.releaseHash,
+      sessionId,
       kind: request.kind,
       view,
       visibility: new FrameVisibility(),
@@ -96,7 +107,10 @@ export class ExtensionViewManager {
     this.frames.set(request.frameId, frame);
     this.options.registry.register({
       frameId: request.frameId,
+      instanceId: request.instanceId,
       extensionId: request.extensionId,
+      origin: request.origin,
+      releaseHash: request.releaseHash,
       kind: request.kind,
       viewId: request.viewId,
       webContentsId: contents.id,
@@ -108,14 +122,28 @@ export class ExtensionViewManager {
       view.setVisible(false);
       window.contentView.addChildView(view);
     }
-    const url = isBackground
-      ? `${EXTENSION_SCHEME}://${request.extensionId}/__agw/background.html`
-      : `${EXTENSION_SCHEME}://${request.extensionId}/${request.entry}`;
+    const url =
+      request.releaseHash === null
+        ? new URL(
+            isBackground ? "__agw/background.html" : request.entry!,
+            `${EXTENSION_SCHEME}://${sessionId}/`,
+          ).toString()
+        : isBackground
+          ? new URL(
+              `/__agw/releases/${request.releaseHash}/${request.extensionId}/__agw/background.html`,
+              serverExtensionOriginUrl(request.instanceId),
+            ).toString()
+          : serverExtensionReleaseUrl(
+              request.instanceId,
+              request.extensionId,
+              request.releaseHash,
+              request.entry!,
+            );
     contents.loadURL(url).catch((error: Error) => {
       if (!this.frames.has(request.frameId)) return;
       this.options.emit({
         type: "frame-failed",
-        extensionId: request.extensionId,
+        extensionId: request.instanceId,
         frameId: request.frameId,
         code: "LOAD_FAILED",
         message: error.message,
@@ -131,16 +159,16 @@ export class ExtensionViewManager {
     const frame = registered ? this.frames.get(registered.frameId) : undefined;
     if (!registered || !frame) return;
 
-    const manifestVersion = (payload as { manifestVersion?: unknown } | null)?.manifestVersion;
-    const expected = this.options.manifestVersion(registered.extensionId);
-    if (manifestVersion !== expected) {
+    const apiVersion = (payload as { manifestVersion?: unknown } | null)?.manifestVersion;
+    const expected = this.options.apiVersion(registered.instanceId, registered.releaseHash);
+    if (apiVersion !== expected) {
       this.destroy(registered.frameId);
       this.options.emit({
         type: "frame-failed",
-        extensionId: registered.extensionId,
+        extensionId: registered.instanceId,
         frameId: registered.frameId,
         code: "MANIFEST_VERSION_MISMATCH",
-        message: `The page uses Extension API version ${String(manifestVersion)}, but the manifest declares ${expected}.`,
+        message: `The page uses Desktop API version ${String(apiVersion)}, but the manifest declares ${expected}.`,
       });
       return;
     }
@@ -156,7 +184,14 @@ export class ExtensionViewManager {
     const { port1, port2 } = new MessageChannelMain();
     window.webContents.postMessage(
       "agw:extension-port",
-      { extensionId: registered.extensionId, frameId: registered.frameId, pageId: hello.pageId },
+      {
+        extensionId: registered.extensionId,
+        instanceId: registered.instanceId,
+        origin: registered.origin,
+        releaseHash: registered.releaseHash,
+        frameId: registered.frameId,
+        pageId: hello.pageId,
+      },
       [port1],
     );
     contents.postMessage("agw-extension:port", null, [port2]);
@@ -182,7 +217,7 @@ export class ExtensionViewManager {
     if (!["http:", "https:", "ws:", "wss:"].includes(url.protocol)) return;
     this.options.emit({
       type: "request-blocked",
-      extensionId: registered.extensionId,
+      extensionId: registered.instanceId,
       url: blockedUri,
       resourceType: directive,
       reason: "host-not-permitted",
@@ -295,7 +330,7 @@ export class ExtensionViewManager {
 
   public destroyExtension(extensionId: string): void {
     for (const frame of this.frames.values()) {
-      if (frame.extensionId === extensionId) this.destroy(frame.frameId);
+      if (frame.instanceId === extensionId) this.destroy(frame.frameId);
     }
   }
 
@@ -321,7 +356,7 @@ export class ExtensionViewManager {
     this.options.onPageReplaced(registered, pageId);
     this.options.emit({
       type: "frame-page-replaced",
-      extensionId: registered.extensionId,
+      extensionId: registered.instanceId,
       frameId: registered.frameId,
       pageId,
     });
@@ -332,8 +367,8 @@ export class ExtensionViewManager {
     const blockNavigation = (url: string, isMainFrame: boolean, preventDefault: () => void) => {
       if (
         isNavigationAllowed(
-          frame.extensionId,
-          this.options.hostPermissions(frame.extensionId),
+          frame.instanceId,
+          this.options.hostPermissions(frame.instanceId, contents.id),
           url,
           isMainFrame,
         )
@@ -343,7 +378,7 @@ export class ExtensionViewManager {
       preventDefault();
       this.options.emit({
         type: "request-blocked",
-        extensionId: frame.extensionId,
+        extensionId: frame.instanceId,
         url,
         resourceType: isMainFrame ? "mainFrame" : "subFrame",
         reason: "navigation-blocked",
@@ -365,7 +400,7 @@ export class ExtensionViewManager {
       if (!isMainFrame || errorCode === -3 || !this.frames.has(frame.frameId)) return;
       this.options.emit({
         type: "frame-failed",
-        extensionId: frame.extensionId,
+        extensionId: frame.instanceId,
         frameId: frame.frameId,
         code: "LOAD_FAILED",
         message: `${errorDescription} (${errorCode})`,
@@ -377,7 +412,7 @@ export class ExtensionViewManager {
       const osProcessId = frame.osProcessId;
       this.options.emit({
         type: "frame-gone",
-        extensionId: frame.extensionId,
+        extensionId: frame.instanceId,
         frameId: frame.frameId,
         reason: this.terminatedProcesses.has(osProcessId) ? "unresponsive" : details.reason,
         osProcessId,

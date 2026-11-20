@@ -197,6 +197,7 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
             )
             .AddFiles(configuration)
             .AddInfrastructure(configuration)
+            .AddTestExtensions(configuration)
             .AddJobs(configuration, new Agw.Jobs.DependencyInjection.RegistrationOptions(AddScheduler: false))
             .AddProviders(configuration)
             .AddSkills(configuration)

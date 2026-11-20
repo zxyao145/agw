@@ -13,12 +13,16 @@ import type {
   HostConfirmationRequest,
   ExtensionInstallSource,
   ExtensionOpenDialogOptions,
+  ServerExtensionArchive,
+  ServerExtensionCatalog,
+  ServerExtensionOrigin,
   ExtensionSaveDialogOptions,
   ExtensionWatchRequest,
   ThemeStyleRequest,
   UninstallExtensionOptions,
 } from "../../shared/contracts";
 import { isExtensionId } from "../../shared/extension-manifest";
+import { isExtensionInstanceId } from "./extension-instance";
 import type { ConfirmationService } from "../confirmation/confirmation-service";
 import { canceledAnswer, hostConfirmationView } from "../confirmation/host-confirmation";
 import { toExtensionIpcResult } from "./extension-ipc-result";
@@ -34,6 +38,10 @@ export type ExtensionIpcOptions = {
 
 function assertExtensionId(extensionId: string): void {
   if (!isExtensionId(extensionId)) throw new Error("Invalid extension id.");
+}
+
+function assertExtensionInstanceId(instanceId: string): void {
+  if (!isExtensionInstanceId(instanceId)) throw new Error("Invalid extension instance id.");
 }
 
 /** 注册 extension 的管理、frame、能力通道与 extension preload 通道。Registers the extension IPC channels. */
@@ -81,6 +89,28 @@ export function registerExtensionIpc({
     runtime.attachHost(hostInstanceId),
   );
   handle("agw:list-extensions", () => runtime.listExtensions());
+  handle("agw:mark-server-extensions-unavailable", (hostInstanceId: string) =>
+    runtime.markServerExtensionsUnavailable(hostInstanceId),
+  );
+  handle(
+    "agw:has-server-extension-release",
+    (origin: ServerExtensionOrigin, extensionId: string, releaseHash: string) => {
+      assertExtensionId(extensionId);
+      return runtime.hasServerExtensionRelease(origin, extensionId, releaseHash);
+    },
+  );
+  handle(
+    "agw:sync-server-extension-catalog",
+    (
+      hostInstanceId: string,
+      request: {
+        origin: ServerExtensionOrigin;
+        catalog: ServerExtensionCatalog;
+        archives: ServerExtensionArchive[];
+        failures?: Array<{ extensionId: string; releaseHash: string; message: string }>;
+      },
+    ) => runtime.syncServerExtensionCatalog(hostInstanceId, request),
+  );
   handle("agw:list-extension-recovery-notices", () => runtime.listRecoveryNotices());
   handle("agw:prepare-extension-install", (request: { source: ExtensionInstallSource }) =>
     runtime.prepareInstall(request.source),
@@ -90,43 +120,49 @@ export function registerExtensionIpc({
   handle(
     "agw:uninstall-extension",
     async (extensionId: string, options: UninstallExtensionOptions) => {
-      assertExtensionId(extensionId);
+      assertExtensionInstanceId(extensionId);
       await runtime.uninstall(extensionId, options.deleteData);
       return runtimeState();
     },
   );
   handle("agw:set-extension-enabled", (extensionId: string, enabled: boolean) => {
-    assertExtensionId(extensionId);
+    assertExtensionInstanceId(extensionId);
     return runtime.setEnabled(extensionId, enabled === true);
   });
-  handle("agw:begin-extension-activation", (hostInstanceId: string, extensionId: string) =>
-    runtime.beginActivation(hostInstanceId, extensionId),
-  );
-  handle("agw:end-extension-activation", (hostInstanceId: string, extensionId: string) =>
-    runtime.endActivation(hostInstanceId, extensionId),
-  );
+  handle("agw:begin-extension-activation", (hostInstanceId: string, extensionId: string) => {
+    assertExtensionInstanceId(extensionId);
+    return runtime.beginActivation(hostInstanceId, extensionId);
+  });
+  handle("agw:end-extension-activation", (hostInstanceId: string, extensionId: string) => {
+    assertExtensionInstanceId(extensionId);
+    return runtime.endActivation(hostInstanceId, extensionId);
+  });
   handle(
     "agw:record-extension-activation",
     async (hostInstanceId: string, extensionId: string, version: string) => {
+      assertExtensionInstanceId(extensionId);
       await runtime.recordActivation(hostInstanceId, extensionId, version);
       return runtimeState();
     },
   );
   handle(
     "agw:release-extension-frame-resources",
-    (hostInstanceId: string, extensionId: string, frameId: string) =>
-      runtime.releaseFrameResources(hostInstanceId, extensionId, frameId),
+    (hostInstanceId: string, extensionId: string, frameId: string) => {
+      assertExtensionInstanceId(extensionId);
+      return runtime.releaseFrameResources(hostInstanceId, extensionId, frameId);
+    },
   );
-  handle("agw:release-extension-resources", (hostInstanceId: string, extensionId: string) =>
-    runtime.releaseResources(hostInstanceId, extensionId),
-  );
+  handle("agw:release-extension-resources", (hostInstanceId: string, extensionId: string) => {
+    assertExtensionInstanceId(extensionId);
+    return runtime.releaseResources(hostInstanceId, extensionId);
+  });
   handle("agw:resume-extensions", async () => {
     runtime.safeMode.resume();
     return runtimeState();
   });
   handle("agw:open-extensions-directory", () => runtime.openDirectory(runtime.packagesDirectory));
   handle("agw:open-extension-data-directory", (extensionId: string) => {
-    assertExtensionId(extensionId);
+    assertExtensionInstanceId(extensionId);
     return runtime.openDirectory(join(runtime.dataDirectory, extensionId));
   });
   handle("agw:cancel-extension-http-request", (requestId: string) =>
@@ -134,7 +170,7 @@ export function registerExtensionIpc({
   );
   handle("agw:save-extension-sdk-types", () => runtime.saveSdkTypes());
   handle("agw:reload-extension", (extensionId: string) => {
-    assertExtensionId(extensionId);
+    assertExtensionInstanceId(extensionId);
     return runtime.reloadExtension(extensionId);
   });
   handle("agw:get-theme-style", (request: ThemeStyleRequest) => runtime.getThemeStyle(request));

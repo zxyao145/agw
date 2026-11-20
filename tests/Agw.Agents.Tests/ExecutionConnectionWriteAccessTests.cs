@@ -27,7 +27,7 @@ public partial class ExecutionCommandHandlerTests
         var token = TestContext.Current.CancellationToken;
         var task = CreateTask("extension-settings");
         await using var context = CreateContext(task);
-        var command = CreateExecCommand(Guid.CreateVersion7());
+        var command = await CreateExecCommand(Guid.CreateVersion7());
         var conversationId = command.ConversationId!.Value;
         await context.ApplySettingsAsync(CreateSettings(task.ProjectId, conversationId, extensionId: null), token);
         await context.StartTurnAsync(command, token);
@@ -51,7 +51,7 @@ public partial class ExecutionCommandHandlerTests
         var task = CreateTask("draft-extension");
         await _persistence.SeedProjectAsync(task.ProjectId);
         await using var context = CreateContext(task, projectTasks: _persistence.CreateProjectTasks());
-        var command = CreateExecCommand(Guid.CreateVersion7());
+        var command = await CreateExecCommand(Guid.CreateVersion7());
         var conversationId = command.ConversationId!.Value;
         await context.ApplySettingsAsync(
             CreateSettings(task.ProjectId, conversationId, TestExtensionIds.Sample),
@@ -81,9 +81,8 @@ public partial class ExecutionCommandHandlerTests
             token
         );
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            context.StartTurnAsync(CreateCommandFor(task), token)
-        );
+        var command = await CreateCommandFor(task);
+        var exception = await Assert.ThrowsAsync<AgwException>(() => context.StartTurnAsync(command, token));
 
         Assert.Equal(ErrorCodes.ConversationReadOnly.Code, exception.Code);
         Assert.Equal(0, projectTasks.ResolveCount);
@@ -103,9 +102,8 @@ public partial class ExecutionCommandHandlerTests
             token
         );
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            context.StartTurnAsync(CreateCommandFor(task), token)
-        );
+        var command = await CreateCommandFor(task);
+        var exception = await Assert.ThrowsAsync<AgwException>(() => context.StartTurnAsync(command, token));
 
         Assert.Equal(ErrorCodes.ConversationReadOnly.Code, exception.Code);
         Assert.Equal(0, await _persistence.CountTurnsAsync(task.ProjectConversationId));
@@ -127,7 +125,7 @@ public partial class ExecutionCommandHandlerTests
             token
         );
 
-        await context.StartTurnAsync(CreateCommandFor(task), token);
+        await context.StartTurnAsync(await CreateCommandFor(task), token);
         await context.WhenIdleAsync();
 
         Assert.Equal(
@@ -150,7 +148,7 @@ public partial class ExecutionCommandHandlerTests
             token
         );
 
-        await context.StartTurnAsync(CreateCommandFor(task), token);
+        await context.StartTurnAsync(await CreateCommandFor(task), token);
         await context.WhenIdleAsync();
 
         Assert.Equal(2, await _persistence.CountTurnsAsync(task.ProjectConversationId));
@@ -167,7 +165,7 @@ public partial class ExecutionCommandHandlerTests
         var task = CreateTask("recreated-conversation");
         await _persistence.SeedProjectAsync(task.ProjectId);
         await using var context = CreateContext(task, projectTasks: _persistence.CreateProjectTasks());
-        var command = CreateExecCommand(Guid.CreateVersion7());
+        var command = await CreateExecCommand(Guid.CreateVersion7());
         var conversationId = command.ConversationId!.Value;
         await context.ApplySettingsAsync(
             CreateSettings(task.ProjectId, conversationId, TestExtensionIds.Sample),
@@ -399,9 +397,9 @@ public partial class ExecutionCommandHandlerTests
     private static ExecutionSettings CreateSettings(Guid projectId, Guid conversationId, string? extensionId) =>
         SettingCommandMapper.FromCommand(new SettingCommand(projectId, conversationId, extensionId: extensionId));
 
-    private ExecCommand CreateCommandFor(AgentExecutionTask task)
+    private async Task<ExecCommand> CreateCommandFor(AgentExecutionTask task)
     {
-        var command = CreateExecCommand(Guid.CreateVersion7());
+        var command = await CreateExecCommand(Guid.CreateVersion7());
         command.ConversationId = task.ProjectConversationId;
         return command;
     }
@@ -426,6 +424,8 @@ public partial class ExecutionCommandHandlerTests
     {
         using var user = TurnPersistenceTestKit.EnterUser();
         var task = await _persistence.SeedConversationAsync();
+        var agentId = Guid.CreateVersion7();
+        await _persistence.SeedAgentAsync(agentId);
         var accepted = await _persistence
             .CreateAcceptance(
                 projectTasks: null,
@@ -436,7 +436,7 @@ public partial class ExecutionCommandHandlerTests
                 new TurnAcceptanceRequest(
                     TurnPersistenceTestKit.UserId,
                     null,
-                    new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
+                    new ExecutionTarget(agentId, AgentRuntimeType.Agent),
                     task.ProjectConversationId,
                     TurnPersistenceTestKit.CreateInput("hello"),
                     TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ProjectConversationId),

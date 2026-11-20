@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "@agw/api";
+import { apiGet, apiPost, apiRequest } from "@agw/api";
 import type { ChatHttpClient } from "@agw/chat-runtime";
 import {
   type ChatEvent,
@@ -11,6 +11,7 @@ import type {
   AgwDesktopBridge,
   ExtensionCaller,
   ExtensionIpcResult,
+  ServerExtensionOrigin,
   ThemeStyleText,
 } from "@desktop/shared/contracts";
 import {
@@ -22,6 +23,7 @@ import {
   type ExtensionManifest,
   type ExtensionPermission,
   type ExtensionWelcome,
+  type ServerRequestOptions,
   type FileHeaderItem,
   type FileHeaderMenuEntry,
   fromExtensionErrorData,
@@ -40,7 +42,12 @@ import {
 } from "@desktop/shared/extension-host-permissions";
 import type { A2AService } from "./a2a-service";
 import { type CloudAccess, type CloudFileSystem, formatCloudUri } from "./cloud-file-system";
-import { type ContextService, filterContextForPermissions } from "./context-service";
+import {
+  type ContextService,
+  type HostContextBase,
+  filterContextForPermissions,
+} from "./context-service";
+import { extensionServerPath, isExtensionVersionMismatch } from "./server-extension-request";
 import type { ExecutionService, SessionOwner } from "./execution-service";
 import type { WorkspaceLayoutStore } from "./workspace-layout-store";
 import { resolveViewId } from "./workspace-ids";
@@ -55,10 +62,16 @@ export type BrokerExtension = {
   permissions: readonly ExtensionPermission[];
   hostPermissions: readonly HostPermission[];
   storageUri: string;
+  origin: ServerExtensionOrigin | null;
+  releaseHash: string | null;
+  serverAvailable: boolean;
 };
 
 export type FrameConnectionInfo = {
+  instanceId: string;
   extensionId: string;
+  origin: ServerExtensionOrigin | null;
+  releaseHash: string | null;
   frameId: string;
   pageId: string;
   kind: ExtensionFrameKind;
@@ -72,6 +85,7 @@ type FrameConnection = FrameConnectionInfo & {
   /** `chat.observe` 的 subscriptionId 与取消订阅的函数。`chat.observe` subscription ids and their unsubscribe functions. */
   chatSubscriptions: Map<string, () => void>;
   disposeContext: () => void;
+  boundContext: HostContextBase;
   /** 这个连接已经收到的主题样式文本标识。The theme style text id this connection already received. */
   themeStyleId: string | null;
 };
@@ -118,6 +132,7 @@ export type ExtensionBridgeBrokerOptions = {
   /** `chat.observe` 订阅的通信入口。The traffic entry point `chat.observe` subscribes to. */
   chat: Pick<ChatHttpClient, "subscribe">;
   extension(extensionId: string): BrokerExtension | null;
+  onServerVersionMismatch?(): void;
   theme(): HostTheme;
   isFrameClosing(frameId: string): boolean;
   insertComposerText(text: string): void;
@@ -176,6 +191,15 @@ function invalidArgument(message: string): Error {
 }
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
+const SERVER_BOUND_PERMISSIONS: ReadonlySet<ExtensionPermission> = new Set([
+  "project.repositories",
+  "context.project",
+  "context.agent",
+  "execution",
+  "a2a",
+  "chat.composer",
+  "chat.observe",
+]);
 
 const SAVE_STATUSES: ReadonlySet<unknown> = new Set<DocumentSaveStatus>([
   "saved",
@@ -497,23 +521,31 @@ export class ExtensionBridgeBroker {
     this.disconnect(info.frameId);
     const controllers = new Set<AbortController>();
     const current = this.options.theme();
+    const extension = this.requireExtension(info.instanceId);
+    const currentContext = structuredClone(this.options.context.snapshot());
     const connection = {
       ...info,
       controllers,
       chatSubscriptions: new Map(),
+      boundContext: currentContext,
       themeStyleId: current.style?.styleId ?? null,
     } as FrameConnection;
+    if (!this.serverContextMatches(connection, extension, currentContext)) {
+      connection.boundContext = this.redactServerContext(currentContext, info.origin);
+    }
     connection.endpoint = new RpcEndpoint(port as unknown as RpcPort, {
       request: (method, params, signal) => this.handle(connection, method, params, signal),
       pong: () => this.options.onPong(info.frameId, info.pageId),
     });
-    connection.disposeContext = this.options.context.subscribe(() => this.sendContext(connection));
+    connection.disposeContext = this.options.context.subscribe(() => {
+      this.sendContext(connection);
+      this.revokeStaleServerConnection(connection);
+    });
     this.connections.set(info.frameId, connection);
-    const extension = this.requireExtension(info.extensionId);
     const welcome: ExtensionWelcome = {
       frame: { frameId: info.frameId, kind: info.kind, viewId: info.viewId, params: info.params },
       manifest: extension.manifest,
-      context: this.contextFor(info.extensionId),
+      context: this.contextFor(connection),
       theme: current.style ? { ...current.theme, cssText: current.style.cssText } : current.theme,
       themeStyleId: connection.themeStyleId,
     };
@@ -583,16 +615,98 @@ export class ExtensionBridgeBroker {
   }
 
   public deliverExecution(owner: SessionOwner, event: string, data: unknown): void {
+    const connection = this.connections.get(owner.frameId);
+    if (!connection || !this.serverContextIsCurrent(connection)) return;
     this.emit(owner.frameId, owner.pageId, event, data);
   }
 
-  private contextFor(extensionId: string): HostContext {
-    const extension = this.requireExtension(extensionId);
+  public revokeStaleServerConnections(): void {
+    for (const connection of this.connections.values()) {
+      this.revokeStaleServerConnection(connection);
+    }
+  }
+
+  private revokeStaleServerConnection(connection: FrameConnection): void {
+    if (!connection.origin || this.serverContextIsCurrent(connection)) return;
+    for (const unsubscribe of connection.chatSubscriptions.values()) unsubscribe();
+    connection.chatSubscriptions.clear();
+    for (const controller of connection.controllers) {
+      controller.abort(
+        createExtensionError("ERR_CONNECTION_CHANGED", "The Server extension identity changed."),
+      );
+    }
+  }
+
+  private serverContextMatches(
+    connection: FrameConnectionInfo,
+    extension: BrokerExtension,
+    context: HostContextBase,
+  ): boolean {
+    if (!connection.origin && !extension.origin) return true;
+    return Boolean(
+      connection.origin &&
+      extension.origin &&
+      extension.serverAvailable &&
+      connection.origin.serverId === extension.origin.serverId &&
+      connection.origin.userId === extension.origin.userId &&
+      connection.releaseHash === extension.releaseHash &&
+      context.server.serverId === connection.origin.serverId &&
+      context.user?.id === connection.origin.userId,
+    );
+  }
+
+  private serverContextIsCurrent(connection: FrameConnectionInfo): boolean {
+    const extension = this.options.extension(connection.instanceId);
+    return (
+      extension !== null &&
+      this.serverContextMatches(connection, extension, this.options.context.snapshot())
+    );
+  }
+
+  private requireServerContext(connection: FrameConnection): BrokerExtension {
+    const extension = this.requireExtension(connection.instanceId);
+    if (!connection.origin && !extension.origin) return extension;
+    if (extension.origin && !extension.serverAvailable) {
+      throw createExtensionError("ERR_EXTENSION_DISABLED", "The Server extension is unavailable.");
+    }
+    if (!this.serverContextIsCurrent(connection)) {
+      throw createExtensionError(
+        "ERR_CONNECTION_CHANGED",
+        "The Server extension identity changed.",
+      );
+    }
+    return extension;
+  }
+
+  private redactServerContext(
+    context: HostContextBase,
+    origin: ServerExtensionOrigin | null,
+  ): HostContextBase {
+    return {
+      ...context,
+      server: {
+        id: "",
+        name: "",
+        kind: "remote",
+        serverId: origin?.serverId ?? null,
+      },
+      user: null,
+      project: null,
+      conversation: null,
+      target: null,
+    };
+  }
+
+  private contextFor(connection: FrameConnection): HostContext {
+    const extension = this.requireExtension(connection.instanceId);
+    const context = this.serverContextIsCurrent(connection)
+      ? this.options.context.snapshot()
+      : connection.boundContext;
     return filterContextForPermissions(
       {
-        ...this.options.context.snapshot(),
+        ...context,
         extension: {
-          id: extensionId,
+          id: extension.manifest.id,
           version: extension.manifest.version,
           manifestVersion: extension.manifest.manifestVersion,
           storageUri: extension.storageUri,
@@ -603,8 +717,8 @@ export class ExtensionBridgeBroker {
   }
 
   private sendContext(connection: FrameConnection): void {
-    if (!this.options.extension(connection.extensionId)) return;
-    connection.endpoint.emit("context.changed", this.contextFor(connection.extensionId));
+    if (!this.options.extension(connection.instanceId)) return;
+    connection.endpoint.emit("context.changed", this.contextFor(connection));
   }
 
   private requireExtension(extensionId: string): BrokerExtension {
@@ -620,6 +734,7 @@ export class ExtensionBridgeBroker {
   private caller(connection: FrameConnection): ExtensionCaller {
     return {
       hostInstanceId: this.options.hostInstanceId,
+      instanceId: connection.instanceId,
       extensionId: connection.extensionId,
       frameId: connection.frameId,
       pageId: connection.pageId,
@@ -628,7 +743,7 @@ export class ExtensionBridgeBroker {
 
   private owner(connection: FrameConnection): SessionOwner {
     return {
-      extensionId: connection.extensionId,
+      extensionId: connection.instanceId,
       frameId: connection.frameId,
       pageId: connection.pageId,
     };
@@ -638,13 +753,14 @@ export class ExtensionBridgeBroker {
     connection: FrameConnection,
     permission: ExtensionPermission,
   ): BrokerExtension {
-    const extension = this.requireExtension(connection.extensionId);
+    const extension = this.requireExtension(connection.instanceId);
     if (!extension.permissions.includes(permission)) {
       throw createExtensionError(
         "ERR_PERMISSION_DENIED",
         `This call requires the ${permission} permission.`,
       );
     }
+    if (SERVER_BOUND_PERMISSIONS.has(permission)) this.requireServerContext(connection);
     return extension;
   }
 
@@ -652,16 +768,18 @@ export class ExtensionBridgeBroker {
   private chatSubscriptionCount(extensionId: string): number {
     let count = 0;
     for (const connection of this.connections.values()) {
-      if (connection.extensionId === extensionId) count += connection.chatSubscriptions.size;
+      if (connection.instanceId === extensionId) count += connection.chatSubscriptions.size;
     }
     return count;
   }
 
   private cloudAccess(connection: FrameConnection): CloudAccess {
+    const extension = this.requireExtension(connection.instanceId);
+    if (extension.origin) this.requireServerContext(connection);
     return {
       kind: "extension",
-      extensionId: connection.extensionId,
-      permissions: this.requireExtension(connection.extensionId).permissions,
+      extensionId: connection.instanceId,
+      permissions: extension.permissions,
     };
   }
 
@@ -747,7 +865,7 @@ export class ExtensionBridgeBroker {
     return {
       "log.error": (connection, params: { message: string; stack: string | null }) => {
         console.error(
-          `[extension ${connection.extensionId}/${connection.viewId ?? connection.kind}] ${params.message}`,
+          `[extension ${connection.instanceId}/${connection.viewId ?? connection.kind}] ${params.message}`,
           params.stack ?? "",
         );
         return null;
@@ -837,11 +955,11 @@ export class ExtensionBridgeBroker {
       },
 
       "workspace.showSidebarView": (connection, params: { id: string }) => {
-        layout.showSidebarView(resolveViewId(connection.extensionId, params.id));
+        layout.showSidebarView(resolveViewId(connection.instanceId, params.id));
         return null;
       },
       "workspace.toggleSidebarView": (connection, params: { id: string }) => {
-        layout.toggleSidebarView(resolveViewId(connection.extensionId, params.id));
+        layout.toggleSidebarView(resolveViewId(connection.instanceId, params.id));
         return null;
       },
       "workspace.setSidebarVisible": (_connection, params: { visible: boolean }) => {
@@ -849,11 +967,12 @@ export class ExtensionBridgeBroker {
         return null;
       },
       "workspace.openMainView": (connection, params: { id: string; params?: unknown }) => {
-        layout.openMainView(resolveViewId(connection.extensionId, params.id), params.params ?? {});
+        layout.openMainView(resolveViewId(connection.instanceId, params.id), params.params ?? {});
         return null;
       },
       "workspace.openFile": async (connection, params: { uri: string }) => {
-        await this.options.openFile(connection.extensionId, params.uri);
+        this.requireServerContext(connection);
+        await this.options.openFile(connection.instanceId, params.uri);
         return null;
       },
       "workspace.setUnsavedChanges": (connection, params: { unsaved: boolean }) => {
@@ -1157,9 +1276,80 @@ export class ExtensionBridgeBroker {
             params.agentName,
             params.method,
             params.params,
-            (event) => connection.endpoint.emit("a2a.event", { streamId: params.streamId, event }),
+            (event) => {
+              if (this.serverContextIsCurrent(connection)) {
+                connection.endpoint.emit("a2a.event", { streamId: params.streamId, event });
+              }
+            },
             requestSignal,
           ),
+        );
+      },
+
+      "server.request": (connection, params: ServerRequestOptions & { path: string }, signal) => {
+        const extension = this.requireServerContext(connection);
+        if (!extension.origin || !extension.releaseHash) {
+          throw createExtensionError(
+            "ERR_UNSUPPORTED_OPERATION",
+            "Server requests are available to Server-managed extensions.",
+          );
+        }
+        const method = typeof params.method === "string" ? params.method.toUpperCase() : "GET";
+        const apiMethod =
+          method === "GET"
+            ? "get"
+            : method === "POST"
+              ? "post"
+              : method === "PUT"
+                ? "put"
+                : method === "DELETE"
+                  ? "delete"
+                  : null;
+        if (apiMethod === null) {
+          throw invalidArgument("method must be GET, POST, PUT or DELETE.");
+        }
+        if (method === "GET" && params.body !== undefined) {
+          throw invalidArgument("GET requests cannot include a body.");
+        }
+        const query = params.query ?? {};
+        if (typeof query !== "object" || query === null || Array.isArray(query)) {
+          throw invalidArgument("query must be an object.");
+        }
+        for (const [key, value] of Object.entries(query)) {
+          if (
+            !key ||
+            !(
+              typeof value === "string" ||
+              typeof value === "boolean" ||
+              (typeof value === "number" && Number.isFinite(value))
+            )
+          ) {
+            throw invalidArgument("query values must be strings, finite numbers or booleans.");
+          }
+        }
+        const path = extensionServerPath(extension.manifest.name, params.path);
+        const requestHeaders = {
+          "X-Agw-Extension-Id": extension.manifest.id,
+          "X-Agw-Extension-Release-Hash": extension.releaseHash,
+        };
+        return this.tracked(connection, signal, (requestSignal) =>
+          context.request(async (contextSignal) => {
+            try {
+              return await apiRequest(
+                path as never,
+                apiMethod as never,
+                {
+                  headers: requestHeaders,
+                  params: { query },
+                  ...(params.body === undefined ? {} : { body: params.body }),
+                  signal: contextSignal,
+                } as never,
+              );
+            } catch (error) {
+              if (isExtensionVersionMismatch(error)) this.options.onServerVersionMismatch?.();
+              throw error;
+            }
+          }, requestSignal),
         );
       },
 
@@ -1173,7 +1363,7 @@ export class ExtensionBridgeBroker {
         },
         signal,
       ) => {
-        const extension = this.requireExtension(connection.extensionId);
+        const extension = this.requireExtension(connection.instanceId);
         if (!matchesHostPermissionHttpUrl(extension.hostPermissions, params.url)) {
           throw createExtensionError(
             "ERR_HOST_NOT_PERMITTED",
@@ -1246,34 +1436,47 @@ export class ExtensionBridgeBroker {
         const problem = validateChatEventFilter(filter);
         if (problem !== null) throw invalidArgument(problem);
         if (
-          this.chatSubscriptionCount(connection.extensionId) >= MAX_CHAT_SUBSCRIPTIONS_PER_EXTENSION
+          this.chatSubscriptionCount(connection.instanceId) >= MAX_CHAT_SUBSCRIPTIONS_PER_EXTENSION
         ) {
           throw createExtensionError(
             "ERR_TOO_MANY_SUBSCRIPTIONS",
             `An extension can hold at most ${MAX_CHAT_SUBSCRIPTIONS_PER_EXTENSION} chat subscriptions.`,
           );
         }
-        const unsubscribe = this.options.chat.subscribe(
-          filter as ChatEventFilter,
-          (event, identity) => {
-            // 只发送属于当前连接的事件：profile、地址与 token 都相同。
-            // Only events of the current connection are sent: the same profile, address and token.
-            const current = context.connection;
-            if (
-              !current ||
-              event.scope.serverId !== current.profileId ||
-              identity.baseUrl !== current.baseUrl ||
-              identity.token !== current.token
-            ) {
-              return;
-            }
-            connection.endpoint.emit("chat.event", {
-              subscriptionId,
-              event: redactChatEventForExtension(event),
-            });
-          },
-        );
-        connection.chatSubscriptions.set(subscriptionId, unsubscribe);
+        let active = true;
+        let unsubscribe: () => void = () => undefined;
+        let disposeContext: () => void = () => undefined;
+        const cancel = () => {
+          if (!active) return;
+          active = false;
+          unsubscribe();
+          disposeContext();
+        };
+        unsubscribe = this.options.chat.subscribe(filter as ChatEventFilter, (event, identity) => {
+          if (!this.serverContextIsCurrent(connection)) {
+            cancel();
+            return;
+          }
+          // 只发送属于当前连接的事件：profile、地址与 token 都相同。
+          // Only events of the current connection are sent: the same profile, address and token.
+          const current = context.connection;
+          if (
+            !current ||
+            event.scope.serverId !== current.profileId ||
+            identity.baseUrl !== current.baseUrl ||
+            identity.token !== current.token
+          ) {
+            return;
+          }
+          connection.endpoint.emit("chat.event", {
+            subscriptionId,
+            event: redactChatEventForExtension(event),
+          });
+        });
+        disposeContext = this.options.context.subscribe(() => {
+          if (!this.serverContextIsCurrent(connection)) cancel();
+        });
+        connection.chatSubscriptions.set(subscriptionId, cancel);
         return null;
       },
       "chat.unobserve": (connection, params: { subscriptionId: string }) => {
@@ -1286,11 +1489,11 @@ export class ExtensionBridgeBroker {
         connection,
         params: { type: "info" | "success" | "error"; message: string },
       ) => {
-        this.options.notify(connection.extensionId, params);
+        this.options.notify(connection.instanceId, params);
         return null;
       },
       "ui.openExternal": async (connection, params: { url: string }) => {
-        const extension = this.requireExtension(connection.extensionId);
+        const extension = this.requireExtension(connection.instanceId);
         let protocol: string;
         try {
           protocol = new URL(params.url).protocol;
@@ -1306,7 +1509,7 @@ export class ExtensionBridgeBroker {
         // 已批准的域名直接打开，其他地址由用户确认。Approved hosts open directly; other URLs need the user's confirmation.
         if (
           !matchesHostPermissionHttpUrl(extension.hostPermissions, params.url) &&
-          !(await this.options.confirmOpenExternal(connection.extensionId, params.url))
+          !(await this.options.confirmOpenExternal(connection.instanceId, params.url))
         ) {
           throw createExtensionError("ERR_CANCELED", "The user did not open the link.");
         }

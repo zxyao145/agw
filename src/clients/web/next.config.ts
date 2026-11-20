@@ -27,6 +27,7 @@ const nextConfig: NextConfig = {
     "@agw/observability",
     "@agw/projects",
     "@agw/providers",
+    "@agw/server-extensions",
     "@agw/settings",
     "@agw/skills",
   ],

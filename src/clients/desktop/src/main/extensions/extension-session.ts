@@ -14,9 +14,9 @@ import { createExtensionProtocolHandler, type ExtensionProtocolState } from "./e
 
 export type ExtensionSessionHooks = {
   sdkDirectory: string;
-  protocolState(extensionId: string): ExtensionProtocolState | null;
-  grantedPermissions(extensionId: string): readonly ExtensionPermission[];
-  hostPermissions(extensionId: string): readonly HostPermission[];
+  protocolState(extensionId: string, releaseHash: string | null): ExtensionProtocolState | null;
+  grantedPermissions(extensionId: string, webContentsId?: number): readonly ExtensionPermission[];
+  hostPermissions(extensionId: string, webContentsId?: number): readonly HostPermission[];
   onRequestBlocked(event: Extract<ExtensionEvent, { type: "request-blocked" }>): void;
   onServiceWorkerRegistered(extensionId: string, scope: string): void;
 };
@@ -118,14 +118,24 @@ export class ExtensionSessionFactory {
       EXTENSION_SCHEME,
       createExtensionProtocolHandler({
         extensionId,
-        getState: () => hooks.protocolState(extensionId),
+        getState: (releaseHash) => hooks.protocolState(extensionId, releaseHash),
         sdkDirectory: hooks.sdkDirectory,
         fetchFile: (fileUrl) => net.fetch(fileUrl),
       }),
     );
 
     extensionSession.webRequest.onBeforeRequest({ urls: ["<all_urls>"] }, (details, callback) => {
-      if (isRequestAllowed(extensionId, hooks.hostPermissions(extensionId), details.url)) {
+      const webContentsId = details.webContentsId;
+      if (
+        isRequestAllowed(
+          extensionId,
+          hooks.hostPermissions(
+            extensionId,
+            webContentsId !== undefined && webContentsId > 0 ? webContentsId : undefined,
+          ),
+          details.url,
+        )
+      ) {
         callback({});
         return;
       }
@@ -161,11 +171,13 @@ export class ExtensionSessionFactory {
       hooks.onServiceWorkerRegistered(extensionId, details.scope);
     });
 
-    extensionSession.setPermissionRequestHandler((_contents, permission, callback) => {
-      callback(isWebPermissionAllowed(permission, hooks.grantedPermissions(extensionId)));
+    extensionSession.setPermissionRequestHandler((contents, permission, callback) => {
+      callback(
+        isWebPermissionAllowed(permission, hooks.grantedPermissions(extensionId, contents.id)),
+      );
     });
-    extensionSession.setPermissionCheckHandler((_contents, permission) =>
-      isWebPermissionAllowed(permission, hooks.grantedPermissions(extensionId)),
+    extensionSession.setPermissionCheckHandler((contents, permission) =>
+      isWebPermissionAllowed(permission, hooks.grantedPermissions(extensionId, contents?.id ?? 0)),
     );
     extensionSession.setDevicePermissionHandler(() => false);
     extensionSession.setDisplayMediaRequestHandler((_request, callback) => callback({}));

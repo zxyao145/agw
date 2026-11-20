@@ -8,6 +8,9 @@ import type {
   ExtensionSafeModeState,
   HostConfirmationRequest,
   InstalledExtension,
+  ServerExtensionArchive,
+  ServerExtensionCatalog,
+  ServerExtensionOrigin,
   ThemeStyleRequest,
   ThemeStyleText,
   UnsavedFileItem,
@@ -25,6 +28,7 @@ import {
   normalizeFloatingChatContext,
 } from "@agw/extension-sdk";
 import { DEFAULT_THEME_ID } from "@desktop/shared/appearance";
+import { extensionDisplayName } from "@desktop/shared/extension-manifest";
 import { parseHostPermissions } from "@desktop/shared/extension-host-permissions";
 import { DEFAULT_THEME_TITLE } from "../appearance/resolve-theme";
 import { A2AService } from "./a2a-service";
@@ -72,6 +76,7 @@ export type BlockedRequest = { url: string; resourceType: string; reason: string
 
 export type HostFrameState = {
   frameId: string;
+  instanceId: string;
   extensionId: string;
   kind: ExtensionFrameKind;
   viewId: string | null;
@@ -81,7 +86,10 @@ export type HostFrameState = {
 
 export type ExtensionState = {
   id: string;
+  instanceId: string;
+  extensionId: string;
   installed: InstalledExtension;
+  pendingUpdate: boolean;
   status: ExtensionRuntimeStatus;
   error: ExtensionFailure | null;
   blockedRequests: readonly BlockedRequest[];
@@ -101,6 +109,7 @@ export type FileOpenLocation = { directoryId: string | null; path: string };
 export type ExtensionHostSnapshot = {
   started: boolean;
   safeMode: ExtensionSafeModeState | null;
+  serverSyncError: string | null;
   recoveryNotices: readonly ExtensionRecoveryNotice[];
   extensions: readonly ExtensionState[];
   /** 握手失败、崩溃或失去响应的视图。Views whose handshake failed, crashed or hung. */
@@ -168,6 +177,10 @@ function deferred(): Deferred {
 type HostFrame = {
   frameId: string;
   extensionId: string;
+  instanceId: string;
+  manifestId: string;
+  origin: ServerExtensionOrigin | null;
+  releaseHash: string | null;
   kind: ExtensionFrameKind;
   /** 完整视图 id；background 为 null，设置页为 `settings`。Full view id; null for background, `settings` for settings. */
   viewId: string | null;
@@ -189,6 +202,7 @@ type HostFrame = {
 
 type ExtensionRecord = {
   installed: InstalledExtension;
+  activeInstalled: InstalledExtension;
   status: ExtensionRuntimeStatus;
   error: ExtensionFailure | null;
   blocked: BlockedRequest[];
@@ -278,6 +292,7 @@ export class ExtensionHost {
   private startPromise: Promise<void> | null = null;
   private started = false;
   private safeMode: ExtensionSafeModeState | null = null;
+  private serverSyncError: string | null = null;
   private recoveryNotices: ExtensionRecoveryNotice[] = [];
   private readonly records = new Map<string, ExtensionRecord>();
   private readonly frames = new Map<string, HostFrame>();
@@ -300,11 +315,15 @@ export class ExtensionHost {
   };
   private themeBackground = "#ffffff";
   private composer: { insertText(text: string): void } | null = null;
+  private serverVersionMismatchHandler: () => void = () => undefined;
   private refreshConversations: ((projectId: string) => void) | null = null;
   private fileOpener: ((location: FileOpenLocation) => Promise<boolean>) | null = null;
   private fileWriteListener: ((location: FileWriteLocation) => void) | null = null;
   /** 文件查看器当前显示的文件，按视图 id 记录。The file each file viewer shows, by view id. */
   private readonly fileViewerFiles = new Map<string, FileViewerFile>();
+  /** 当前仍有文件查看器贡献的视图。Views that still have a file viewer contribution. */
+  private readonly retainedFileViewerIds = new Set<string>();
+  private fileViewerRetentionInitialized = false;
   /** 报告了未保存修改的 frame。Frames that reported unsaved changes. */
   private readonly unsavedFrames = new Set<string>();
   /** 宿主 Source 中有未保存修改的文件名；没有时为 null。The file with unsaved changes in the host's Source, or null. */
@@ -332,6 +351,7 @@ export class ExtensionHost {
   private snapshot: ExtensionHostSnapshot = {
     started: false,
     safeMode: null,
+    serverSyncError: null,
     recoveryNotices: [],
     extensions: [],
     viewErrors: {},
@@ -377,6 +397,7 @@ export class ExtensionHost {
     this.layout.subscribe(() => this.context.setWorkspace(this.workspaceState()));
     this.context.onConnectionChanged(() => this.cloudGrants.clear());
     this.context.onConnectionChanged(() => this.clearFloatingChat());
+    this.context.onConnectionChanged(() => this.markServerExtensionsUnavailableLocally());
     this.context.subscribe((context) => {
       const scopeChanged = (scope: { serverId: string; projectId: string | null }) =>
         scope.projectId !== (context.project?.id ?? null) || scope.serverId !== context.server.id;
@@ -408,6 +429,7 @@ export class ExtensionHost {
       a2a: new A2AService(this.context),
       chat: chatHttpClient,
       extension: (extensionId) => this.brokerExtension(extensionId),
+      onServerVersionMismatch: () => this.serverVersionMismatchHandler(),
       theme: () => this.theme,
       isFrameClosing: (frameId) => this.frames.get(frameId)?.closing !== null,
       insertComposerText: (text) => {
@@ -417,7 +439,7 @@ export class ExtensionHost {
       },
       notify: (extensionId, notification) =>
         options.notify(
-          this.records.get(extensionId)?.installed.manifest?.name ?? extensionId,
+          extensionDisplayName(this.records.get(extensionId)?.installed.manifest) ?? extensionId,
           notification,
         ),
       onPong: (frameId, pageId) => {
@@ -447,7 +469,8 @@ export class ExtensionHost {
         this.confirm({
           kind: "open-link",
           extensionId,
-          extensionName: this.records.get(extensionId)?.installed.manifest?.name ?? extensionId,
+          extensionName:
+            extensionDisplayName(this.records.get(extensionId)?.installed.manifest) ?? extensionId,
           url,
         }),
       showMessageBox: (owner, request) => this.showMessageBox(owner, request),
@@ -513,8 +536,13 @@ export class ExtensionHost {
     if (this.safeMode) return;
     await Promise.all(
       [...this.records.values()]
-        .filter((record) => record.installed.enabled && record.installed.validation === "valid")
-        .map((record) => this.activate(record.installed.id)),
+        .filter(
+          (record) =>
+            record.installed.enabled &&
+            record.installed.validation === "valid" &&
+            (record.installed.source !== "server" || record.installed.serverAvailable !== false),
+        )
+        .map((record) => this.activate(record.installed.instanceId ?? record.installed.id)),
     );
   }
 
@@ -522,6 +550,47 @@ export class ExtensionHost {
 
   public async rescan(): Promise<void> {
     await this.refreshList();
+    await Promise.all(
+      [...this.records.values()]
+        .filter((record) => record.installed.source === "server" && record.status === "inactive")
+        .map((record) => this.activate(record.installed.instanceId ?? record.installed.id)),
+    );
+  }
+
+  public setServerVersionMismatchHandler(handler: () => void): void {
+    this.serverVersionMismatchHandler = handler;
+  }
+
+  public setServerSyncError(error: string | null): void {
+    if (this.serverSyncError === error) return;
+    this.serverSyncError = error;
+    this.publish();
+  }
+
+  public async markServerExtensionsUnavailable(): Promise<void> {
+    this.markServerExtensionsUnavailableLocally();
+    if (!this.desktopBridge) return;
+    await this.bridge.markServerExtensionsUnavailable(this.hostInstanceId);
+    await this.refreshList();
+  }
+
+  public hasServerExtensionRelease(
+    origin: ServerExtensionOrigin,
+    extensionId: string,
+    releaseHash: string,
+  ): Promise<boolean> {
+    return this.bridge.hasServerExtensionRelease(origin, extensionId, releaseHash);
+  }
+
+  public async syncServerExtensionCatalog(request: {
+    origin: ServerExtensionOrigin;
+    catalog: ServerExtensionCatalog;
+    archives: ServerExtensionArchive[];
+    failures?: Array<{ extensionId: string; releaseHash: string; message: string }>;
+  }): Promise<boolean> {
+    const applied = await this.bridge.syncServerExtensionCatalog(this.hostInstanceId, request);
+    await this.rescan();
+    return applied;
   }
 
   /**
@@ -845,7 +914,9 @@ export class ExtensionHost {
       (frame) => frame.extensionId === extensionId && frame.kind === "background",
     );
     const name =
-      (extensionId && this.records.get(extensionId)?.installed.manifest?.name) ?? extensionId ?? "";
+      (extensionId && extensionDisplayName(this.records.get(extensionId)?.installed.manifest)) ??
+      extensionId ??
+      "";
     const run = background
       ? this.broker.call(background.frameId, "commands.execute", { command: action.command, args })
       : Promise.reject(
@@ -896,13 +967,27 @@ export class ExtensionHost {
 
   /** 只保留匹配当前文件的文件查看器，其余关闭。Keeps the file viewers matching the current file and closes the rest. */
   public retainFileViewers(viewIds: readonly string[]): void {
+    this.fileViewerRetentionInitialized = true;
+    this.retainedFileViewerIds.clear();
+    for (const viewId of viewIds) this.retainedFileViewerIds.add(viewId);
+
     for (const [viewId, frame] of this.viewFrames) {
-      if (frame.kind === "fileViewer" && !viewIds.includes(viewId)) {
+      if (
+        frame.kind === "fileViewer" &&
+        !this.retainedFileViewerIds.has(viewId) &&
+        !this.unsavedFrames.has(frame.frameId)
+      ) {
         void this.closeFrame(frame, "frame-unloaded", true);
       }
     }
     for (const viewId of this.fileViewerFiles.keys()) {
-      if (!viewIds.includes(viewId)) this.fileViewerFiles.delete(viewId);
+      const frame = this.viewFrames.get(viewId);
+      if (
+        !this.retainedFileViewerIds.has(viewId) &&
+        (!frame || !this.unsavedFrames.has(frame.frameId))
+      ) {
+        this.fileViewerFiles.delete(viewId);
+      }
     }
   }
 
@@ -1226,9 +1311,16 @@ export class ExtensionHost {
     const record = this.records.get(extensionId);
     if (!record || this.safeMode) return;
     if (record.status !== "inactive" && record.status !== "failed") return;
-    const { installed } = record;
+    const installed = record.activeInstalled;
     const manifest = installed.manifest;
-    if (!installed.enabled || installed.validation !== "valid" || !manifest) return;
+    if (
+      !installed.enabled ||
+      installed.permissionApprovalRequired ||
+      installed.validation !== "valid" ||
+      (installed.source === "server" && installed.serverAvailable === false) ||
+      !manifest
+    )
+      return;
 
     if (record.status === "failed") this.unregister(record);
     record.status = "activating";
@@ -1271,6 +1363,10 @@ export class ExtensionHost {
         extensionId,
         manifest.version,
       );
+      record.activeInstalled = {
+        ...record.activeInstalled,
+        lastActivatedVersion: manifest.version,
+      };
       record.installed = { ...record.installed, lastActivatedVersion: manifest.version };
     } catch (error) {
       if (!abort.signal.aborted)
@@ -1373,7 +1469,7 @@ export class ExtensionHost {
   }
 
   private async cleanUpWithoutHooks(record: ExtensionRecord): Promise<void> {
-    const extensionId = record.installed.id;
+    const extensionId = record.installed.instanceId ?? record.installed.id;
     await this.execution.closeExtension(extensionId, "deactivated", false);
     for (const frame of [...this.frames.values()].filter(
       (item) => item.extensionId === extensionId,
@@ -1391,7 +1487,21 @@ export class ExtensionHost {
   private unregister(record: ExtensionRecord): void {
     if (!record.registered && record.status !== "failed") return;
     record.registered = false;
-    this.registry.unregisterExtension(record.installed.id);
+    this.registry.unregisterExtension(record.installed.instanceId ?? record.installed.id);
+  }
+
+  private markServerExtensionsUnavailableLocally(): void {
+    let changed = false;
+    for (const record of this.records.values()) {
+      if (record.installed.source !== "server" || record.installed.serverAvailable === false)
+        continue;
+      record.installed = { ...record.installed, serverAvailable: false };
+      this.unregister(record);
+      changed = true;
+    }
+    if (!changed) return;
+    this.broker.revokeStaleServerConnections();
+    this.publish();
   }
 
   /* ---------- frame ---------- */
@@ -1403,9 +1513,21 @@ export class ExtensionHost {
     entry: string | null,
     params: unknown,
   ): Promise<HostFrame> {
+    const installed = this.records.get(extensionId)?.activeInstalled;
+    if (!installed) throw new Error(`Extension instance ${extensionId} is not installed.`);
+    const instanceId = installed.instanceId ?? installed.id;
+    const origin = installed.source === "server" ? (installed.origin ?? null) : null;
+    const releaseHash = installed.source === "server" ? (installed.releaseHash ?? null) : null;
+    if (installed.source === "server" && (!origin || !releaseHash)) {
+      throw new Error("A Server extension frame requires its source and release identity.");
+    }
     const frame: HostFrame = {
       frameId: crypto.randomUUID(),
       extensionId,
+      instanceId,
+      manifestId: installed.id,
+      origin,
+      releaseHash,
       kind,
       viewId,
       params,
@@ -1427,7 +1549,10 @@ export class ExtensionHost {
     this.startHandshakeTimer(frame);
     this.publish();
     await this.bridge.createExtensionFrame(this.hostInstanceId, {
-      extensionId,
+      instanceId,
+      extensionId: installed.id,
+      origin,
+      releaseHash,
       frameId: frame.frameId,
       kind,
       viewId: viewId === null ? null : localViewId(viewId),
@@ -1462,6 +1587,8 @@ export class ExtensionHost {
       this.publish();
       this.dismissMessageBoxes(frame.frameId);
       this.dismissImagePreview(frame.frameId);
+      // 让待处理的 RPC 拒绝响应先发出，再销毁页面。Let pending RPC rejections be sent before destroying the page.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
       if (frame.handshakeTimer !== null) clearTimeout(frame.handshakeTimer);
       if (!frame.handshake.settled)
         frame.handshake.reject(createExtensionError("ERR_FRAME_CLOSING", "The frame is closing."));
@@ -1618,7 +1745,15 @@ export class ExtensionHost {
 
   private attachPort(message: ExtensionPortMessage, port: MessagePort): void {
     const frame = this.frames.get(message.frameId);
-    if (!frame || frame.closing || frame.extensionId !== message.extensionId) {
+    if (
+      !frame ||
+      frame.closing ||
+      frame.instanceId !== message.instanceId ||
+      frame.manifestId !== message.extensionId ||
+      frame.releaseHash !== message.releaseHash ||
+      frame.origin?.serverId !== message.origin?.serverId ||
+      frame.origin?.userId !== message.origin?.userId
+    ) {
       port.close();
       return;
     }
@@ -1631,7 +1766,10 @@ export class ExtensionHost {
     frame.lastPong = Date.now();
     this.broker.connect(
       {
-        extensionId: frame.extensionId,
+        instanceId: frame.instanceId,
+        extensionId: frame.manifestId,
+        origin: message.origin,
+        releaseHash: message.releaseHash,
         frameId: frame.frameId,
         pageId: message.pageId,
         kind: frame.kind,
@@ -1646,6 +1784,7 @@ export class ExtensionHost {
   }
 
   private onMainEvent(event: ExtensionEvent): void {
+    const instanceId = event.instanceId ?? event.extensionId;
     switch (event.type) {
       case "file-change":
         this.broker.emit(event.frameId, event.pageId, "fs.changed", {
@@ -1654,7 +1793,7 @@ export class ExtensionHost {
         });
         return;
       case "request-blocked": {
-        const record = this.records.get(event.extensionId);
+        const record = this.records.get(instanceId);
         if (!record) return;
         record.blocked = [
           {
@@ -1691,7 +1830,7 @@ export class ExtensionHost {
         return;
       }
       case "extension-failed":
-        void this.fail(event.extensionId, { code: event.code, message: event.message });
+        void this.fail(instanceId, { code: event.code, message: event.message });
         return;
     }
   }
@@ -1729,7 +1868,8 @@ export class ExtensionHost {
             kind: "extension",
             extensionId: owner.extensionId,
             extensionName:
-              this.records.get(owner.extensionId)?.installed.manifest?.name ?? owner.extensionId,
+              extensionDisplayName(this.records.get(owner.extensionId)?.installed.manifest) ??
+              owner.extensionId,
           },
           type: request.type,
           message: request.message,
@@ -1834,6 +1974,35 @@ export class ExtensionHost {
     if (unsaved) this.unsavedFrames.add(frameId);
     else this.unsavedFrames.delete(frameId);
     this.publish();
+    if (!unsaved) {
+      const frame = this.frames.get(frameId);
+      if (
+        frame?.kind === "fileViewer" &&
+        frame.viewId !== null &&
+        this.fileViewerRetentionInitialized &&
+        !this.retainedFileViewerIds.has(frame.viewId)
+      ) {
+        this.fileViewerFiles.delete(frame.viewId);
+        void this.closeFrame(frame, "frame-unloaded", true);
+      }
+      const record = frame ? this.records.get(frame.instanceId) : undefined;
+      const hasUnsavedFrame = frame
+        ? [...this.frames.values()].some(
+            (candidate) =>
+              candidate.instanceId === frame.instanceId &&
+              this.unsavedFrames.has(candidate.frameId),
+          )
+        : false;
+      if (
+        record?.activeInstalled.source === "server" &&
+        record.activeInstalled.releaseHash !== record.installed.releaseHash &&
+        !hasUnsavedFrame
+      ) {
+        void this.refreshList().catch((error: unknown) =>
+          console.error("Unable to apply the pending Server extension release.", error),
+        );
+      }
+    }
   }
 
   private setSaveStatus(frameId: string, status: DocumentSaveStatus | null): void {
@@ -1917,14 +2086,15 @@ export class ExtensionHost {
 
   private async refreshList(): Promise<void> {
     const list = await this.bridge.listExtensions();
-    const ids = new Set(list.map((item) => item.id));
+    const ids = new Set(list.map((item) => item.instanceId ?? item.id));
     for (const id of this.records.keys()) {
       if (ids.has(id)) continue;
       await this.deactivate(id);
       this.records.delete(id);
     }
     for (const installed of list) {
-      const record = this.records.get(installed.id);
+      const instanceId = installed.instanceId ?? installed.id;
+      const record = this.records.get(instanceId);
       const fixedStatus: ExtensionRuntimeStatus | null =
         installed.validation === "invalid"
           ? "invalid"
@@ -1932,8 +2102,9 @@ export class ExtensionHost {
             ? "incompatible"
             : null;
       if (!record) {
-        this.records.set(installed.id, {
+        this.records.set(instanceId, {
           installed,
+          activeInstalled: installed,
           status: fixedStatus ?? "inactive",
           error: null,
           blocked: [],
@@ -1943,20 +2114,48 @@ export class ExtensionHost {
         });
         continue;
       }
-      if (fixedStatus !== null && (record.status === "active" || record.status === "activating")) {
-        await this.deactivate(installed.id);
+      const releaseChanged =
+        record.activeInstalled.source === "server" &&
+        installed.source === "server" &&
+        record.activeInstalled.releaseHash !== installed.releaseHash;
+      const hasUnsavedFrame = [...this.frames.values()].some(
+        (frame) => frame.instanceId === instanceId && this.unsavedFrames.has(frame.frameId),
+      );
+      const releaseDeferred = releaseChanged && hasUnsavedFrame;
+      if (
+        !releaseDeferred &&
+        (fixedStatus !== null || releaseChanged) &&
+        (record.status === "active" || record.status === "activating")
+      ) {
+        await this.deactivate(instanceId);
       }
       record.installed = installed;
-      if (fixedStatus !== null) record.status = fixedStatus;
+      if (!releaseDeferred) record.activeInstalled = installed;
+      if (fixedStatus !== null && !releaseDeferred) record.status = fixedStatus;
       else if (record.status === "invalid" || record.status === "incompatible")
         record.status = "inactive";
+      const serverAvailable = installed.source !== "server" || installed.serverAvailable !== false;
+      if (!serverAvailable) this.unregister(record);
+      if (
+        releaseChanged &&
+        !hasUnsavedFrame &&
+        installed.enabled &&
+        fixedStatus === null &&
+        serverAvailable
+      ) {
+        await this.activate(instanceId);
+      } else if (serverAvailable && record.status === "active" && !record.registered) {
+        this.registry.registerExtension(instanceId, extensionRegistration(record.activeInstalled));
+        record.registered = true;
+      }
     }
+    this.broker.revokeStaleServerConnections();
     this.publish();
   }
 
   private brokerExtension(extensionId: string): BrokerExtension | null {
     const record = this.records.get(extensionId);
-    if (!record || !record.installed.manifest || record.storageUri === null) return null;
+    if (!record || !record.activeInstalled.manifest || record.storageUri === null) return null;
     if (
       record.status !== "active" &&
       record.status !== "activating" &&
@@ -1964,17 +2163,24 @@ export class ExtensionHost {
     )
       return null;
     return {
-      manifest: record.installed.manifest,
-      permissions: record.installed.grantedPermissions,
-      hostPermissions: parseHostPermissions(record.installed.grantedHostPermissions),
+      manifest: record.activeInstalled.manifest,
+      permissions: record.activeInstalled.grantedPermissions,
+      hostPermissions: parseHostPermissions(record.activeInstalled.grantedHostPermissions),
       storageUri: record.storageUri,
+      origin: record.activeInstalled.origin ?? null,
+      releaseHash: record.installed.releaseHash ?? null,
+      serverAvailable:
+        record.installed.source !== "server" || (record.installed.serverAvailable ?? true),
     };
   }
 
   private settingsView(viewId: string): WorkspaceView | undefined {
     if (!viewId.startsWith("settings:")) return undefined;
     const extensionId = viewId.slice("settings:".length);
-    const installed = this.records.get(extensionId)?.installed;
+    const record = this.records.get(extensionId);
+    const installed = record?.activeInstalled;
+    if (record?.installed.source === "server" && record.installed.serverAvailable === false)
+      return undefined;
     const entry = installed?.manifest?.contributes?.settings?.entry;
     if (!installed?.manifest || !entry) return undefined;
     return {
@@ -1983,7 +2189,7 @@ export class ExtensionHost {
       title: "Settings",
       icon: { kind: "lucide", name: "Settings" },
       extensionId,
-      extensionName: installed.manifest.name,
+      extensionName: extensionDisplayName(installed.manifest) ?? installed.id,
       entry,
       retainContextWhenHidden: false,
       failure: null,
@@ -2004,6 +2210,7 @@ export class ExtensionHost {
     this.snapshot = {
       started: this.started,
       safeMode: this.safeMode,
+      serverSyncError: this.serverSyncError,
       recoveryNotices: this.recoveryNotices,
       viewErrors: Object.fromEntries(this.viewErrors),
       unsavedViewIds: [...this.unsavedFrames].flatMap((frameId) => {
@@ -2025,24 +2232,40 @@ export class ExtensionHost {
       imagePreview: this.imagePreview?.preview ?? null,
       floatingChat: this.floatingChat,
       extensions: [...this.records.values()]
-        .sort((left, right) => left.installed.id.localeCompare(right.installed.id))
-        .map((record) => ({
-          id: record.installed.id,
-          installed: record.installed,
-          status: record.status,
-          error: record.error,
-          blockedRequests: record.blocked,
-          frames: [...this.frames.values()]
-            .filter((frame) => frame.extensionId === record.installed.id && frame.closing === null)
-            .map((frame) => ({
+        .sort((left, right) =>
+          (left.installed.instanceId ?? left.installed.id).localeCompare(
+            right.installed.instanceId ?? right.installed.id,
+          ),
+        )
+        .map((record) => {
+          const instanceId = record.installed.instanceId ?? record.installed.id;
+          const frames = [...this.frames.values()].filter(
+            (frame) => frame.instanceId === instanceId && frame.closing === null,
+          );
+          return {
+            id: instanceId,
+            instanceId,
+            extensionId: record.installed.id,
+            installed: record.installed,
+            pendingUpdate: frames.some(
+              (frame) =>
+                this.unsavedFrames.has(frame.frameId) &&
+                frame.releaseHash !== (record.installed.releaseHash ?? null),
+            ),
+            status: record.status,
+            error: record.error,
+            blockedRequests: record.blocked,
+            frames: frames.map((frame) => ({
               frameId: frame.frameId,
-              extensionId: frame.extensionId,
+              extensionId: frame.manifestId,
+              instanceId: frame.instanceId,
               kind: frame.kind,
               viewId: frame.viewId,
               status: frame.pageId === null ? "loading" : "ready",
               snapshot: frame.snapshot,
             })),
-        })),
+          };
+        }),
     };
     for (const listener of this.listeners) listener();
   }

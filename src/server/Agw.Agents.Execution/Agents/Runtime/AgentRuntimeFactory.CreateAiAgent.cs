@@ -1,5 +1,7 @@
+using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Agents.ExternalAgents;
+using Agw.Extensions.Contracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -20,7 +22,10 @@ public partial class AgentRuntimeFactory
         IReadOnlyDictionary<string, string>? environmentVariables,
         bool deferHumanInteractions,
         CancellationToken cancellationToken = default,
-        AgwPermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null,
+        IReadOnlyList<ExtensionExecutionPin>? extensionPins = null,
+        ExtensionCapabilitySnapshot? acceptedExtensionCapabilities = null,
+        IReadOnlyList<Guid>? extensionIds = null
     )
     {
         var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
@@ -40,6 +45,9 @@ public partial class AgentRuntimeFactory
                 DefaultMode = "execute",
                 DeferHumanInteractions = deferHumanInteractions,
                 PermissionMode = permissionMode,
+                ExtensionPins = extensionPins,
+                ExtensionIds = extensionIds,
+                AcceptedExtensionCapabilities = acceptedExtensionCapabilities,
             },
             cancellationToken
         );
@@ -92,7 +100,10 @@ public partial class AgentRuntimeFactory
                 environmentVariables,
                 request.DefaultMode,
                 cancellationToken,
-                deferHumanInteractions: request.DeferHumanInteractions
+                deferHumanInteractions: request.DeferHumanInteractions,
+                extensionPins: request.ExtensionPins,
+                acceptedExtensionCapabilities: request.AcceptedExtensionCapabilities,
+                extensionIds: request.ExtensionIds
             )
             .ConfigureAwait(false);
     }

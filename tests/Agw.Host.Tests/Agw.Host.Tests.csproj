@@ -32,4 +32,15 @@
       />
     </ItemGroup>
   </Target>
+
+  <Target Name="CopyExtensionRecoveryFixture" AfterTargets="Build">
+    <ItemGroup>
+      <ExtensionRecoveryFixtureFiles Include="$(MSBuildProjectDirectory)/../Agw.Extensions.Runtime.Tests/Fixture/bin/$(Configuration)/net10.0/*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(ExtensionRecoveryFixtureFiles)"
+      DestinationFolder="$(OutDir)ExtensionFixture"
+      SkipUnchangedFiles="true"
+    />
+  </Target>
 </Project>

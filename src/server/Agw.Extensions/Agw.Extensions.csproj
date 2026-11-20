@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Semver" />
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Nito.AsyncEx.Coordination" />
+    <PackageReference Include="Microsoft.OpenApi" />
+    <ProjectReference Include="../Agw.Agents.Contracts/Agw.Agents.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Extensions.Contracts/Agw.Extensions.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Extensions.Sdk/Agw.Extensions.Sdk.csproj" />
+    <ProjectReference Include="../Agw.Shared/Agw.Shared.csproj" />
+    <ProjectReference Include="../Agw.Settings/Agw.Settings.csproj" />
+    <ProjectReference Include="../Agw.Tools.Abstractions/Agw.Tools.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

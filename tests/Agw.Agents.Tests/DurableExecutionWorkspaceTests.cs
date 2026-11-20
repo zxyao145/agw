@@ -41,7 +41,7 @@ public sealed partial class DurableExecutionStoreTests
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
-        var accepted = await AcceptAsync(agentType: AgentRuntimeType.Agentflow);
+        var accepted = await AcceptAsync();
         var id = accepted.Request.TurnId;
         var registered = await Store.GetAsync(id, token);
         var json = System.Text.Json.Nodes.JsonNode.Parse(DurableExecutionJson.Serialize(registered.Manifest))!;

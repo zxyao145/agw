@@ -42,6 +42,30 @@ public sealed class ToolValueObjectJsonTests : IDisposable
     }
 
     [Fact]
+    public void SerializeAndDeserialize_ExtensionTool_PreservesStableSelectionIdentity()
+    {
+        var extensionId = Guid.CreateVersion7();
+        ToolValueObject[] values =
+        [
+            new ToolValue
+            {
+                Definition = new ExtensionToolDefinition { ExtensionId = extensionId, ToolId = "calendar.read" },
+            },
+        ];
+
+        var json = ToolValueObjectJson.Serialize(values);
+        var decoded = Assert.IsType<ToolValue>(Assert.Single(ToolValueObjectJson.Deserialize(json)));
+        var definition = Assert.IsType<ExtensionToolDefinition>(decoded.Definition);
+
+        Assert.Equal(extensionId, definition.ExtensionId);
+        Assert.Equal("calendar.read", definition.ToolId);
+        Assert.Equal(
+            $"extension:{extensionId:D}:{Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes("calendar.read"))}",
+            definition.GetDefinitionName()
+        );
+    }
+
+    [Fact]
     public void Deserialize_BackgroundAgentsOptions_CreatesStrongDefinition()
     {
         var agentId = Guid.NewGuid();

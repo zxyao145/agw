@@ -64,5 +64,9 @@ public class ToolsController : ControllerBase
             RequiresWorkspace = tool.RequiresWorkspace,
             RequiredPermission = tool.RequiredPermission,
             RequiresConfirmation = tool.RequiresConfirmation,
+            AllowInPlanMode = tool.AllowInPlanMode,
+            ExtensionId = tool.ExtensionId,
+            ExtensionToolId = tool.ExtensionToolId,
+            InputSchema = tool.InputSchema,
         };
 }

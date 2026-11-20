@@ -200,7 +200,10 @@ test("CodeViewer_FontSize_FollowsTheCodeSizeVariableWithMonacoLineHeight", async
     document.documentElement.style.setProperty("--agw-font-size-code", "18px"),
   );
   await set(page, { revision: 1 });
-  await until(async () => (await metrics()).fontSize === 18, "18px text");
+  await until(async () => {
+    const current = await metrics();
+    return current.fontSize === 18 && current.matchesDefault;
+  }, "18px text with Monaco's default line height");
   assert.deepEqual(await metrics(), { fontSize: 18, matchesDefault: true });
   done();
 });

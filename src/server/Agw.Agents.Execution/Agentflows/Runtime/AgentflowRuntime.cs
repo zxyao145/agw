@@ -26,7 +26,9 @@ public sealed class AgentflowRuntime : IAsyncDisposable
 
     public AgentExecutionTask Task { get; }
 
-    public ExecutionSettings Settings { get; }
+    public ExecutionSettings Settings { get; private set; }
+
+    internal void ApplyExecutionSettings(ExecutionSettings settings) => Settings = settings;
 
     /// <summary>
     /// 节点 Agent 是否把输入工具包装为可存档的审批边界。

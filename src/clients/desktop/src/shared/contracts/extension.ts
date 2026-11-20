@@ -58,11 +58,39 @@ export type ThemeStyleRequest = { themeId: string; styleId: string };
 export type ThemeStyleText = { styleId: string; cssText: string };
 
 /** 内置 extension 来自应用资源目录，用户 extension 来自 `<userData>/extensions/packages`。Bundled from the app resources, user from `<userData>/extensions/packages`. */
-export type ExtensionSource = "bundled" | "user";
+export type ExtensionSource = "bundled" | "user" | "server";
+
+export type ServerExtensionOrigin = { serverId: string; userId: string };
+
+export type ServerExtensionCatalogRelease = {
+  id: string;
+  name: string;
+  displayName: string;
+  version: string;
+  releaseHash: string;
+  packageHash: string;
+  manifest: ExtensionManifest;
+};
+
+export type ServerExtensionCatalog = {
+  serverId: string;
+  revision: number;
+  extensions: ServerExtensionCatalogRelease[];
+};
+
+export type ServerExtensionArchive = {
+  extensionId: string;
+  releaseHash: string;
+  bytes: Uint8Array;
+};
 
 export type InstalledExtension = {
   id: string;
+  instanceId: string;
   source: ExtensionSource;
+  origin?: ServerExtensionOrigin;
+  releaseHash?: string;
+  serverAvailable?: boolean;
   directory: string;
   manifest: ExtensionManifest | null;
   validation: ExtensionValidation;
@@ -120,7 +148,10 @@ export type ExtensionSafeModeState = {
 /* ---------- frame 通道 Frame channels ---------- */
 
 export type CreateExtensionFrameRequest = {
+  instanceId: string;
   extensionId: string;
+  origin: ServerExtensionOrigin | null;
+  releaseHash: string | null;
   frameId: string;
   kind: ExtensionFrameKind;
   viewId: string | null;
@@ -157,7 +188,10 @@ export type ExtensionFrameObscureRequest = {
 /** 主窗口 preload 交给宿主页面的端口消息。Port message the main-window preload hands to the host page. */
 export type ExtensionPortMessage = {
   type: "agw:extension-port";
+  instanceId: string;
   extensionId: string;
+  origin: ServerExtensionOrigin | null;
+  releaseHash: string | null;
   frameId: string;
   pageId: string;
 };
@@ -166,6 +200,7 @@ export type ExtensionPortMessage = {
 
 export type ExtensionCaller = {
   hostInstanceId: string;
+  instanceId: string;
   extensionId: string;
   frameId: string;
   pageId: string;
@@ -255,7 +290,7 @@ export type ExtensionRequestBlockedReason =
   | "upstream-proxy-unsupported"
   | "service-worker-blocked";
 
-export type ExtensionEvent =
+export type ExtensionEvent = (
   | {
       type: "file-change";
       extensionId: string;
@@ -296,4 +331,5 @@ export type ExtensionEvent =
       extensionId: string;
       code: string;
       message: string;
-    };
+    }
+) & { instanceId?: string };

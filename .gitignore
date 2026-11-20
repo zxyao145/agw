@@ -198,6 +198,7 @@ PublishScripts/
 *.snupkg
 # The packages folder can be ignored because of Package Restore
 **/[Pp]ackages/*
+!src/server/Agw.Extensions/Application/Packages/*.cs
 # except build/, which is used as an MSBuild target.
 !**/[Pp]ackages/build/
 # Uncomment if necessary however generally it will be regenerated when needed
@@ -386,3 +387,6 @@ appsettings.setup.json
 .wrangler
 .scratch/
 **/.superpowers/**/*
+
+# extension 安装包处理源码。Extension package source files.
+!src/server/Agw.Extensions/Infrastructure/Packages/*.cs

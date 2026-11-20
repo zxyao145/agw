@@ -129,12 +129,6 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     }
 
     /// <summary>
-    /// 进程内 Turn 已经写出结束消息、只剩释放与 Turn 后动作时为 true；客户端收到结束消息后立即发来的命令等它收尾后受理。
-    /// True when an in-process turn has written its finish message and only disposal and after-turn actions remain; a command sent right after the client receives the finish message is accepted once it settles.
-    /// </summary>
-    private bool IsFinishingTurn => Host is { HasActiveTurn: true } && HasWrittenTurnFinish;
-
-    /// <summary>
     /// 连接上最近的进程内 Turn 已写出结束消息，这条连接会把它送达自己的客户端；之后只剩释放与 Turn 后动作。
     /// The latest in-process turn on this connection has written its finish message, which this connection delivers to its own client; only disposal and after-turn actions remain.
     /// </summary>
@@ -146,17 +140,18 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     /// </summary>
     private async Task EnsureIdleForNewTurnAsync()
     {
-        if (!HasActiveTurn)
+        var host = Host;
+        if (host?.HasActiveTurn != true && _attachment?.HasActiveTurn != true)
         {
             return;
         }
 
-        if (!IsFinishingTurn)
+        if (host?.HasActiveTurn != true || !HasWrittenTurnFinish)
         {
             throw new AgwException(ErrorCodes.ExecutionBusy);
         }
 
-        await Host!.WhenIdleAsync();
+        await host.WhenIdleAsync();
     }
 
     public async Task ApplySettingsAsync(ExecutionSettings settings, CancellationToken cancellationToken)
@@ -223,9 +218,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
 
         await EnsureIdleForNewTurnAsync();
-        if (Host != null)
+        if (Host is { } idleHost)
         {
-            await Host.WhenIdleAsync();
+            await idleHost.WhenIdleAsync();
         }
 
         if (Settings?.ConversationId == null)
@@ -420,7 +415,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return;
         }
 
-        if (!HasActiveTurn)
+        var host = Host;
+        if (host?.HasActiveTurn != true)
         {
             await SendSystemMessageAsync(reason ?? "No active request is currently running.");
             await _messageSink.WriteAsync(
@@ -430,7 +426,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return;
         }
 
-        Host!.RequestInterrupt();
+        host.RequestInterrupt();
     }
 
     public async Task SubmitHumanDecisionAsync(HumanResponseCommand command, CancellationToken cancellationToken)
@@ -444,7 +440,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return;
         }
 
-        if (Host == null || !await Host.TrySubmitHumanResponseAsync(command.Response, cancellationToken))
+        var host = Host;
+        if (host == null || !await host.TrySubmitHumanResponseAsync(command.Response, cancellationToken))
         {
             await SendSystemMessageAsync("No matching interaction is waiting for this response.");
         }
@@ -645,10 +642,11 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return false;
         }
 
-        var hasActiveTurn = HasActiveTurn;
+        var host = Host;
+        var hasActiveTurn = host?.HasActiveTurn == true;
         if (hasActiveTurn && _waitingForHuman)
         {
-            Host!.RequestInterrupt();
+            host!.RequestInterrupt();
         }
 
         return hasActiveTurn;

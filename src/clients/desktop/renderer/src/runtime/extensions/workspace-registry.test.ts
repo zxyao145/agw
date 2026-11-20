@@ -48,6 +48,7 @@ function createRegistry(): WorkspaceRegistry {
 
 const sample: InstalledExtension = {
   id: "sample",
+  instanceId: "sample",
   source: "user",
   directory: "/extensions/sample",
   validation: "valid",
@@ -136,6 +137,7 @@ function alphaRegistration() {
   return extensionRegistration({
     ...sample,
     id: "alpha",
+    instanceId: "alpha",
     manifest: {
       ...sample.manifest!,
       id: "alpha",
@@ -187,6 +189,7 @@ function viewerRegistration(id: string, fileViewers: ExtensionFileViewerContribu
   return extensionRegistration({
     ...sample,
     id,
+    instanceId: id,
     manifest: { ...sample.manifest!, id, name: id, contributes: { fileViewers } },
   });
 }
