@@ -71,6 +71,211 @@ public sealed class AgwFileReadonlyAccessProviderTests : IDisposable
         Assert.Equal("readonly content", Assert.IsType<JsonElement>(result).GetString());
     }
 
+    [Fact]
+    public async Task GrepAsync_DefaultPage_IsCompactAndCanContinue()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await File.WriteAllLinesAsync(
+            Path.Combine(_primary, "notes.txt"),
+            Enumerable.Range(1, 250).Select(static line => $"needle {line}"),
+            token
+        );
+        var grep = Assert.IsAssignableFrom<AIFunction>(
+            Assert.Single(_fileAccessProvider.Tools, tool => tool.Name == AgwFileAccessProvider.GrepToolName)
+        );
+
+        var firstPage = Assert.IsType<JsonElement>(
+            await grep.InvokeAsync(new AIFunctionArguments { ["regexPattern"] = "needle" }, token)
+        );
+
+        Assert.Equal(JsonValueKind.Object, firstPage.ValueKind);
+        var firstMatches = ReadMatches(firstPage);
+        Assert.Equal(20, firstMatches.Length);
+        Assert.Equal(1, firstMatches[0].LineNumber);
+        Assert.Equal("notes.txt", firstMatches[0].FileName);
+        Assert.Equal("needle 1", firstMatches[0].Line);
+        var firstFile = firstPage.GetProperty("files")[0];
+        Assert.Equal("notes.txt", firstFile.GetProperty("fileName").GetString());
+        Assert.False(firstFile.TryGetProperty("snippet", out _));
+
+        var continuation = firstPage.GetProperty("continuation");
+        Assert.Equal(JsonValueKind.Object, continuation.ValueKind);
+        Assert.Equal("notes.txt", continuation.GetProperty("fileName").GetString());
+        Assert.Equal(20, continuation.GetProperty("lineNumber").GetInt32());
+        var secondPage = Assert.IsType<JsonElement>(
+            await grep.InvokeAsync(
+                new AIFunctionArguments { ["regexPattern"] = "needle", ["continuation"] = continuation },
+                token
+            )
+        );
+        var secondMatches = ReadMatches(secondPage);
+        Assert.Equal(20, secondMatches.Length);
+        Assert.Equal(21, secondMatches[0].LineNumber);
+        Assert.Equal(40, secondMatches[^1].LineNumber);
+
+        var matchingLines = new List<int>();
+        var currentPage = firstPage;
+        while (true)
+        {
+            matchingLines.AddRange(ReadMatches(currentPage).Select(static match => match.LineNumber));
+            if (
+                !currentPage.TryGetProperty("continuation", out var nextContinuation)
+                || nextContinuation.ValueKind == JsonValueKind.Null
+            )
+            {
+                break;
+            }
+
+            currentPage = Assert.IsType<JsonElement>(
+                await grep.InvokeAsync(
+                    new AIFunctionArguments { ["regexPattern"] = "needle", ["continuation"] = nextContinuation },
+                    token
+                )
+            );
+        }
+
+        Assert.Equal(Enumerable.Range(1, 250), matchingLines);
+    }
+
+    [Fact]
+    public async Task GrepAsync_LargeLinesAcrossFiles_ContinuationPassesResultCharacterBudget()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await File.WriteAllLinesAsync(
+            Path.Combine(_primary, "a-large-lines.txt"),
+            Enumerable.Range(1, 10).Select(CreateLongMatchingLine),
+            token
+        );
+        await File.WriteAllLinesAsync(
+            Path.Combine(_primary, "b-large-lines.txt"),
+            Enumerable.Range(1, 10).Select(CreateLongMatchingLine),
+            token
+        );
+        var grep = Assert.IsAssignableFrom<AIFunction>(
+            Assert.Single(_fileAccessProvider.Tools, tool => tool.Name == AgwFileAccessProvider.GrepToolName)
+        );
+
+        var firstPage = Assert.IsType<JsonElement>(
+            await grep.InvokeAsync(new AIFunctionArguments { ["regexPattern"] = "needle" }, token)
+        );
+        var firstMatches = ReadMatches(firstPage);
+        Assert.Equal(16, firstMatches.Length);
+        Assert.Equal(4 * 1024, firstMatches[0].Line.Length);
+        Assert.Equal(10, firstMatches.Count(static match => match.FileName == "a-large-lines.txt"));
+        Assert.Equal(6, firstMatches.Count(static match => match.FileName == "b-large-lines.txt"));
+        Assert.EndsWith("... [truncated]", firstMatches[^1].Line, StringComparison.Ordinal);
+
+        var secondPage = Assert.IsType<JsonElement>(
+            await grep.InvokeAsync(
+                new AIFunctionArguments
+                {
+                    ["regexPattern"] = "needle",
+                    ["continuation"] = firstPage.GetProperty("continuation"),
+                },
+                token
+            )
+        );
+        var secondMatches = ReadMatches(secondPage);
+        Assert.Equal("b-large-lines.txt", secondMatches[0].FileName);
+        Assert.Equal(7, secondMatches[0].LineNumber);
+    }
+
+    [Fact]
+    public async Task GrepAsync_ExactFinalPage_HasNoContinuation()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await File.WriteAllLinesAsync(
+            Path.Combine(_primary, "exact-page.txt"),
+            Enumerable.Range(1, 40).Select(static line => $"needle {line}"),
+            token
+        );
+        var grep = Assert.IsAssignableFrom<AIFunction>(
+            Assert.Single(_fileAccessProvider.Tools, tool => tool.Name == AgwFileAccessProvider.GrepToolName)
+        );
+
+        var firstPage = Assert.IsType<JsonElement>(
+            await grep.InvokeAsync(new AIFunctionArguments { ["regexPattern"] = "needle" }, token)
+        );
+        var secondPage = Assert.IsType<JsonElement>(
+            await grep.InvokeAsync(
+                new AIFunctionArguments
+                {
+                    ["regexPattern"] = "needle",
+                    ["continuation"] = firstPage.GetProperty("continuation"),
+                },
+                token
+            )
+        );
+
+        Assert.Equal(20, ReadMatches(secondPage).Length);
+        Assert.False(secondPage.TryGetProperty("continuation", out _));
+    }
+
+    [Fact]
+    public async Task GrepAsync_InvalidContinuation_IsRejected()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var grep = Assert.IsAssignableFrom<AIFunction>(
+            Assert.Single(_fileAccessProvider.Tools, tool => tool.Name == AgwFileAccessProvider.GrepToolName)
+        );
+
+        await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(async () =>
+        {
+            await grep.InvokeAsync(
+                new AIFunctionArguments
+                {
+                    ["regexPattern"] = "needle",
+                    ["continuation"] = JsonSerializer.SerializeToElement(
+                        new { fileName = "notes.txt", lineNumber = 0 }
+                    ),
+                },
+                token
+            );
+        });
+    }
+
+    [Fact]
+    public async Task GrepAsync_MultipleFiles_OrdersMatchesByPathThenLine()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await File.WriteAllLinesAsync(Path.Combine(_primary, "z.txt"), ["needle z1", "needle z2"], token);
+        await File.WriteAllLinesAsync(Path.Combine(_primary, "a.txt"), ["needle a1", "needle a2"], token);
+        var grep = Assert.IsAssignableFrom<AIFunction>(
+            Assert.Single(_fileAccessProvider.Tools, tool => tool.Name == AgwFileAccessProvider.GrepToolName)
+        );
+
+        var result = Assert.IsType<JsonElement>(
+            await grep.InvokeAsync(new AIFunctionArguments { ["regexPattern"] = "needle" }, token)
+        );
+        var matches = ReadMatches(result);
+
+        Assert.Equal(["a.txt", "a.txt", "z.txt", "z.txt"], matches.Select(static match => match.FileName));
+        Assert.Equal([1, 2, 1, 2], matches.Select(static match => match.LineNumber));
+    }
+
+    private static (string FileName, int LineNumber, string Line)[] ReadMatches(JsonElement result) =>
+        result
+            .GetProperty("files")
+            .EnumerateArray()
+            .SelectMany(file =>
+                file.GetProperty("matchingLines")
+                    .EnumerateArray()
+                    .Select(match =>
+                        (
+                            file.GetProperty("fileName").GetString()!,
+                            match.GetProperty("lineNumber").GetInt32(),
+                            match.GetProperty("line").GetString()!
+                        )
+                    )
+            )
+            .ToArray();
+
+    private static string CreateLongMatchingLine(int lineNumber)
+    {
+        var prefix = $"needle {lineNumber} ";
+        return string.Concat(prefix, new string('x', (4 * 1024) - prefix.Length));
+    }
+
     private async Task<AIContext> InvokeProviderAsync()
     {
         var agent = new ChatClientAgent(new StubChatClient());

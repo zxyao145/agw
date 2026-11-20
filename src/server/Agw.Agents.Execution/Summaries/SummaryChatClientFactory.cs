@@ -1,5 +1,6 @@
 using System.ClientModel;
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Execution.Agents.Middleware.ModelInput;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.References;
@@ -101,7 +102,7 @@ public sealed class SummaryChatClientFactory : ISummaryChatClientFactory
         var client = new AnthropicClient(
             new ClientOptions { ApiKey = ResolveApiKey(authConfig), BaseUrl = configuration.Provider.Endpoint }
         );
-        return client.AsIChatClient(configuration.Model.Name);
+        return AnthropicPromptCachingChatClient.Create(client, configuration.Model.Name);
     }
 
     private static string ResolveApiKey(ProviderAuthConfigSnapshot authConfig)

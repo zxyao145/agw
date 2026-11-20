@@ -1,5 +1,7 @@
 namespace Agw.Files.Abstracts.Dtos;
 
+public sealed record FileSearchPosition(string FileName, int LineNumber);
+
 public sealed record SearchOptions(
     string Pattern,
     bool IsRegex = true,
@@ -13,4 +15,9 @@ public sealed record SearchOptions(
     int? MaxFiles = null,
     long? MaxFileSizeBytes = null,
     long? MaxTotalBytes = null
-);
+)
+{
+    public bool OrderByPath { get; init; }
+
+    public FileSearchPosition? After { get; init; }
+}
