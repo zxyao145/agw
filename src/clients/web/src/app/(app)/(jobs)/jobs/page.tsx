@@ -1,1 +1,5 @@
-export { JobsPage as default } from "@agw/jobs";
+import { JobsPage } from "@agw/jobs";
+
+export default function WebJobsPage() {
+  return <JobsPage />;
+}

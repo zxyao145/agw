@@ -93,6 +93,42 @@ Use short, lowercase `snake_case` table names in `ToTable`. The runtime prefixes
 
 Include SQLite and PostgreSQL migrations in the extension release. Use structured EF migration operations for schema and data changes (`CreateTable`, `AddColumn`, `CreateIndex`, `InsertData`, `UpdateData`, and `DeleteData`). Index names must be extension-owned: use the generated `ix_zext_<extensionIdN>_...` form or an explicit name beginning with `zext_<extensionIdN>_`. Primary and unique constraint names also require their extension prefix (`pk_zext_<extensionIdN>_...` and `uq_zext_<extensionIdN>_...`). Tables, columns, indexes, constraints, temporary identifiers, and operations are checked against provider limits. Column types must match the provider mapping for their CLR types and configured facets; collation names are restricted to identifiers. Validation covers the actual operations and target model used by the SQL generator, including SQLite table rebuilds.
 
+To assign the same values to every row of an extension-owned business table, add `ExtensionUpdateAllRowsOperation` to `migrationBuilder.Operations`. Use the full prefixed table name and list each target column once in `Assignments`. The operation is limited to business tables in the migration target model. The SDK reserves `__inbox`, `__outbox`, and migration history tables.
+
+```csharp
+migrationBuilder.Operations.Add(new ExtensionUpdateAllRowsOperation
+{
+    Table = "zext_0123456789abcdef0123456789abcdef_calendar_entry",
+    Assignments = [new("description", null)],
+});
+```
+
+Supply values of the CLR types in the migration target model. EF applies the column's value converter when the target model declares one. If a generated SQLite migration target model already uses `long` for a timestamp stored as ticks, supply the ticks as a `long`.
+
+使用 `ExtensionUpdateAllRowsOperation` 可以为扩展业务表的每一行设置相同的值。`Assignments` 使用目标模型中的列名和 CLR 类型，每列只填写一次。目标模型声明值转换器时，EF 会应用该转换器。业务表使用带完整前缀的表名，`__inbox`、`__outbox` 和 migration 历史表由 SDK 保留。
+
+Use provider-specific migration and snapshot classes in separate namespaces within the registered migrations assembly. Annotate both classes with `ExtensionMigrationProviderAttribute`:
+
+```csharp
+[ExtensionMigrationProvider(ExtensionDatabaseProvider.Sqlite)]
+public partial class CalendarSqliteInitial { }
+
+[ExtensionMigrationProvider(ExtensionDatabaseProvider.Sqlite)]
+partial class CalendarSqliteModelSnapshot { }
+```
+
+Give each provider's snapshot a unique class name and matching file name, such as `CalendarSqliteModelSnapshot.cs` and `CalendarPostgresModelSnapshot.cs`. Rename the first generated snapshot before generating the other provider. Subsequent EF scaffolding uses the selected snapshot's class name. The runtime selects annotated migrations and snapshots for the configured provider; provider-neutral classes can omit the attribute.
+
+The design-time factory uses the same naming convention and migration selector as the runtime:
+
+```csharp
+options
+    .UseSnakeCaseNamingConvention()
+    .ReplaceService<IMigrationsAssembly, ExtensionMigrationsAssembly>();
+```
+
+每种数据库使用独立的 migration 和 model snapshot，并在两种类上声明 `ExtensionMigrationProviderAttribute`。snapshot 的类名和文件名包含数据库名称。设计时 factory 与运行时使用相同的 `UseSnakeCaseNamingConvention` 和 `ExtensionMigrationsAssembly` 配置。
+
 Migrations cannot contain raw SQL, foreign keys, sequences, schemas, check constraints, SQL defaults, computed SQL, or SQL index filters. Entity mappings to views, SQL queries, functions, stored procedures, or sequences are rejected. Migration history remains with retained business data so a compatible release can be reinstalled without rebuilding or downgrading the schema.
 
 SQLite rebuilds use generation-prefixed temporary identifiers. Keep table and index names short enough for both providers; model validation applies the configured provider's identifier limit before migration.

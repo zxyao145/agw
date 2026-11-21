@@ -18,7 +18,7 @@ import type {
   ExecutionMessage,
   InteractionResponse,
   PermissionMode,
-} from "@agw/execution-core";
+} from "@agw/execution-types";
 import type { ExtensionPermission } from "./permissions";
 import type { RepositoryWorkspaceApi } from "./repositories";
 export type * from "./repositories";
@@ -923,6 +923,10 @@ export interface HttpApi {
 }
 
 export interface ServerApi {
+  /**
+   * 使用当前 Server 身份发送请求；路径默认限定在 extension 自己的 API 下，Notifications 回答只允许 POST `/api/notifications/answer`。
+   * Sends requests as the current Server user; paths stay under the extension API except POST `/api/notifications/answer`.
+   */
   request<T = unknown>(path: string, options?: ServerRequestOptions): Promise<T>;
 }
 

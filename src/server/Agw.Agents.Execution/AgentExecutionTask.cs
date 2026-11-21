@@ -14,8 +14,6 @@ public sealed class AgentExecutionTask
 
     public string ContextId { get; init; } = string.Empty;
 
-    public Guid? JobId { get; init; }
-
     public string Title { get; init; } = "Untitled";
 
     public TaskExecutionStatus Status { get; init; } = TaskExecutionStatus.Pending;

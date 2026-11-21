@@ -48,6 +48,8 @@ test("project core services use the injected API client", async () => {
             projectId: "project-1",
             conversationId: "11111111-1111-1111-1111-000000000001",
             contextId: "context-1",
+            kind: "native",
+            relateId: null,
             title: "Mobile",
             executionCount: 0,
             messageCount: 0,
@@ -57,7 +59,8 @@ test("project core services use the injected API client", async () => {
             projectId: "project-1",
             conversationId: "11111111-1111-1111-1111-000000000002",
             contextId: "external-agent-context",
-            jobId: null,
+            kind: "event:timer",
+            relateId: "event-1",
             title: "Claude Code",
             executionCount: 1,
             messageCount: 0,
@@ -77,8 +80,12 @@ test("project core services use the injected API client", async () => {
 
   assert.equal(conversations.items[0]?.conversationId, "11111111-1111-1111-1111-000000000001");
   assert.equal(conversations.items[0]?.contextId, "context-1");
+  assert.equal(conversations.items[0]?.kind, "native");
+  assert.equal(conversations.items[0]?.relateId, null);
   assert.equal(conversations.items[1]?.conversationId, "11111111-1111-1111-1111-000000000002");
   assert.equal(conversations.items[1]?.contextId, "external-agent-context");
+  assert.equal(conversations.items[1]?.kind, "event:timer");
+  assert.equal(conversations.items[1]?.relateId, "event-1");
   assert.deepEqual(files, { items: [] });
   assert.deepEqual(requests, ["/api/projects/{projectId}/conversations", "/api/files/list"]);
 });

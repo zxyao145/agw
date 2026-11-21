@@ -1,4 +1,4 @@
-import type { ExecutionMessage, ExecutionMessageContent } from "./types";
+import type { ExecutionMessage, ExecutionMessageContent } from "@agw/execution-types";
 
 const TEXT_CONTENT_TYPES = new Set(["TextContent", "text"]);
 const FUNCTION_RESULT_CONTENT_TYPE = "FunctionResultContent";

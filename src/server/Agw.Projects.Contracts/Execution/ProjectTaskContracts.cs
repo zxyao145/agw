@@ -1,3 +1,5 @@
+using Agw.Shared.Contracts.Conversations;
+
 namespace Agw.Projects.Contracts.Execution;
 
 public enum ProjectTaskStatus
@@ -14,7 +16,6 @@ public sealed record ProjectTaskSnapshot(
     Guid ProjectConversationId,
     Guid ProjectId,
     string ContextId,
-    Guid? JobId,
     string Title,
     ProjectTaskStatus Status,
     string? ErrorMessage,
@@ -41,19 +42,14 @@ public sealed record ResolveProjectTaskRequest(
 public sealed record StartProjectTaskRequest(
     Guid ProjectId,
     Guid TaskId,
-    Guid? JobId,
     string Input,
     string? Title,
     string? ContextId,
     string OwnerUserId,
-    ProjectTaskStatus InitialStatus
-);
-
-public sealed record FinishProjectTaskRequest(
-    Guid TaskId,
-    ProjectTaskStatus Status,
-    string? ErrorMessage,
-    string OwnerUserId
+    ProjectTaskStatus InitialStatus,
+    string? RequesterExtensionId = null,
+    string Kind = ConversationKinds.Native,
+    Guid? RelateId = null
 );
 
 public interface IProjectTaskFacade
@@ -79,11 +75,6 @@ public interface IProjectTaskFacade
 
     Task<ProjectTaskSnapshot> GetOrCreateAsync(
         StartProjectTaskRequest request,
-        CancellationToken cancellationToken = default
-    );
-
-    Task<ProjectTaskSnapshot?> FinishAsync(
-        FinishProjectTaskRequest request,
         CancellationToken cancellationToken = default
     );
 

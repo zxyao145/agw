@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <ProjectReference Include="../../../server/Agw.Extensions.Contracts/Agw.Extensions.Contracts.csproj" />
+    <ProjectReference Include="../../../server/Agw.Extensions.Sdk/Agw.Extensions.Sdk.csproj" />
+    <ProjectReference Include="../../../server/Agw.Extensions.Sdk.EntityFrameworkCore/Agw.Extensions.Sdk.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="../../../server/Agw.Notifications.Contracts/Agw.Notifications.Contracts.csproj" />
+    <ProjectReference Include="../../../server/Agw.Shared/Agw.Shared.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="feishu-worker.mjs" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <None Update="feishu-webhook.mjs" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+  </ItemGroup>
+</Project>

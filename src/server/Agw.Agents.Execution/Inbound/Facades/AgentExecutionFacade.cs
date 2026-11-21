@@ -49,38 +49,6 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
         _durableCoordinator = durableCoordinator;
     }
 
-    /// <summary>
-    /// 执行到终态并返回消息流中的全部消息；Durable 执行进入人工等待且允许交互时返回 WaitingForHuman。
-    /// Runs to a terminal state and returns every message of the stream; a durable execution that waits for a human with interaction allowed returns WaitingForHuman.
-    /// </summary>
-    public async Task<AgentExecutionResult> ExecuteAsync(
-        AgentExecutionRequest request,
-        CancellationToken cancellationToken = default
-    )
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        var messages = new List<AgwMessage>();
-        await foreach (var message in RunTurnAsync(request, cancellationToken).ConfigureAwait(false))
-        {
-            if (AgwMessageClassifier.TryGetTurnFinishedStatus(message, out var status))
-            {
-                if (status is AgwTurnStatus.Failed or AgwTurnStatus.Interrupted)
-                {
-                    throw new AgwException(ErrorCodes.AgentExecutionFailed, FindErrorText(messages));
-                }
-                return new AgentExecutionResult(request.TurnId, AgentExecutionState.Completed, messages);
-            }
-            messages.Add(message);
-            if (IsHumanInteraction(message))
-            {
-                return new AgentExecutionResult(request.TurnId, AgentExecutionState.WaitingForHuman, messages);
-            }
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        throw new AgwException(ErrorCodes.AgentExecutionFailed, "The execution ended without a terminal message.");
-    }
-
     public async IAsyncEnumerable<AgentExecutionEvent> ExecuteStreamingAsync(
         AgentExecutionRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default
@@ -164,6 +132,7 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
     {
         using var userScope = PushExecutionUser(request.OwnerUserId);
         var target = await ResolveTargetAsync(request.Target, cancellationToken).ConfigureAwait(false);
+        await ValidateToolPolicyAsync(target, request.ToolPolicy, cancellationToken).ConfigureAwait(false);
         var task = ProjectTaskProjectionMapper.Map(request.Task);
         // 进程内 Facade 调用没有回答通道，人工请求一律按无人值守规则处理。
         // An in-process Facade call has no answer channel, so every human request follows the unattended rules.
@@ -171,7 +140,8 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
             task.ProjectId,
             task.ProjectConversationId,
             permissionMode: MapPermissionMode(request.PermissionMode),
-            resume: request.Resume
+            resume: request.Resume,
+            toolPolicy: request.ToolPolicy
         ).WithHumanInteractionPolicy(
             _durableCoordinator == null ? HumanInteractionPolicy.Reject : request.HumanInteractionPolicy
         );
@@ -214,6 +184,137 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
                 throw new AgwException(ErrorCodes.AgentExecutionFailed, "Human interaction is not supported.");
             }
             yield return message;
+        }
+    }
+
+    internal async Task<AcceptedTurn> AcceptBackgroundAsync(
+        AgentExecutionRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        using var userScope = PushExecutionUser(request.OwnerUserId);
+        var target = await ResolveTargetAsync(request.Target, cancellationToken).ConfigureAwait(false);
+        await ValidateToolPolicyAsync(target, request.ToolPolicy, cancellationToken).ConfigureAwait(false);
+        var task = ProjectTaskProjectionMapper.Map(request.Task);
+        var settings = new ExecutionSettings(
+            task.ProjectId,
+            task.ProjectConversationId,
+            permissionMode: MapPermissionMode(request.PermissionMode),
+            resume: request.Resume,
+            humanInteractionPolicy: HumanInteractionPolicy.Reject,
+            toolPolicy: request.ToolPolicy
+        );
+        return await _acceptance
+            .AcceptAsync(
+                new TurnAcceptanceRequest(
+                    UserInfoUtil.RequiredUserId,
+                    request.TurnId,
+                    target,
+                    task.ProjectConversationId,
+                    request.Input,
+                    settings,
+                    Stream: true
+                )
+                {
+                    Task = task,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+    }
+
+    internal async Task<AgentTarget> ResolveBackgroundTargetAsync(
+        AgentTarget target,
+        string ownerUserId,
+        BackgroundToolPolicy toolPolicy,
+        CancellationToken cancellationToken
+    )
+    {
+        using var userScope = PushExecutionUser(ownerUserId);
+        var resolved = await ResolveTargetAsync(target, cancellationToken).ConfigureAwait(false);
+        await ValidateToolPolicyAsync(resolved, toolPolicy, cancellationToken).ConfigureAwait(false);
+        return new AgentTarget(
+            resolved.AgentType == AgentRuntimeType.Agent ? AgentTargetKind.Agent : AgentTargetKind.Agentflow,
+            resolved.AgentId
+        );
+    }
+
+    internal async Task<AgentExecutionResult> ExecuteAcceptedAsync(
+        AcceptedTurn accepted,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(accepted);
+        using var userScope = PushExecutionUser(accepted.Request.UserId);
+        var messages = new List<AgwMessage>();
+        await foreach (var message in StartAndReadAsync(accepted, cancellationToken).ConfigureAwait(false))
+        {
+            if (AgwMessageClassifier.IsTurnStart(message))
+            {
+                continue;
+            }
+
+            if (AgwMessageClassifier.TryGetTurnFinishedStatus(message, out var status))
+            {
+                return new AgentExecutionResult(
+                    accepted.Request.TurnId,
+                    status switch
+                    {
+                        AgwTurnStatus.Completed => AgentExecutionState.Completed,
+                        AgwTurnStatus.Interrupted => AgentExecutionState.Interrupted,
+                        _ => AgentExecutionState.Failed,
+                    },
+                    messages,
+                    status == AgwTurnStatus.Completed ? null : FindErrorText(messages)
+                );
+            }
+
+            if (IsHumanInteraction(message))
+            {
+                if (_durableCoordinator != null)
+                {
+                    await _durableCoordinator
+                        .InterruptAsync(
+                            accepted.Request.TurnId,
+                            accepted.Request.UserId,
+                            HumanInteractionUnsupportedReason,
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false);
+                }
+                return new AgentExecutionResult(
+                    accepted.Request.TurnId,
+                    AgentExecutionState.Failed,
+                    messages,
+                    "Human interaction is not supported."
+                );
+            }
+
+            messages.Add(message);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new AgwException(ErrorCodes.AgentExecutionFailed, "The execution ended without a terminal message.");
+    }
+
+    private async Task ValidateToolPolicyAsync(
+        ExecutionTarget target,
+        BackgroundToolPolicy toolPolicy,
+        CancellationToken cancellationToken
+    )
+    {
+        if (
+            toolPolicy == BackgroundToolPolicy.None
+            && !await _catalog
+                .SupportsNoToolsAsync(target.AgentType, target.AgentId, cancellationToken)
+                .ConfigureAwait(false)
+        )
+        {
+            throw new AgwException(
+                ErrorCodes.BackgroundToolPolicyUnsupported,
+                "The target cannot run with tools disabled."
+            );
         }
     }
 

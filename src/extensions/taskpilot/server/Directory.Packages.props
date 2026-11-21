@@ -1,0 +1,6 @@
+<Project>
+  <Import Project="../../../server/Directory.Packages.props" />
+  <ItemGroup>
+    <PackageVersion Update="JsonSchema.Net" Version="8.0.5" />
+  </ItemGroup>
+</Project>

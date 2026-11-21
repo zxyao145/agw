@@ -1,8 +1,11 @@
 using System.IO.Hashing;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Agw.Events.Contracts;
 using Agw.Extensions.Contracts;
 using Agw.Extensions.Sdk;
+using Agw.Shared.Contracts.Events;
+using Agw.Shared.Exceptions;
 using Agw.Tools.Abstractions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +19,27 @@ public sealed class TestExtension : IServerExtension
     public void ConfigureServices(IServiceCollection services, IExtensionRegistration registration)
     {
         registration.RegisterJsonContext(FixtureJsonContext.Default);
+        registration.RegisterEndpoint(
+            new ExtensionEndpointDescriptor
+            {
+                Id = "callback",
+                Method = "POST",
+                RelativePath = "callback",
+                IsCallback = true,
+            },
+            static (_, context, request, _) =>
+            {
+                string signature = request
+                    .Headers.First(pair => pair.Key.Equals("X-Callback-Signature", StringComparison.OrdinalIgnoreCase))
+                    .Value.Single();
+                string value = signature + ":" + Convert.ToBase64String(request.RawBody!);
+                return ValueTask.FromResult(
+                    ExtensionEndpointResponse.FromJson(
+                        JsonSerializer.SerializeToElement(new EchoResponse(value), context.JsonOptions)
+                    )
+                );
+            }
+        );
         using JsonDocument echoSchema = JsonDocument.Parse(
             """{"type":"object","properties":{"value":{"type":"string"}},"required":["value"]}"""
         );
@@ -37,6 +61,36 @@ public sealed class TestExtension : IServerExtension
                         )
                     )
                 )
+        );
+        registration.RegisterEndpoint(
+            new ExtensionEndpointDescriptor
+            {
+                Id = "manage-subscription",
+                Method = "POST",
+                RelativePath = "manage-subscription",
+            },
+            static async (_, context, request, cancellationToken) =>
+            {
+                var body = request.Body!.Value;
+                using var emptyConfig = JsonDocument.Parse("{}");
+                var managed = new ManagedSubscriptionRequest
+                {
+                    ManagedKey = "test",
+                    ManagedVersion = 1,
+                    Name = "Test subscription",
+                    SourceIds = body.GetProperty("sourceIds").EnumerateArray().Select(item => item.GetGuid()).ToArray(),
+                    EventTypes = body.GetProperty("eventTypes")
+                        .EnumerateArray()
+                        .Select(item => item.GetString()!)
+                        .ToArray(),
+                    HandlerId = "caller",
+                    HandlerConfig = emptyConfig.RootElement.Clone(),
+                };
+                var state = await context
+                    .HostCapabilities.GetRequired<IEventSubscriptionFacade>()
+                    .UpsertManagedAsync(managed, cancellationToken);
+                return ExtensionEndpointResponse.FromJson(JsonSerializer.SerializeToElement(state.Accepted));
+            }
         );
         using JsonDocument toolSchema = JsonDocument.Parse(
             """{"type":"object","properties":{"value":{"type":"string"}},"required":["value"]}"""
@@ -65,6 +119,37 @@ public sealed class TestExtension : IServerExtension
                 AllowInPlanMode = false,
             }
         );
+        registration.RegisterEventHandler(
+            new ExtensionEventHandlerDescriptor { Id = "caller" },
+            static (_, context, delivery, _) =>
+            {
+                ExtensionCaller caller =
+                    context.HostCapabilities.GetRequired<IExtensionCallerAccessor>().Current
+                    ?? throw new InvalidOperationException("Extension caller context is unavailable.");
+                string reason =
+                    $"{caller.ExtensionId:D}|{caller.GenerationId:D}|{caller.UserId}|{caller.InvocationId:D}|{delivery.DeliveryId:D}";
+                return ValueTask.FromResult(ExtensionEventHandlerResult.Failed(reason));
+            }
+        );
+        registration.RegisterEventSourceProvider<TestEventSourceProvider>(
+            new ExtensionEventSourceProviderDescriptor
+            {
+                Id = "source",
+                EventTypes = ["test.source.*"],
+                Configurations =
+                [
+                    new ExtensionEventSourceConfiguration
+                    {
+                        Id = "default",
+                        Name = "Default",
+                        Config = JsonSerializer.Deserialize<JsonElement>("""{"value":"selected"}"""),
+                    },
+                ],
+            }
+        );
+        registration.RegisterNotificationChannel<TestNotificationChannel>(
+            new ExtensionNotificationChannelDescriptor { Id = "channel", Name = "Test channel" }
+        );
         registration.RegisterBackgroundService<FixtureBackgroundService>();
         registration.RegisterSkill(
             new ExtensionSkillDescriptor("calendar-skill", "calendar", "Calendar instructions."),
@@ -82,6 +167,19 @@ public sealed class TestExtension : IServerExtension
                 RelativePath = "stream",
             },
             static (_, _, _, _) => ValueTask.FromResult(ExtensionEndpointResponse.FromStream(StreamResponseAsync()))
+        );
+        registration.RegisterEndpoint(
+            new ExtensionEndpointDescriptor
+            {
+                Id = "browser-page",
+                Method = "GET",
+                RelativePath = "browser",
+                IsBrowserPage = true,
+            },
+            static (_, _, _, _) =>
+                ValueTask.FromResult(
+                    ExtensionEndpointResponse.FromStream(BrowserPageResponseAsync(), "text/html; charset=utf-8")
+                )
         );
         registration.RegisterEndpoint(
             new ExtensionEndpointDescriptor
@@ -125,6 +223,27 @@ public sealed class TestExtension : IServerExtension
                 );
             }
         );
+        registration.RegisterEndpoint(
+            new ExtensionEndpointDescriptor
+            {
+                Id = "sdk-capabilities",
+                Method = "GET",
+                RelativePath = "sdk-capabilities",
+            },
+            static async (_, context, _, cancellationToken) =>
+            {
+                await using IExtensionLease lease = await context.Leases.AcquireAsync("test", cancellationToken);
+                Guid recordId = Guid.CreateVersion7();
+                string encrypted = context.Secrets.Protect("profile", recordId, "private value");
+                bool secretRoundTrips = context.Secrets.Unprotect("profile", recordId, encrypted) == "private value";
+                return ExtensionEndpointResponse.FromJson(
+                    JsonSerializer.SerializeToElement(
+                        new SdkCapabilityResponse(lease.HandleLostToken.IsCancellationRequested, secretRoundTrips),
+                        context.JsonOptions
+                    )
+                );
+            }
+        );
     }
 
     public ValueTask StartAsync(IExtensionContext context, CancellationToken cancellationToken) =>
@@ -140,6 +259,12 @@ public sealed class TestExtension : IServerExtension
         yield return "{\"chunk\":1}"u8.ToArray();
         await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
         yield return "{\"chunk\":2}"u8.ToArray();
+    }
+
+    private static async IAsyncEnumerable<ReadOnlyMemory<byte>> BrowserPageResponseAsync()
+    {
+        yield return "<html><body>Signed in</body></html>"u8.ToArray();
+        await Task.Yield();
     }
 
     private sealed class FixtureException(string message) : Exception(message);
@@ -172,6 +297,97 @@ public sealed class TestExtension : IServerExtension
                 (Func<string, string>)(value => $"updated:{value}"),
                 new AIFunctionFactoryOptions { Name = Name, SerializerOptions = serializerOptions }
             );
+    }
+
+    public sealed class TestEventSourceProvider(IExtensionHostCapabilities capabilities) : IExtensionEventSourceProvider
+    {
+        public ValueTask<ExtensionSourcePollResult> PollAsync(
+            ExtensionSourcePollRequest request,
+            CancellationToken cancellationToken
+        )
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ExtensionCaller caller =
+                capabilities.GetRequired<IExtensionCallerAccessor>().Current
+                ?? throw new AgwException(ErrorCodes.ExtensionUnavailable);
+            return ValueTask.FromResult(
+                new ExtensionSourcePollResult
+                {
+                    Events =
+                    [
+                        new CloudEventDraft
+                        {
+                            Id = request.SourceId.ToString("D"),
+                            Type =
+                                request.Cursor is { } cursor && cursor.TryGetProperty("eventType", out var eventType)
+                                    ? eventType.GetString()!
+                                    : "test.source.polled",
+                            Subject = caller.UserId,
+                            Data = new CloudEventData
+                            {
+                                Kind = CloudEventDataKind.Json,
+                                Json = JsonSerializer.SerializeToElement(
+                                    new Dictionary<string, object?>
+                                    {
+                                        ["configurationId"] = request.ConfigurationId,
+                                        ["configuration"] = request.Configuration,
+                                    }
+                                ),
+                            },
+                        },
+                    ],
+                    Cursor = request.Cursor?.Clone(),
+                }
+            );
+        }
+    }
+
+    public sealed class TestNotificationChannel(IExtensionHostCapabilities capabilities) : IExtensionNotificationChannel
+    {
+        public ValueTask<IReadOnlyList<NotificationChannelTarget>> ListTargetsAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ExtensionCaller caller =
+                capabilities.GetRequired<IExtensionCallerAccessor>().Current
+                ?? throw new AgwException(ErrorCodes.ExtensionUnavailable);
+            return ValueTask.FromResult<IReadOnlyList<NotificationChannelTarget>>([
+                new NotificationChannelTarget { TargetId = "target", Name = caller.UserId! },
+            ]);
+        }
+
+        public ValueTask<NotificationSendResult> SendAsync(
+            NotificationMessage message,
+            CancellationToken cancellationToken
+        )
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ExtensionCaller caller =
+                capabilities.GetRequired<IExtensionCallerAccessor>().Current
+                ?? throw new AgwException(ErrorCodes.ExtensionUnavailable);
+            return ValueTask.FromResult(
+                new NotificationSendResult
+                {
+                    Status = NotificationSendStatus.Sent,
+                    ExternalMessageId = $"{message.NotificationId:D}:{caller.UserId}",
+                }
+            );
+        }
+
+        public ValueTask<NotificationSendResult> UpdateAsync(
+            NotificationMessage message,
+            string externalMessageId,
+            CancellationToken cancellationToken
+        )
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(
+                new NotificationSendResult
+                {
+                    Status = NotificationSendStatus.Sent,
+                    ExternalMessageId = externalMessageId,
+                }
+            );
+        }
     }
 
     private sealed class FixtureBackgroundService : IExtensionBackgroundService
@@ -508,3 +724,70 @@ public sealed class DuplicateSkillNameExtension : IServerExtension
     public ValueTask StopAsync(IExtensionContext context, CancellationToken cancellationToken) =>
         ValueTask.CompletedTask;
 }
+
+public sealed class InvalidBrowserPageMethodExtension : IServerExtension
+{
+    public void ConfigureServices(IServiceCollection services, IExtensionRegistration registration) =>
+        registration.RegisterEndpoint(
+            new ExtensionEndpointDescriptor
+            {
+                Id = "invalid-browser-page",
+                Method = "POST",
+                RelativePath = "browser",
+                IsBrowserPage = true,
+            },
+            static (_, _, _, _) =>
+                ValueTask.FromResult(ExtensionEndpointResponse.FromJson(JsonSerializer.SerializeToElement(true)))
+        );
+
+    public ValueTask StartAsync(IExtensionContext context, CancellationToken cancellationToken) =>
+        ValueTask.CompletedTask;
+
+    public ValueTask StopAsync(IExtensionContext context, CancellationToken cancellationToken) =>
+        ValueTask.CompletedTask;
+}
+
+public abstract class SourceProviderExtension(
+    IReadOnlyList<string> eventTypes,
+    IReadOnlyList<ExtensionEventSourceConfiguration>? configurations = null
+) : IServerExtension
+{
+    public void ConfigureServices(IServiceCollection services, IExtensionRegistration registration) =>
+        registration.RegisterEventSourceProvider<TestExtension.TestEventSourceProvider>(
+            new ExtensionEventSourceProviderDescriptor
+            {
+                Id = "source",
+                EventTypes = eventTypes,
+                Configurations = configurations ?? [],
+            }
+        );
+
+    public ValueTask StartAsync(IExtensionContext context, CancellationToken cancellationToken) =>
+        ValueTask.CompletedTask;
+
+    public ValueTask StopAsync(IExtensionContext context, CancellationToken cancellationToken) =>
+        ValueTask.CompletedTask;
+
+    protected static ExtensionEventSourceConfiguration Configuration(string id, string json) =>
+        new()
+        {
+            Id = id,
+            Name = id,
+            Config = JsonSerializer.Deserialize<JsonElement>(json),
+        };
+}
+
+public sealed class EmptySourceTypesExtension() : SourceProviderExtension([]) { }
+
+public sealed class ReservedSourceTypesExtension() : SourceProviderExtension(["agw.demo"]) { }
+
+public sealed class InvalidPatternSourceTypesExtension() : SourceProviderExtension(["demo*"]) { }
+
+public sealed class DuplicateSourceConfigurationsExtension()
+    : SourceProviderExtension(["demo.*"], [Configuration("same", "{}"), Configuration("same", "{}")]) { }
+
+public sealed class InvalidSourceConfigurationPayloadExtension()
+    : SourceProviderExtension(["demo.*"], [Configuration("default", "[]")]) { }
+
+public sealed class MixedCaseSourceConfigurationExtension()
+    : SourceProviderExtension(["demo.*"], [Configuration("MainWorkspace", "{}")]) { }

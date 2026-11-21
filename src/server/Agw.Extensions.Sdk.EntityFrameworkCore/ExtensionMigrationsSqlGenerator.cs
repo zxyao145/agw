@@ -45,6 +45,17 @@ internal sealed class ExtensionSqliteMigrationsSqlGenerator : SqliteMigrationsSq
         return base.Generate(operations, model, options);
     }
 
+    protected override void Generate(MigrationOperation operation, IModel? model, MigrationCommandListBuilder builder)
+    {
+        if (operation is ExtensionUpdateAllRowsOperation updateAll)
+        {
+            ExtensionUpdateAllRowsSqlGenerator.Generate(updateAll, model, builder, Dependencies.SqlGenerationHelper);
+            return;
+        }
+
+        base.Generate(operation, model, builder);
+    }
+
     protected override void Generate(
         CreateTableOperation operation,
         IModel? model,
@@ -94,9 +105,70 @@ internal sealed class ExtensionNpgsqlMigrationsSqlGenerator : NpgsqlMigrationsSq
         ExtensionMigrationSqlGenerationValidator.Validate(operations, model, _schemaMetadata, _typeMappingSource);
         return base.Generate(operations, model, options);
     }
+
+    protected override void Generate(MigrationOperation operation, IModel? model, MigrationCommandListBuilder builder)
+    {
+        if (operation is ExtensionUpdateAllRowsOperation updateAll)
+        {
+            ExtensionUpdateAllRowsSqlGenerator.Generate(updateAll, model, builder, Dependencies.SqlGenerationHelper);
+            return;
+        }
+
+        base.Generate(operation, model, builder);
+    }
 }
 
 #pragma warning restore EF1001
+
+internal static class ExtensionUpdateAllRowsSqlGenerator
+{
+    public static void Generate(
+        ExtensionUpdateAllRowsOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder,
+        ISqlGenerationHelper helper
+    )
+    {
+        var table =
+            model?.GetRelationalModel().FindTable(operation.Table, null)
+            ?? throw ExtensionDatabaseModelValidator.MigrationInvalid(
+                $"Table '{operation.Table}' is missing from the migration target model."
+            );
+        builder.Append("UPDATE ").Append(helper.DelimitIdentifier(operation.Table)).Append(" SET ");
+        for (var index = 0; index < operation.Assignments.Count; index++)
+        {
+            if (index > 0)
+            {
+                builder.Append(", ");
+            }
+
+            var (column, value) = operation.Assignments[index];
+            builder
+                .Append(helper.DelimitIdentifier(column))
+                .Append(" = ")
+                .Append(GenerateLiteral(table, column, value));
+        }
+
+        builder.AppendLine(helper.StatementTerminator).EndCommand();
+    }
+
+    private static string GenerateLiteral(ITable table, string name, object? value)
+    {
+        var column =
+            table.FindColumn(name)
+            ?? throw ExtensionDatabaseModelValidator.MigrationInvalid(
+                $"Column '{name}' is missing from table '{table.Name}' in the migration target model."
+            );
+        var mapping = column.StoreTypeMapping;
+        var validValue = value is null ? column.IsNullable : mapping.ClrType.IsInstanceOfType(value);
+        if (!validValue)
+            throw ExtensionDatabaseModelValidator.MigrationInvalid(
+                $"Column '{name}' in table '{table.Name}' requires a value compatible with '{mapping.ClrType.Name}'."
+            );
+
+        return mapping.GenerateSqlLiteral(value);
+    }
+}
 
 internal static class ExtensionMigrationSqlGenerationValidator
 {
@@ -116,14 +188,14 @@ internal static class ExtensionMigrationSqlGenerationValidator
         IRelationalTypeMappingSource typeMappingSource
     )
     {
-        if (
+        var isHistoryModel =
             model?.FindEntityType(typeof(HistoryRow)) is not null
             && model
                 .GetRelationalModel()
                 .Tables.All(table =>
                     table.Name == $"{options.TablePrefix}__ef_migrations_history" && table.Schema is null
-                )
-        )
+                );
+        if (isHistoryModel && operations.All(operation => operation is not ExtensionUpdateAllRowsOperation))
             return;
 
         if (model is not null)

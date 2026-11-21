@@ -4,6 +4,43 @@
  */
 
 export interface paths {
+  "/api/events/webhooks/receive": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query: {
+          sourceId: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Accepted */
+        202: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventWebhookReceiveResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/health/live": {
     parameters: {
       query?: never;
@@ -70,7 +107,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/jobs": {
+  "/api/jobs/list": {
     parameters: {
       query?: never;
       header?: never;
@@ -79,7 +116,9 @@ export interface paths {
     };
     get: {
       parameters: {
-        query?: never;
+        query?: {
+          projectId?: string;
+        };
         header?: never;
         path?: never;
         cookie?: never;
@@ -92,11 +131,64 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfJob[]"];
+            "application/json": components["schemas"]["ApiResultOfJobResponse[]"];
           };
         };
       };
     };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/jobs/get": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          id: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfJobResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/jobs/create": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
     put?: never;
     post: {
       parameters: {
@@ -117,7 +209,7 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfJob"];
+            "application/json": components["schemas"]["ApiResultOfJobResponse"];
           };
         };
       };
@@ -128,42 +220,20 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/jobs/{id}": {
+  "/api/jobs/update": {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    get: {
+    get?: never;
+    put?: never;
+    post: {
       parameters: {
         query?: never;
         header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["ApiResultOfJob"];
-          };
-        };
-      };
-    };
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
+        path?: never;
         cookie?: never;
       };
       requestBody: {
@@ -178,77 +248,18 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfJob"];
+            "application/json": components["schemas"]["ApiResultOfJobResponse"];
           };
         };
       };
     };
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/jobs/{id}/logs": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["ApiResultOfJobLogResponse[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  "/api/jobs/enabled": {
+  "/api/jobs/enable": {
     parameters: {
       query?: never;
       header?: never;
@@ -256,7 +267,8 @@ export interface paths {
       cookie?: never;
     };
     get?: never;
-    put: {
+    put?: never;
+    post: {
       parameters: {
         query?: never;
         header?: never;
@@ -265,7 +277,7 @@ export interface paths {
       };
       requestBody: {
         content: {
-          "application/json": components["schemas"]["JobEnabledUpdateRequest"];
+          "application/json": components["schemas"]["JobEnableRequest"];
         };
       };
       responses: {
@@ -275,11 +287,88 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfJob"];
+            "application/json": components["schemas"]["ApiResultOfJobResponse"];
           };
         };
       };
     };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/jobs/delete": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["JobIdRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfJobResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/jobs/runs/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          jobId: string;
+          offset?: number;
+          limit?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfJobRunResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
     post?: never;
     delete?: never;
     options?: never;
@@ -381,6 +470,1263 @@ export interface paths {
             [name: string]: unknown;
           };
           content?: never;
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfEventSourceResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/options": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceOptionResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/providers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceProviderResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/http-poll-options": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          cursorPath?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventHttpPollFormOptionsResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/get": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          id: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/create": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSourceCreateRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceMutationResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/update": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSourceUpdateRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceMutationResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/delete": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSourceVersionRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/enable": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSourceEnableRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceMutationResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/rotate-secret": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSourceVersionRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceMutationResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/test": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSourceIdRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceTestResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/subscriptions/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfEventSubscriptionResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/subscriptions/get": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          id: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSubscriptionResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/subscriptions/create": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSubscriptionRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSubscriptionResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/subscriptions/update": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSubscriptionRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSubscriptionResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/subscriptions/delete": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSubscriptionDeleteRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          SourceId?: string;
+          Type?: string;
+          Subject?: string;
+          ChainId?: string;
+          From?: string;
+          To?: string;
+          PageIndex?: null | number;
+          PageSize?: null | number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfEventResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/get": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          id: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/chain": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          chainId: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/deliveries/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          eventId?: string;
+          state?: components["schemas"]["EventDeliveryState"];
+          pageIndex?: number;
+          pageSize?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfEventDeliveryResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/schedules/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfEventScheduleResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/deliveries/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventIdRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventDeliveryActionResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/deliveries/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventIdRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventDeliveryActionResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/unpublished/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfUnpublishedEventRecord"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/unpublished/republish": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventRepublishRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          unreadOnly: boolean;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfNotificationListItem[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/get": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          id: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfNotificationDetail"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/stream": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/read": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["NotificationReadRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/answer": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["NotificationAnswerRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfNotificationAnswerResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/delivered": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["NotificationDeliveredRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/channels": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfNotificationChannelResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/dispatches/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["NotificationDispatchRetryRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResult"];
+          };
         };
       };
     };
@@ -6624,6 +7970,7 @@ export interface components {
       resultFormat: components["schemas"]["ResultFormat"];
       responseSchema?: null | string;
     };
+    /** @description Agent Runtime Type */
     AgentRuntimeType: number;
     AgentSkillRelation: {
       /** Format: uuid */
@@ -6911,6 +8258,83 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    ApiResultOfEventDeliveryActionResponse: {
+      data?: null | components["schemas"]["EventDeliveryActionResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfEventHttpPollFormOptionsResponse: {
+      data?: null | components["schemas"]["EventHttpPollFormOptionsResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfEventResponse: {
+      data?: null | components["schemas"]["EventResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfEventResponse[]": {
+      data?: null | components["schemas"]["EventResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfEventSourceMutationResponse: {
+      data?: null | components["schemas"]["EventSourceMutationResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfEventSourceOptionResponse[]": {
+      data?: null | components["schemas"]["EventSourceOptionResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfEventSourceProviderResponse[]": {
+      data?: null | components["schemas"]["EventSourceProviderResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfEventSourceResponse: {
+      data?: null | components["schemas"]["EventSourceResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfEventSourceTestResponse: {
+      data?: null | components["schemas"]["EventSourceTestResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfEventSubscriptionResponse: {
+      data?: null | components["schemas"]["EventSubscriptionResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfEventWebhookReceiveResponse: {
+      data?: null | components["schemas"]["EventWebhookReceiveResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     ApiResultOfExecutionPermissionCapabilities: {
       data?: null | components["schemas"]["ExecutionPermissionCapabilities"];
       /** Format: int32 */
@@ -6988,22 +8412,22 @@ export interface components {
       title: string;
       detail?: null | string;
     };
-    ApiResultOfJob: {
-      data?: null | components["schemas"]["Job"];
+    ApiResultOfJobResponse: {
+      data?: null | components["schemas"]["JobResponse"];
       /** Format: int32 */
       code: number;
       title: string;
       detail?: null | string;
     };
-    "ApiResultOfJob[]": {
-      data?: null | components["schemas"]["Job"][];
+    "ApiResultOfJobResponse[]": {
+      data?: null | components["schemas"]["JobResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
       detail?: null | string;
     };
-    "ApiResultOfJobLogResponse[]": {
-      data?: null | components["schemas"]["JobLogResponse"][];
+    "ApiResultOfJobRunResponse[]": {
+      data?: null | components["schemas"]["JobRunResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
@@ -7032,6 +8456,34 @@ export interface components {
     };
     ApiResultOfModelProviderRelation: {
       data?: null | components["schemas"]["ModelProviderRelation"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfNotificationAnswerResult: {
+      data?: null | components["schemas"]["NotificationAnswerResult"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfNotificationChannelResponse[]": {
+      data?: null | components["schemas"]["NotificationChannelResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfNotificationDetail: {
+      data?: null | components["schemas"]["NotificationDetail"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfNotificationListItem[]": {
+      data?: null | components["schemas"]["NotificationListItem"][];
       /** Format: int32 */
       code: number;
       title: string;
@@ -7100,6 +8552,41 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    ApiResultOfPagedResultOfEventDeliveryResponse: {
+      data?: null | components["schemas"]["PagedResultOfEventDeliveryResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfPagedResultOfEventResponse: {
+      data?: null | components["schemas"]["PagedResultOfEventResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfPagedResultOfEventScheduleResponse: {
+      data?: null | components["schemas"]["PagedResultOfEventScheduleResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfPagedResultOfEventSourceResponse: {
+      data?: null | components["schemas"]["PagedResultOfEventSourceResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfPagedResultOfEventSubscriptionResponse: {
+      data?: null | components["schemas"]["PagedResultOfEventSubscriptionResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     ApiResultOfPagedResultOfMcpServer: {
       data?: null | components["schemas"]["PagedResultOfMcpServer"];
       /** Format: int32 */
@@ -7116,6 +8603,13 @@ export interface components {
     };
     ApiResultOfPagedResultOfSkillResponse: {
       data?: null | components["schemas"]["PagedResultOfSkillResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfPagedResultOfUnpublishedEventRecord: {
+      data?: null | components["schemas"]["PagedResultOfUnpublishedEventRecord"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -7321,6 +8815,21 @@ export interface components {
       /** @description 克隆到空的项目根目录。Clones into the empty project root. */
       intoRoot?: null | boolean;
     };
+    CloudEventResponse: {
+      specversion: string;
+      id: string;
+      source: string;
+      type: string;
+      /** Format: date-time */
+      time?: null | string;
+      subject?: null | string;
+      datacontenttype?: null | string;
+      dataschema?: null | string;
+      data?: null | components["schemas"]["JsonElement"];
+      data_base64?: null | string;
+      scope?: null | string;
+      tags?: null | string[];
+    };
     ConnectionCreateRequest: {
       pluginId: string;
       connectorId: string;
@@ -7421,7 +8930,7 @@ export interface components {
       /** Format: int64 */
       sequence: number | string;
       /** Format: int32 */
-      stepIndex: number;
+      stepIndex: null | number;
       message: components["schemas"]["AgwMessage"];
     };
     ConversationTurnMessagesResponse: {
@@ -7541,8 +9050,246 @@ export interface components {
      *     The kind of program that executes an Agent; values match the persisted external Agent kind.
      */
     EngineKind: number;
+    EventDeliveryActionResponse: {
+      accepted: boolean;
+    };
+    EventDeliveryResponse: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      eventId: string;
+      /** Format: uuid */
+      subscriptionId: string;
+      state: components["schemas"]["EventDeliveryState"];
+      /** Format: int32 */
+      attempt: number;
+      lastError?: null | string;
+      /** Format: date-time */
+      nextAttemptAt?: null | string;
+      /** Format: date-time */
+      completedAt?: null | string;
+    };
+    EventDeliveryState: number;
+    EventDispatchState: number;
+    EventHttpPollFormOptionsResponse: {
+      /** Format: int32 */
+      maxPages: number;
+      cursorPathValid?: null | boolean;
+    };
+    EventIdRequest: {
+      /** Format: uuid */
+      id: string;
+    };
+    EventRepublishRequest: {
+      topic: string;
+      /** Format: uuid */
+      entityId: string;
+    };
+    EventResponse: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      sourceId: string;
+      cloudEvent: components["schemas"]["CloudEventResponse"];
+      summary?: null | string;
+      link?: null | string;
+      /** Format: uuid */
+      parentEventId?: null | string;
+      /** Format: date-time */
+      receivedAt: string;
+      /** Format: uuid */
+      chainId: string;
+      /** Format: int32 */
+      hops: number;
+      dispatchState: components["schemas"]["EventDispatchState"];
+      /** Format: int32 */
+      matchedCount: number;
+    };
+    EventScheduleKind: number;
+    EventScheduleResponse: {
+      /** Format: uuid */
+      id: string;
+      kind?: null | components["schemas"]["EventScheduleKind"];
+      /** Format: date-time */
+      dueAt?: null | string;
+      interval?: null | string;
+      cron?: null | string;
+      timeZone?: null | string;
+      eventType?: null | string;
+      subject?: null | string;
+      summary?: null | string;
+      state: components["schemas"]["EventScheduleState"];
+      /** Format: int64 */
+      occurrence: number | string;
+      /** Format: date-time */
+      lastFiredAt?: null | string;
+    };
+    EventScheduleState: number;
+    EventSourceCreateRequest: {
+      name: string;
+      kind: components["schemas"]["EventSourceKind"];
+      config: components["schemas"]["JsonElement"];
+      enabled: boolean;
+      /** Format: uuid */
+      providerExtensionId?: null | string;
+      providerId?: null | string;
+      secret?: null | components["schemas"]["JsonElement"];
+    };
+    EventSourceEnableRequest: {
+      /** Format: uuid */
+      id: string;
+      /** Format: int64 */
+      version: number | string;
+      enabled: boolean;
+    };
+    EventSourceIdRequest: {
+      /** Format: uuid */
+      id: string;
+    };
+    EventSourceKind: number;
+    EventSourceMutationResponse: {
+      /** Format: uuid */
+      id: string;
+      /** Format: int64 */
+      version: number | string;
+      secret?: null | string;
+    };
+    EventSourceOptionResponse: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      kind: components["schemas"]["EventSourceKind"];
+      managedBy: string;
+      eventTypes: string[];
+    };
+    EventSourceProviderConfigurationResponse: {
+      id: string;
+      name: string;
+      description?: null | string;
+    };
+    EventSourceProviderResponse: {
+      /** Format: uuid */
+      extensionId: string;
+      extensionName: string;
+      extensionDisplayName: string;
+      providerId: string;
+      eventTypes: string[];
+      configurations: components["schemas"]["EventSourceProviderConfigurationResponse"][];
+    };
+    EventSourceResponse: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      kind: components["schemas"]["EventSourceKind"];
+      /** Format: uuid */
+      providerExtensionId?: null | string;
+      providerId?: null | string;
+      managedBy: string;
+      managedKey?: null | string;
+      ceSource: string;
+      config: components["schemas"]["JsonElement"];
+      eventTypes: string[];
+      enabled: boolean;
+      /** Format: date-time */
+      baselineAt?: null | string;
+      /** Format: date-time */
+      nextRunAt?: null | string;
+      /** Format: date-time */
+      lastRunAt?: null | string;
+      lastError?: null | string;
+      lastDiscardedType?: null | string;
+      /** Format: date-time */
+      lastDiscardedAt?: null | string;
+      hasSecret: boolean;
+      /** Format: int64 */
+      version: number | string;
+    };
+    EventSourceTestResponse: {
+      /** Format: int32 */
+      itemCount: number;
+    };
+    EventSourceUpdateRequest: {
+      /** Format: uuid */
+      id: string;
+      /** Format: int64 */
+      version: number | string;
+      name: string;
+      config: components["schemas"]["JsonElement"];
+      secret?: null | components["schemas"]["JsonElement"];
+    };
+    EventSourceVersionRequest: {
+      /** Format: uuid */
+      id: string;
+      /** Format: int64 */
+      version: number | string;
+    };
+    EventSubscriptionDeleteRequest: {
+      /** Format: uuid */
+      id: string;
+      /** Format: int64 */
+      version: number | string;
+    };
+    EventSubscriptionManagedState: number;
+    EventSubscriptionRequest: {
+      /** Format: uuid */
+      id?: null | string;
+      /** Format: int64 */
+      version?: null | number | string;
+      name: string;
+      enabled: boolean;
+      sourceIds?: string[];
+      eventTypes: string[];
+      filter?: null | components["schemas"]["JsonElement"];
+      targetKind: components["schemas"]["EventSubscriptionTargetKind"];
+      /** Format: uuid */
+      agentId?: null | string;
+      /** Format: uuid */
+      projectId?: null | string;
+      instructions?: null | string;
+      /** Format: int32 */
+      permissionMode?: null | number;
+      /** Format: uuid */
+      handlerExtensionId?: null | string;
+      handlerId?: null | string;
+      handlerConfig?: null | components["schemas"]["JsonElement"];
+    };
+    EventSubscriptionResponse: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      enabled: boolean;
+      sourceIds: string[];
+      eventTypes: string[];
+      filter?: null | components["schemas"]["JsonElement"];
+      targetKind: components["schemas"]["EventSubscriptionTargetKind"];
+      /** Format: uuid */
+      agentId?: null | string;
+      /** Format: uuid */
+      projectId?: null | string;
+      instructions?: null | string;
+      /** Format: int32 */
+      permissionMode?: null | number;
+      /** Format: uuid */
+      handlerExtensionId?: null | string;
+      handlerId?: null | string;
+      handlerConfig?: null | components["schemas"]["JsonElement"];
+      managedBy: string;
+      managedKey?: null | string;
+      /** Format: int64 */
+      managedVersion?: null | number | string;
+      managedState?: null | components["schemas"]["EventSubscriptionManagedState"];
+      /** Format: int64 */
+      version: number | string;
+    };
+    EventSubscriptionTargetKind: number;
+    EventWebhookReceiveResponse: {
+      /** Format: uuid */
+      eventId?: null | string;
+      discarded: boolean;
+    };
     ExecutionPermissionCapabilities: {
       supportedPermissionModes: components["schemas"]["AgwPermissionMode"][];
+      supportsNoTools: boolean;
       reason?: null | string;
     };
     ExtensionCatalog: {
@@ -7590,7 +9337,7 @@ export interface components {
       settingsVersion: number | string;
       state: components["schemas"]["ExtensionManagementState"];
       /** Format: int32 */
-      errorCode?: number;
+      errorCode?: null | number;
       errorMessage?: null | string;
       /** Format: int32 */
       activeInvocations: number;
@@ -7680,86 +9427,95 @@ export interface components {
     FormFieldTypeResponse: "Text" | "Secret" | "Url";
     /** Format: binary */
     IFormFile: string;
-    Job: {
-      /** Format: uuid */
-      id: string;
-      /** Format: uuid */
-      projectId: string;
-      agentType?: null | components["schemas"]["AgentRuntimeType"];
-      /** Format: uuid */
-      agentId?: null | string;
-      name: string;
-      prompt?: null | string;
-      triggerType: components["schemas"]["TriggerType"];
-      triggerValue: string;
-      /** Format: date-time */
-      nextRunTime: string;
-      status: components["schemas"]["JobStatus"];
-      isEnabled: boolean;
-      /** Format: int32 */
-      retryCount: number;
-      /** Format: int32 */
-      maxRetryCount: number;
-      lastError?: null | string;
-      /** Format: byte */
-      rowVersion?: string;
-      /** Format: date-time */
-      createTime: string;
-      createBy?: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy?: null | string;
-    };
     JobCreateRequest: {
+      name?: null | string;
+      enabled: boolean;
       /** Format: uuid */
       projectId: string;
-      agentType?: null | components["schemas"]["AgentRuntimeType"];
+      targetKind: components["schemas"]["AgentRuntimeType"];
       /** Format: uuid */
-      agentId?: null | string;
-      name: string;
-      prompt?: null | string;
-      triggerType: components["schemas"]["TriggerType"];
-      triggerValue: string;
-      /** Format: int32 */
-      maxRetryCount: number;
-      isEnabled: boolean;
+      agentId: string;
+      instructions?: null | string;
+      schedule?: null | components["schemas"]["JobScheduleDto"];
     };
-    JobEnabledUpdateRequest: {
-      /** Format: uuid */
-      jobId: string;
-      isEnabled: boolean;
-    };
-    JobLogResponse: {
+    JobDeliveryResponse: {
       /** Format: uuid */
       id: string;
-      /** Format: uuid */
-      jobId: string;
-      /** Format: uuid */
-      conversationId: null | string;
-      /** Format: date-time */
-      startTime: string;
-      /** Format: date-time */
-      endTime: null | string;
-      success: boolean;
+      /** Format: int32 */
+      state: number;
       /** Format: int32 */
       attempt: number;
-      errorMessage: null | string;
+      lastError?: null | string;
     };
-    JobStatus: number;
-    JobUpdateRequest: {
+    JobEnableRequest: {
+      /** Format: uuid */
+      id: string;
+      enabled: boolean;
+    };
+    JobIdRequest: {
+      /** Format: uuid */
+      id: string;
+    };
+    JobResponse: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      enabled: boolean;
       /** Format: uuid */
       projectId: string;
-      agentType?: null | components["schemas"]["AgentRuntimeType"];
+      targetKind: components["schemas"]["AgentRuntimeType"];
       /** Format: uuid */
-      agentId?: null | string;
-      name: string;
-      prompt?: null | string;
-      triggerType: components["schemas"]["TriggerType"];
-      triggerValue: string;
+      agentId: string;
+      instructions: string;
+      schedule: components["schemas"]["JobScheduleResponse"];
+      /** Format: date-time */
+      dueAt?: null | string;
+      scheduleCompleted: boolean;
+      lastDelivery?: null | components["schemas"]["JobDeliveryResponse"];
+    };
+    JobRunResponse: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      deliveryId: string;
       /** Format: int32 */
-      maxRetryCount: number;
-      isEnabled: boolean;
-      status: components["schemas"]["JobStatus"];
+      attempt: number;
+      /** Format: date-time */
+      startedAt: string;
+      /** Format: date-time */
+      endedAt: string;
+      /** Format: int32 */
+      result: number;
+      error?: null | string;
+      /** Format: uuid */
+      conversationId?: null | string;
+    };
+    JobScheduleDto: {
+      kind?: null | string;
+      /** Format: date-time */
+      at?: null | string;
+      interval?: null | string;
+      cron?: null | string;
+    };
+    JobScheduleResponse: {
+      kind: string;
+      /** Format: date-time */
+      at?: null | string;
+      interval?: null | string;
+      cron?: null | string;
+    };
+    JobUpdateRequest: {
+      /** Format: uuid */
+      id: string;
+      name?: null | string;
+      enabled: boolean;
+      /** Format: uuid */
+      projectId: string;
+      targetKind: components["schemas"]["AgentRuntimeType"];
+      /** Format: uuid */
+      agentId: string;
+      instructions?: null | string;
+      schedule?: null | components["schemas"]["JobScheduleDto"];
     };
     JsonElement: unknown;
     LoginRequest: {
@@ -7936,6 +9692,134 @@ export interface components {
       /** Format: int32 */
       maxOutputTokens: number;
     };
+    NotificationAnswerRequest: {
+      /** Format: uuid */
+      notificationId: string;
+      /** Format: int32 */
+      option?: null | number;
+      text?: null | string;
+    };
+    NotificationAnswerResult: {
+      /** Format: uuid */
+      notificationId: string;
+      state: components["schemas"]["NotificationState"];
+      /** Format: int64 */
+      version: number | string;
+      /** Format: int32 */
+      option?: null | number;
+      text?: null | string;
+      answeredBy?: null | string;
+      answeredVia?: null | string;
+      /** Format: date-time */
+      answeredAt?: null | string;
+    };
+    NotificationChannelResponse: {
+      channelKey: string;
+      name: string;
+      /** Format: uuid */
+      extensionId: null | string;
+      channelId: null | string;
+      targetId: null | string;
+    };
+    NotificationDeliveredRequest: {
+      /** Format: uuid */
+      notificationId: string;
+      /** Format: int64 */
+      version: number | string;
+    };
+    NotificationDetail: {
+      /** Format: uuid */
+      id: string;
+      kind: components["schemas"]["NotificationKind"];
+      state: components["schemas"]["NotificationState"];
+      title: string;
+      text: string;
+      link: null | string;
+      /** Format: date-time */
+      readAt: null | string;
+      /** Format: date-time */
+      changedAt: string;
+      /** Format: int64 */
+      version: number | string;
+      question: null | components["schemas"]["NotificationQuestionResponse"];
+      dispatches: components["schemas"]["NotificationDispatchResponse"][];
+    };
+    NotificationDispatchAttemptResponse: {
+      /** Format: uuid */
+      id: string;
+      /** Format: int32 */
+      attempt: number;
+      /** Format: int64 */
+      messageVersion: number | string;
+      /** Format: date-time */
+      startedAt: string;
+      /** Format: date-time */
+      finishedAt: null | string;
+      result: components["schemas"]["NotificationDispatchAttemptResult"];
+      externalMessageId: null | string;
+      error: null | string;
+    };
+    NotificationDispatchAttemptResult: number;
+    NotificationDispatchResponse: {
+      /** Format: uuid */
+      id: string;
+      channelKey: string;
+      state: components["schemas"]["NotificationDispatchState"];
+      externalMessageId: null | string;
+      /** Format: int64 */
+      messageVersion: number | string;
+      /** Format: int64 */
+      sentVersion: number | string;
+      /** Format: int32 */
+      attempt: number;
+      /** Format: date-time */
+      nextAttemptAt: null | string;
+      lastError: null | string;
+      attempts: components["schemas"]["NotificationDispatchAttemptResponse"][];
+    };
+    NotificationDispatchRetryRequest: {
+      /** Format: uuid */
+      dispatchId: string;
+    };
+    NotificationDispatchState: number;
+    NotificationKind: number;
+    NotificationListItem: {
+      /** Format: uuid */
+      id: string;
+      kind: components["schemas"]["NotificationKind"];
+      state: components["schemas"]["NotificationState"];
+      title: string;
+      text: string;
+      link: null | string;
+      /** Format: date-time */
+      readAt: null | string;
+      /** Format: date-time */
+      changedAt: string;
+      /** Format: int64 */
+      version: number | string;
+    };
+    NotificationOption: {
+      label: string;
+      value: string;
+    };
+    NotificationQuestionResponse: {
+      options: components["schemas"]["NotificationOption"][];
+      /** Format: int32 */
+      recommend: null | number;
+      allowText: boolean;
+      /** Format: int32 */
+      answerOption: null | number;
+      answerText: null | string;
+      answeredBy: null | string;
+      answeredVia: null | string;
+      /** Format: date-time */
+      answeredAt: null | string;
+    };
+    NotificationReadRequest: {
+      /** Format: uuid */
+      notificationId: string;
+    };
+    NotificationState: number;
     OAuth2AuthorizationCodeResponse: {
       authorizationEndpoint: string;
       tokenEndpoint: string;
@@ -8018,6 +9902,51 @@ export interface components {
       /** Format: int32 */
       pageSize: number;
     };
+    PagedResultOfEventDeliveryResponse: {
+      items: components["schemas"]["EventDeliveryResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfEventResponse: {
+      items: components["schemas"]["EventResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfEventScheduleResponse: {
+      items: components["schemas"]["EventScheduleResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfEventSourceResponse: {
+      items: components["schemas"]["EventSourceResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfEventSubscriptionResponse: {
+      items: components["schemas"]["EventSubscriptionResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
     PagedResultOfMcpServer: {
       items: components["schemas"]["McpServer"][];
       /** Format: int64 */
@@ -8038,6 +9967,15 @@ export interface components {
     };
     PagedResultOfSkillResponse: {
       items: components["schemas"]["SkillResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfUnpublishedEventRecord: {
+      items: components["schemas"]["UnpublishedEventRecord"][];
       /** Format: int64 */
       total: number | string;
       /** Format: int32 */
@@ -8109,7 +10047,7 @@ export interface components {
       type?: null | string;
       title?: null | string;
       /** Format: int32 */
-      status?: number;
+      status?: null | number;
       detail?: null | string;
       instance?: null | string;
     };
@@ -8143,8 +10081,9 @@ export interface components {
       /** Format: uuid */
       conversationId: string;
       contextId: string;
+      kind: string;
       /** Format: uuid */
-      jobId: null | string;
+      relateId: null | string;
       title: string;
       latestStatus: null | components["schemas"]["TaskExecutionStatus"];
       /** Format: int32 */
@@ -8171,8 +10110,9 @@ export interface components {
       /** Format: uuid */
       conversationId: string;
       contextId: string;
+      kind: string;
       /** Format: uuid */
-      jobId: null | string;
+      relateId: null | string;
       title: string;
       latestStatus: null | components["schemas"]["TaskExecutionStatus"];
       /** Format: int32 */
@@ -8513,7 +10453,8 @@ export interface components {
       | components["schemas"]["ToolBlockDefinitionUserMemoryToolBlockDefinition"]
       | components["schemas"]["ToolBlockDefinitionFileReadonlyAccessToolBlockDefinition"]
       | components["schemas"]["ToolBlockDefinitionFileAccessToolBlockDefinition"]
-      | components["schemas"]["ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"];
+      | components["schemas"]["ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"]
+      | components["schemas"]["ToolBlockDefinitionNotificationToolBlockDefinition"];
     ToolBlockDefinitionBackgroundAgentsToolBlockDefinition: {
       /** @enum {string} */
       name: "background-agents";
@@ -8532,6 +10473,11 @@ export interface components {
     ToolBlockDefinitionModeToolBlockDefinition: {
       /** @enum {string} */
       name: "mode";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolBlockDefinitionNotificationToolBlockDefinition: {
+      /** @enum {string} */
+      name: "notification";
       options: components["schemas"]["EmptyToolOptions"];
     };
     ToolBlockDefinitionProjectMemoryToolBlockDefinition: {
@@ -8629,7 +10575,14 @@ export interface components {
       kind: "tool";
       definition: components["schemas"]["ToolDefinition"];
     };
-    TriggerType: number;
+    UnpublishedEventRecord: {
+      topic: string;
+      /** Format: uuid */
+      entityId: string;
+      state: string;
+      /** Format: date-time */
+      recoverAfter: string;
+    };
     UsageDetails: {
       /** Format: int64 */
       inputTokenCount?: null | number | string;
@@ -8704,9 +10657,9 @@ export interface components {
        * Format: int32
        * @description 相对上游分支的领先、落后提交数；没有上游时为 null。Commits ahead of and behind the upstream; null without one.
        */
-      ahead?: number;
+      ahead?: null | number;
       /** Format: int32 */
-      behind?: number;
+      behind?: null | number;
       branches?: string[];
       /** @description 远程跟踪分支，例如 `origin/main`。Remote-tracking branches such as `origin/main`. */
       remoteBranches?: string[];

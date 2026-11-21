@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Agw.Agents.Definitions.Controllers;
 using Agw.Host.OpenApi;
+using Agw.Notifications.Api.Dtos;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +15,23 @@ namespace Agw.Host.Tests;
 /// </summary>
 public sealed class OpenApiSchemaTransformerTests
 {
+    [Fact]
+    public async Task NotificationAnswerRequest_TextOnlyAnswer_OptionSchemaAllowsNull()
+    {
+        var schemas = await GenerateSchemasAsync();
+        var answer = schemas.GetProperty("NotificationAnswerRequest");
+        var types = answer
+            .GetProperty("properties")
+            .GetProperty("option")
+            .GetProperty("type")
+            .EnumerateArray()
+            .Select(type => type.GetString())
+            .ToArray();
+        Assert.Contains("integer", types);
+        Assert.Contains("null", types);
+        Assert.DoesNotContain(answer.GetProperty("required").EnumerateArray(), item => item.GetString() == "option");
+    }
+
     [Fact]
     public async Task AgentUpdateRequest_AllPropertiesNullable_HasNoRequiredProperties()
     {
@@ -50,6 +68,7 @@ public sealed class OpenApiSchemaTransformerTests
         builder.Services.AddOpenApi(options => options.AddSchemaTransformer<AgwOpenApiSchemaTransformer>());
         await using var app = builder.Build();
         app.MapControllers();
+        app.MapPost("/notification-answer", (NotificationAnswerRequest request) => request);
         app.MapOpenApi();
         await app.StartAsync(TestContext.Current.CancellationToken);
         using var client = app.GetTestClient();

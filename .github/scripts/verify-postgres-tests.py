@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("directory", type=Path)
-parser.add_argument("--suite", choices=("all", "agents", "jobs", "files", "extensions"), default="all")
+parser.add_argument("--suite", choices=("all", "agents", "jobs", "files", "events", "extensions"), default="all")
 args = parser.parse_args()
 
 agent_tests = (
@@ -18,20 +18,18 @@ agent_tests = (
     "Postgres_TurnAcceptance_EnabledExtensionAdmissionBlocksDisableUntilCommit",
 )
 job_tests = (
-    "AcquireAsync_PostgresLeaseLoss_CancelsHeldOperation",
-    "RecoverAsync_ActiveTurnChangesAfterSnapshot_DoesNotRecordStaleOutcome",
-    "Delete_ConcurrentAttemptClaim_PreservesJobLogs(deleteByProject: False)",
-    "Delete_ConcurrentAttemptClaim_PreservesJobLogs(deleteByProject: True)",
-    "ExecuteAsync_PostgresLeaseLost_CancelsDatabaseOperation(durableRecovery: False)",
-    "ExecuteAsync_PostgresLeaseLost_CancelsDatabaseOperation(durableRecovery: True)",
-    "TryAcquireAsync_PostgresContention_ReturnsNullUntilLeaseReleased",
-    "RecoverAsync_PostgresLeaseLost_CancelsInProcessRecovery",
-    "Delete_ConcurrentMutableUpdate_ReturnsModificationConflictAndPreservesJobLogs",
-    "Delete_ConcurrentProjectDeletion_ReturnsSameMissingResult",
+    "Update_ProjectDeletedAfterJobRead_ReturnsConflict",
+    "Update_ProjectDeletedAfterJobRead_ThrowsConflictAndLeavesNoJobRecords",
+    "Enable_ConcurrentRequests_KeepTimerSubscriptionAndScheduleConsistent",
+    "Upgrade_Postgres_RemovesJobTablesAndAddsConversationKind",
 )
 file_tests = (
     "WriteAsync_TwoHostsWithSameExpectedSha256_SerializesAndOnlyOneSucceeds",
     "WriteAsync_LeaseLostBeforeCommit_StaleHolderFailsAndKeepsNewContent",
+)
+event_tests = (
+    "ListAsync_WaitingRecordsOnPostgres_PagesAcrossRecordKinds",
+    "ListSchedulesAsync_NullDueAtOnPostgres_SortsLast",
 )
 extension_tests = (
     "PrepareAsync_MigratesPostgreSqlAndRetainsCompatibleSchema",
@@ -40,8 +38,14 @@ extension_tests = (
     "AcquireBusinessAccessAsync_UsesTransactionSharedLockAgainstMigrationSessionLock",
     "UnloadAsync_AfterPrivateNpgsqlQuery_CollectibleGenerationIsReleased",
 )
-suites = {"agents": agent_tests, "jobs": job_tests, "files": file_tests, "extensions": extension_tests}
-required = agent_tests + job_tests + file_tests + extension_tests if args.suite == "all" else suites[args.suite]
+suites = {
+    "agents": agent_tests,
+    "jobs": job_tests,
+    "files": file_tests,
+    "events": event_tests,
+    "extensions": extension_tests,
+}
+required = (name for suite in suites.values() for name in suite) if args.suite == "all" else suites[args.suite]
 results = [
     item
     for report in args.directory.glob("*.trx")

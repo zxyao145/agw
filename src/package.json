@@ -1,0 +1,39 @@
+{
+  "name": "@agw/clients",
+  "private": true,
+  "scripts": {
+    "dev:web": "turbo run dev --filter=@agw/web",
+    "dev:desktop": "turbo run dev --filter=@agw/desktop",
+    "dev:mobile": "turbo run dev --filter=@agw/mobile",
+    "android:mobile": "pnpm --filter=@agw/mobile android",
+    "ios:mobile": "pnpm --filter=@agw/mobile ios",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "pnpm test:boundaries && pnpm test:repository-proxy && turbo run test",
+    "test:boundaries": "node clients/tools/scripts/check-client-boundaries.mjs",
+    "test:repository-proxy": "tsx --test clients/tools/tests/bare-repository-proxy.test.ts",
+    "test:repository-workspace": "tsc -p clients/tools/tests/bare-repository-workspace/tsconfig.json && tsx --test clients/tools/tests/bare-repository-workspace.test.mts",
+    "test:e2e": "turbo run test:e2e",
+    "fmt": "turbo run format",
+    "fmt:check": "turbo run format:check",
+    "gen:api": "turbo run gen:api",
+    "package:desktop": "turbo run package --filter=@agw/desktop --",
+    "make:desktop": "turbo run make --filter=@agw/desktop --",
+    "release:desktop": "pnpm --filter=@agw/desktop release:build",
+    "release:collect": "turbo run release:collect --filter=@agw/desktop --"
+  },
+  "devDependencies": {
+    "@swc/core": "1.16.2",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "dependency-cruiser": "18.4.0",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "tsx": "catalog:",
+    "turbo": "2.11.2",
+    "typescript": "catalog:"
+  },
+  "packageManager": "pnpm@12.5.1"
+}

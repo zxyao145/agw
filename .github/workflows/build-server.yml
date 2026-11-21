@@ -27,6 +27,8 @@ jobs:
             server:
               - 'Dockerfile'
               - '.dockerignore'
+              - 'src/extensions/feishu/**'
+              - 'src/extensions/taskpilot/**'
               - 'src/server/**'
               - 'src/sdks/**'
               - 'tests/**'
@@ -54,16 +56,35 @@ jobs:
     - name: Audit dependencies
       run: dotnet restore Agw.slnx -p:NuGetAudit=true -p:NuGetAuditMode=all -p:WarningsAsErrors=NU1900%3BNU1903%3BNU1904
 
-    - name: Setup Node.js for external CLI tests
+    - uses: pnpm/action-setup@v6
+      with:
+        package_json_file: src/package.json
+
+    - name: Setup Node.js for extensions and external CLI tests
       uses: actions/setup-node@v6
       with:
         node-version: 24
+        cache: pnpm
+        cache-dependency-path: src/pnpm-lock.yaml
 
     - name: Install Pi CLI startup test dependency
       run: npm ci --prefix src/sdks/pi-agent-sdk-csharp/tests/fixtures/pi-cli --ignore-scripts --no-audit --no-fund
 
     - name: Install Codex app-server test dependency
       run: npm ci --prefix tests/Agw.Agents.Tests/fixtures/codex-app-server --ignore-scripts --no-audit --no-fund
+
+    - name: Install Redis test dependency
+      run: sudo apt-get update && sudo apt-get install --yes redis-server
+
+    - name: Install extension workspace dependencies
+      working-directory: src
+      run: pnpm install --frozen-lockfile
+
+    - name: Build Server extension packages
+      working-directory: src
+      run: >-
+        pnpm --filter @agw/extension-feishu --filter @agw/extension-taskpilot
+        --workspace-concurrency=1 run build
 
     - name: build
       run: |
@@ -119,7 +140,9 @@ jobs:
         run: |
           dotnet build tests/Agw.Agents.Tests -c Release
           dotnet build tests/Agw.Jobs.Tests -c Release
+          dotnet build tests/Agw.Projects.Tests -c Release
           dotnet build tests/Agw.Files.Tests -c Release
+          dotnet build tests/Agw.Events.Tests -c Release
           dotnet build tests/Agw.Extensions.Database.Tests -c Release
           dotnet build tests/Agw.Extensions.Runtime.Tests -c Release
       - name: Configure PostgreSQL test databases
@@ -132,17 +155,29 @@ jobs:
           -filterVSTest "FullyQualifiedName~DurableDistributedStoreTests.Postgres_|FullyQualifiedName~DurableTurnUpgradeTests.Postgres_|FullyQualifiedName~DurableSchedulerTests.Postgres_|FullyQualifiedName~TurnAcceptanceLockTests.Postgres_"
           -result-trx TestResults/Postgres/results.trx
           -failSkips
-      - name: Test PostgreSQL job deletion and execution locks
+      - name: Test PostgreSQL job writes
         run: >-
           tests/Agw.Jobs.Tests/bin/Release/net10.0/Agw.Jobs.Tests
           -filterVSTest "Category=Postgres"
           -result-trx TestResults/Postgres/jobs.trx
+          -failSkips
+      - name: Test PostgreSQL Jobs/Event Timer migration
+        run: >-
+          tests/Agw.Projects.Tests/bin/Release/net10.0/Agw.Projects.Tests
+          -filterVSTest "FullyQualifiedName~JobsEventTimerMigrationTests.Upgrade_Postgres_"
+          -result-trx TestResults/Postgres/jobs-migration.trx
           -failSkips
       - name: Test PostgreSQL file write serialization across Hosts
         run: >-
           tests/Agw.Files.Tests/bin/Release/net10.0/Agw.Files.Tests
           -filterVSTest "Category=Postgres"
           -result-trx TestResults/Postgres/files.trx
+          -failSkips
+      - name: Test PostgreSQL event list paging
+        run: >-
+          tests/Agw.Events.Tests/bin/Release/net10.0/Agw.Events.Tests
+          -filterVSTest "Category=Postgres"
+          -result-trx TestResults/Postgres/events.trx
           -failSkips
       - name: Test PostgreSQL extension migrations, isolation and settings propagation
         run: >-

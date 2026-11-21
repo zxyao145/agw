@@ -4,6 +4,7 @@ using Agw.Integrations.Application.Facades;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.OAuth;
 using Agw.Integrations.Application.Plugins;
+using Agw.Integrations.Contracts;
 using Agw.Integrations.Contracts.Capabilities;
 using Agw.Integrations.Contracts.References;
 using Agw.Integrations.Domain.Repositories;
@@ -45,6 +46,7 @@ public static class DependencyInjection
         services.AddScoped<PluginInstallationAppService>();
         services.AddScoped<ConnectionAppService>();
         services.AddScoped<IConnectionReferenceFacade, ConnectionReferenceFacade>();
+        services.AddScoped<IConnectionAuthorizationFacade, ConnectionAuthorizationFacade>();
         services.AddSingleton<OAuthStateProtector>();
         services.AddSingleton<OAuthRedirectUriResolver>();
         services.AddScoped<OAuthAuthorizationAppService>();

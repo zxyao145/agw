@@ -2,7 +2,7 @@
 
 This file provides guidance to coding agents working in this repository.
 
-Agw is a modular-monolith agent gateway (Agents, Agentflows, Jobs, Chat, Integrations) built on ASP.NET Core + EF Core (.NET 10) with Microsoft.Agents.AI, MCP, and A2A. Clients are a Next.js Web app, an Electron Desktop app, and an Expo Mobile app in one pnpm/Turborepo workspace.
+Agw is a modular-monolith agent gateway (Agents, Agentflows, Jobs, Chat, Integrations) built on ASP.NET Core + EF Core (.NET 10) with Microsoft.Agents.AI, MCP, and A2A. Clients are a Next.js Web app, an Electron Desktop app, and an Expo Mobile app in one pnpm/Turborepo workspace rooted at `src`, alongside extension projects under `src/extensions`.
 
 ## Reference documents
 
@@ -45,7 +45,7 @@ dotnet test Agw.slnx
 - EF migrations are never added or applied automatically. A model change needs matching migrations in both `Agw.Migrations.Sqlite` and `Agw.Migrations.Postgres`. Generate them only when asked, using the provider-specific commands in `docs/1.Development.md`.
 - Release packaging goes through `publish.sh` (`PUBLISH_MODE=portable|docker|all`).
 
-### Clients (run from `src/clients`)
+### Clients (run from `src`)
 
 ```bash
 pnpm install
@@ -53,7 +53,7 @@ pnpm dev:web        # http://localhost:3001, proxies /api and /openapi to :30816
 pnpm dev:desktop    # renderer on http://localhost:3000; does not need dev:web
 pnpm dev:mobile     # also android:mobile / ios:mobile
 pnpm build | typecheck | lint | test | fmt | fmt:check
-pnpm gen:api        # regenerate packages/api/src/openapi.d.ts after backend contract changes
+pnpm gen:api        # regenerate clients/packages/api/src/openapi.d.ts after backend contract changes
 pnpm test:boundaries
 ```
 
@@ -70,7 +70,7 @@ pnpm test:boundaries
 
 `Agw.Host` is the shared Hosting Module that composes every module's `Add<Module>()` registration. The executables are:
 
-- `Agw.ControlPlane.Host`: Setup, auth management, management APIs, OpenAPI, static Web UI, Job scheduling.
+- `Agw.ControlPlane.Host`: Setup, auth management, management APIs, OpenAPI, static Web UI, and Events workers for scheduling and delivery.
 - `Agw.DataPlane.Host`: the SignalR hub `/api/hubs/exec`, A2A routes, and durable execution workers. It does not map management controllers or Setup.
 - `Agw.Standalone.Host`: both roles in one process (assembly `agw-server`). Defaults are SQLite and InProcess execution.
 
@@ -86,7 +86,7 @@ pnpm test:boundaries
 ### Persistence
 
 - Entity CLR types and EF configurations live centrally in `Agw.Data/Entities`. Each table still has exactly one logical owner module, listed in `EntityOwners` in `BackendArchitectureTests.cs`. Adding a `[Table]` entity requires adding it there.
-- Each module declares `Application/Persistence/I<Module>DbContext` (DbSets plus the inherited `SaveChangesAsync`). The single scoped `Agw.Infrastructure/Data/AgwDbContext` implements all nine of them. A module uses only its own interface. Reusable complex persistence and cross-module transactions are declared as interfaces in the module's `Application/Persistence` and implemented under `Agw.Infrastructure/<Module>/`.
+- Modules that own tables declare `Application/Persistence/I<Module>DbContext` (DbSets plus the inherited `SaveChangesAsync`). The single scoped `Agw.Infrastructure/Data/AgwDbContext` implements all ten of them. A module uses only its own interface. Reusable complex persistence and cross-module transactions are declared as interfaces in the module's `Application/Persistence` and implemented under `Agw.Infrastructure/<Module>/`.
 - The database has no foreign keys: `NoForeignKeyModelDiffer` strips them from migrations, so never hand-add them. Application and Infrastructure code validates references and cleans up related rows. Columns use `snake_case`.
 - `EntityCreatorInterceptor`, `EntityModifierInterceptor`, and `EntitySoftDeleteInterceptor` handle audit stamping (`CreateBy`/`CreateTime`/`UpdateBy`/`UpdateTime`), keep `CreateBy` immutable, and validate ownership.
 - Raw persistence access per file is tracked in an exact inventory (`RawPersistenceInventoryTests`, `ModuleSource_RawPersistenceAccessMatchesExactInventory`). Changing that access means updating the inventory to match exactly. Do not grow legacy allowlists.

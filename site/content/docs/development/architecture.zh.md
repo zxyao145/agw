@@ -34,7 +34,7 @@ Domain 中的 Entity 保存状态。单个 Aggregate 的业务规则由 Behavior
 
 每张表只有一个负责它的模块。即使多个模块共用实体类型和数据库，也要通过所属模块提供的接口访问数据，不能直接查询或修改其他模块的表。
 
-拥有数据表的模块在 `Application/Persistence` 中声明自己的持久化接口 `I<Module>DbContext`，目前共有九个：Agents、Auth、Integrations、Jobs、Projects、Providers、Settings、Skills 和 Tools；Files、Setup 和 A2A 不拥有数据表，也没有这类接口。同一次请求中，这些接口由同一个 `AgwDbContext` 实例实现。这样既能共用数据库连接和事务，又能限制模块可见的数据范围。跨模块调用使用 Contracts 中的公开约定，必要的跨模块事务放在经过批准的 Infrastructure 适配器中。
+拥有数据表的模块在 `Application/Persistence` 中声明自己的持久化接口 `I<Module>DbContext`。十个持久化接口分别属于 Agents、Auth、Events、Integrations、Notifications、Projects、Providers、Settings、Skills 和 Tools。Files、Setup、A2A 和 Jobs 不拥有数据表，也没有这类接口。同一次请求中，这些接口由同一个 `AgwDbContext` 实例实现。这样既能共用数据库连接和事务，又能限制模块可见的数据范围。跨模块调用使用 Contracts 中的公开约定，必要的跨模块事务放在经过批准的 Infrastructure 适配器中。
 
 `Agw.Agents.Execution → Agw.Agents` 单向依赖，两程序集属于同一 Agents 模块。Agentflow 的选择性 DDD 不扩展到普通 CRUD 模块。
 

@@ -45,6 +45,28 @@ public class ExecutionSettingsTests
 
         Assert.Null(restored.PermissionMode);
         Assert.Equal(HumanInteractionPolicy.Allow, restored.HumanInteractionPolicy);
+        Assert.Equal(BackgroundToolPolicy.Default, restored.ToolPolicy);
+    }
+
+    [Fact]
+    public void ToolPolicy_SurvivesDerivedAndDurableSettings()
+    {
+        var settings = ExecutionSettings.CreateDefault().WithToolPolicy(BackgroundToolPolicy.None);
+
+        Assert.Equal(BackgroundToolPolicy.None, settings.WithPermissionMode(AgwPermissionMode.FullAccess).ToolPolicy);
+        Assert.Equal(
+            BackgroundToolPolicy.None,
+            settings.WithHumanInteractionPolicy(HumanInteractionPolicy.Reject).ToolPolicy
+        );
+
+        var snapshot = DurableExecutionMapper.FromSettings(settings);
+        var restored = JsonSerializer.Deserialize<DurableExecutionSettings>(JsonSerializer.Serialize(snapshot))!;
+
+        Assert.Equal(
+            BackgroundToolPolicy.None,
+            restored.ToRuntimeSettings(Guid.CreateVersion7(), Guid.CreateVersion7()).ToolPolicy
+        );
+        Assert.NotEqual(settings, settings.WithToolPolicy(BackgroundToolPolicy.Default));
     }
 
     [Fact]

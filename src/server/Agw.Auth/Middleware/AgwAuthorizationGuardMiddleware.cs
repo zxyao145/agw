@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Bens.Results;
@@ -43,7 +44,8 @@ public sealed class AgwAuthorizationGuardMiddleware
             return;
         }
 
-        if (!isProtectedProtocol || isAnonymousPath || context.User.Identity?.IsAuthenticated == true)
+        var isEventWebhook = HttpMethods.IsPost(context.Request.Method) && path.Equals(EventWebhookRoute.Receive);
+        if (!isProtectedProtocol || isAnonymousPath || isEventWebhook || context.User.Identity?.IsAuthenticated == true)
         {
             await _next(context);
             return;

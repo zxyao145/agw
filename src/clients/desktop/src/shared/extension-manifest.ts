@@ -182,7 +182,16 @@ export const extensionManifestSchema = z
           .optional(),
         entryAssembly: z.string().min(1),
         entryType: z.string().min(1),
-        permissions: z.array(z.string()).optional(),
+        permissions: z
+          .strictObject({
+            events: z
+              .strictObject({
+                publish: z.array(z.string()).optional(),
+                publishRoot: z.boolean().optional(),
+              })
+              .optional(),
+          })
+          .optional(),
       })
       .passthrough()
       .optional(),

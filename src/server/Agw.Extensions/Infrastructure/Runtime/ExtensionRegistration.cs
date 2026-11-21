@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Agw.Extensions.Contracts;
 using Agw.Extensions.Sdk;
 using Agw.Extensions.Sdk.Database;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,10 +21,17 @@ internal sealed class ExtensionRegistration : IExtensionRegistration
     private readonly HashSet<string> _toolNames = new(StringComparer.Ordinal);
     private readonly HashSet<string> _skillIds = new(StringComparer.Ordinal);
     private readonly HashSet<string> _skillNames = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _eventHandlerIds = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _eventSourceProviderIds = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _notificationChannelIds = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _outboxResultHandlerKinds = new(StringComparer.Ordinal);
     private readonly HashSet<string> _backgroundServiceTypes = new(StringComparer.Ordinal);
     private readonly List<RegisteredEndpoint> _endpoints = [];
     private readonly List<RegisteredTool> _tools = [];
     private readonly List<RegisteredSkill> _skills = [];
+    private readonly List<RegisteredEventHandler> _eventHandlers = [];
+    private readonly List<RegisteredEventSourceProvider> _eventSourceProviders = [];
+    private readonly List<RegisteredNotificationChannel> _notificationChannels = [];
     private readonly List<Type> _backgroundServiceTypesToStart = [];
     private readonly List<JsonSerializerContext> _jsonContexts = [];
     private JsonSerializerOptions? _jsonOptions;
@@ -61,6 +69,12 @@ internal sealed class ExtensionRegistration : IExtensionRegistration
 
     public IReadOnlyList<RegisteredSkill> Skills => _skills;
 
+    public IReadOnlyList<RegisteredEventHandler> EventHandlers => _eventHandlers;
+
+    public IReadOnlyList<RegisteredEventSourceProvider> EventSourceProviders => _eventSourceProviders;
+
+    public IReadOnlyList<RegisteredNotificationChannel> NotificationChannels => _notificationChannels;
+
     public IReadOnlyList<Type> BackgroundServiceTypes => _backgroundServiceTypesToStart;
 
     public IExtensionDatabaseFactory? DatabaseFactory => _databaseFactory;
@@ -72,6 +86,10 @@ internal sealed class ExtensionRegistration : IExtensionRegistration
         ValidateIdentifier(descriptor.Id);
         ValidateHttpMethod(descriptor.Method);
         ValidateRelativePath(descriptor.RelativePath);
+        if (descriptor.IsBrowserPage && descriptor.Method != "GET")
+        {
+            throw new AgwException(ErrorCodes.ExtensionPackageInvalid, "Browser page endpoints must use GET.");
+        }
         ValidateSchema(descriptor.RequestSchema);
         ValidateSchema(descriptor.ResponseSchema);
         string routeKey = $"{descriptor.Method} {descriptor.RelativePath}";
@@ -128,6 +146,87 @@ internal sealed class ExtensionRegistration : IExtensionRegistration
         _skills.Add(new RegisteredSkill(descriptor, contentProvider));
     }
 
+    public void RegisterEventHandler(ExtensionEventHandlerDescriptor descriptor, ExtensionEventHandler handler)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentNullException.ThrowIfNull(handler);
+        ValidateIdentifier(descriptor.Id);
+        if (!_eventHandlerIds.Add(descriptor.Id))
+        {
+            throw new AgwException(ErrorCodes.ExtensionPackageInvalid, "Extension event handler is duplicated.");
+        }
+
+        _eventHandlers.Add(new RegisteredEventHandler(descriptor, handler));
+    }
+
+    public void RegisterEventSourceProvider<TProvider>(ExtensionEventSourceProviderDescriptor descriptor)
+        where TProvider : class, IExtensionEventSourceProvider
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ValidateIdentifier(descriptor.Id);
+        var validEventTypes =
+            descriptor.EventTypes is { Count: > 0 } types && types.All(EventTypePatterns.IsDeclaredExternalPattern);
+        if (!validEventTypes)
+        {
+            throw new AgwException(ErrorCodes.ExtensionPackageInvalid, "Extension source event types are invalid.");
+        }
+        var configurationIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var configuration in descriptor.Configurations)
+        {
+            ValidateIdentifier(configuration.Id);
+            var invalidConfiguration =
+                string.IsNullOrWhiteSpace(configuration.Name)
+                || configuration.Config.ValueKind != JsonValueKind.Object
+                || !configurationIds.Add(configuration.Id);
+            if (invalidConfiguration)
+            {
+                throw new AgwException(
+                    ErrorCodes.ExtensionPackageInvalid,
+                    "Extension source configuration is invalid."
+                );
+            }
+        }
+        if (!_eventSourceProviderIds.Add(descriptor.Id))
+        {
+            throw new AgwException(
+                ErrorCodes.ExtensionPackageInvalid,
+                "Extension event source provider is duplicated."
+            );
+        }
+
+        Services.AddScoped<TProvider>();
+        _eventSourceProviders.Add(
+            new RegisteredEventSourceProvider(typeof(TProvider), EventSourceProviderDescriptorCloner.Clone(descriptor))
+        );
+    }
+
+    public void RegisterNotificationChannel<TChannel>(ExtensionNotificationChannelDescriptor descriptor)
+        where TChannel : class, IExtensionNotificationChannel
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ValidateIdentifier(descriptor.Id);
+        ValidateIdentifier(descriptor.Name);
+        if (!_notificationChannelIds.Add(descriptor.Id))
+        {
+            throw new AgwException(ErrorCodes.ExtensionPackageInvalid, "Extension notification channel is duplicated.");
+        }
+
+        Services.AddScoped<TChannel>();
+        _notificationChannels.Add(new RegisteredNotificationChannel(typeof(TChannel), descriptor));
+    }
+
+    public void RegisterOutboxResultHandler<THandler>(string kind)
+        where THandler : class, IExtensionOutboxResultHandler
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(kind);
+        if (!ExtensionOutboxKind.IsDefined(kind) || !_outboxResultHandlerKinds.Add(kind))
+        {
+            throw new AgwException(ErrorCodes.ExtensionPackageInvalid, "Extension outbox result handler is invalid.");
+        }
+
+        Services.AddKeyedScoped<IExtensionOutboxResultHandler, THandler>(kind);
+    }
+
     public void RegisterBackgroundService<TService>()
         where TService : class, IExtensionBackgroundService
     {
@@ -156,6 +255,9 @@ internal sealed class ExtensionRegistration : IExtensionRegistration
         _endpoints.Clear();
         _tools.Clear();
         _skills.Clear();
+        _eventHandlers.Clear();
+        _eventSourceProviders.Clear();
+        _notificationChannels.Clear();
         _backgroundServiceTypesToStart.Clear();
         _jsonContexts.Clear();
         _databaseFactory = null;
@@ -166,6 +268,10 @@ internal sealed class ExtensionRegistration : IExtensionRegistration
         _toolNames.Clear();
         _skillIds.Clear();
         _skillNames.Clear();
+        _eventHandlerIds.Clear();
+        _eventSourceProviderIds.Clear();
+        _notificationChannelIds.Clear();
+        _outboxResultHandlerKinds.Clear();
         _backgroundServiceTypes.Clear();
     }
 
@@ -237,4 +343,19 @@ internal sealed record RegisteredTool(Type ToolType, ExtensionToolDescriptor Des
 internal sealed record RegisteredSkill(
     ExtensionSkillDescriptor Descriptor,
     ExtensionSkillContentProvider ContentProvider
+);
+
+internal sealed record RegisteredEventHandler(
+    ExtensionEventHandlerDescriptor Descriptor,
+    ExtensionEventHandler Handler
+);
+
+internal sealed record RegisteredEventSourceProvider(
+    Type ProviderType,
+    ExtensionEventSourceProviderDescriptor Descriptor
+);
+
+internal sealed record RegisteredNotificationChannel(
+    Type ChannelType,
+    ExtensionNotificationChannelDescriptor Descriptor
 );

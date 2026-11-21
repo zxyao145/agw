@@ -43,6 +43,7 @@ public sealed partial class ExtensionRuntime : IExtensionRuntime, IExtensionInvo
     );
 
     private readonly IServiceProvider _hostServices;
+    private readonly IExtensionCallerScope _callerContext;
     private readonly IExtensionRuntimeAvailability _availability;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ExtensionRuntime> _logger;
@@ -62,6 +63,7 @@ public sealed partial class ExtensionRuntime : IExtensionRuntime, IExtensionInvo
     )
     {
         _hostServices = hostServices;
+        _callerContext = _hostServices.GetRequiredService<IExtensionCallerScope>();
         _availability = availability;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -198,6 +200,18 @@ public sealed partial class ExtensionRuntime : IExtensionRuntime, IExtensionInvo
                                 services.GetRequiredService(backgroundServiceType);
                             generation.BackgroundServices.Add(backgroundService);
                             await backgroundService.StartAsync(
+                                context,
+                                new ExtensionBackgroundScheduler(this, generation.GenerationId),
+                                cancellationToken
+                            );
+                        }
+
+                        IExtensionOutboxWorker? outboxWorker =
+                            generation.Services!.GetService<IExtensionOutboxWorker>();
+                        if (outboxWorker is not null)
+                        {
+                            generation.BackgroundServices.Add(outboxWorker);
+                            await outboxWorker.StartAsync(
                                 context,
                                 new ExtensionBackgroundScheduler(this, generation.GenerationId),
                                 cancellationToken
@@ -1106,15 +1120,26 @@ public sealed partial class ExtensionRuntime : IExtensionRuntime, IExtensionInvo
         Guid invocationId = generation.StartLifecycleInvocation();
         IDisposable? capabilitiesScope = null;
         IDisposable? userContextScope = null;
+        IDisposable? callerContextScope = null;
         try
         {
             capabilitiesScope = generation.HostCapabilities.Push(scope.ServiceProvider);
             userContextScope = generation.UserContext?.Push(currentUser.UserId, invocationId);
+            callerContextScope = _callerContext.Push(
+                new ExtensionCaller
+                {
+                    ExtensionId = generation.GenerationId.ExtensionId,
+                    GenerationId = generation.GenerationId.GenerationId,
+                    UserId = currentUser.UserId,
+                    InvocationId = invocationId,
+                }
+            );
             var context = new ExtensionContext(
                 generation.Request,
                 generation.GenerationId,
                 generation.HostCapabilities,
                 currentUser,
+                scope.ServiceProvider,
                 generation.Registration.JsonOptions,
                 generation.Logger
             );
@@ -1122,6 +1147,7 @@ public sealed partial class ExtensionRuntime : IExtensionRuntime, IExtensionInvo
         }
         finally
         {
+            callerContextScope?.Dispose();
             userContextScope?.Dispose();
             capabilitiesScope?.Dispose();
             generation.FinishInvocation(invocationId);
@@ -1131,15 +1157,16 @@ public sealed partial class ExtensionRuntime : IExtensionRuntime, IExtensionInvo
     private static ExtensionRuntimeLoadRequest NormalizeRequest(ExtensionRuntimeLoadRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (
+        var invalidRequest =
             request.ExtensionId == Guid.Empty
             || string.IsNullOrWhiteSpace(request.Name)
+            || string.IsNullOrWhiteSpace(request.DisplayName)
             || string.IsNullOrWhiteSpace(request.ReleaseHash)
             || string.IsNullOrWhiteSpace(request.PackageDirectory)
             || string.IsNullOrWhiteSpace(request.EntryAssemblyPath)
             || string.IsNullOrWhiteSpace(request.EntryType)
-            || string.IsNullOrWhiteSpace(request.DataDirectory)
-        )
+            || string.IsNullOrWhiteSpace(request.DataDirectory);
+        if (invalidRequest)
         {
             throw new AgwException(ErrorCodes.ExtensionPackageInvalid);
         }
@@ -1195,6 +1222,7 @@ public sealed partial class ExtensionRuntime : IExtensionRuntime, IExtensionInvo
         {
             GenerationId = generationId,
             Name = request.Name,
+            DisplayName = request.DisplayName,
             Version = request.Version,
             ReleaseHash = request.ReleaseHash,
             Epoch = request.Epoch,
@@ -1202,6 +1230,12 @@ public sealed partial class ExtensionRuntime : IExtensionRuntime, IExtensionInvo
             Endpoints = registration.Endpoints.Select(endpoint => endpoint.Descriptor).ToArray(),
             Tools = registration.Tools.Select(tool => tool.Descriptor).ToArray(),
             Skills = registration.Skills.Select(skill => skill.Descriptor).ToArray(),
+            EventHandlers = registration.EventHandlers.Select(handler => handler.Descriptor).ToArray(),
+            EventSourceProviders = registration
+                .EventSourceProviders.Select(provider => EventSourceProviderDescriptorCloner.Clone(provider.Descriptor))
+                .ToArray(),
+            NotificationChannels = registration.NotificationChannels.Select(channel => channel.Descriptor).ToArray(),
+            EventPermissions = request.EventPermissions with { Publish = request.EventPermissions.Publish.ToArray() },
         };
 
     private static ExtensionGenerationSnapshot CreateSnapshot(ExtensionGeneration generation)
@@ -1223,6 +1257,15 @@ public sealed partial class ExtensionRuntime : IExtensionRuntime, IExtensionInvo
             Tools = generation
                 .Snapshot.Tools.Select(tool => tool with { InputSchema = tool.InputSchema.Clone() })
                 .ToArray(),
+            EventHandlers = generation.Snapshot.EventHandlers.ToArray(),
+            EventSourceProviders = generation
+                .Snapshot.EventSourceProviders.Select(EventSourceProviderDescriptorCloner.Clone)
+                .ToArray(),
+            NotificationChannels = generation.Snapshot.NotificationChannels.ToArray(),
+            EventPermissions = generation.Snapshot.EventPermissions with
+            {
+                Publish = generation.Snapshot.EventPermissions.Publish.ToArray(),
+            },
         };
     }
 

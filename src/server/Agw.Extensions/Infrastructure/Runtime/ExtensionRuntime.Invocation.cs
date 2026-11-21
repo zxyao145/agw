@@ -236,12 +236,66 @@ public sealed partial class ExtensionRuntime
         }
     }
 
+    private async ValueTask ExecuteBackgroundWorkAsync(
+        ExtensionGenerationId generationId,
+        string userId,
+        Guid callerInvocationId,
+        Func<IExtensionContext, CancellationToken, ValueTask> work,
+        CancellationToken cancellationToken
+    )
+    {
+        ValidateUserAndInvocation(userId, callerInvocationId);
+        ExtensionGeneration generation = GetGeneration(generationId);
+        InvocationScope scope = await BeginInvocationAsync(
+            generation,
+            allowDraining: false,
+            backgroundWork: true,
+            token => _availability.CanAcceptNewWorkAsync(CreatePin(generation), token),
+            cancellationToken,
+            userId,
+            callerInvocationId
+        );
+        await using (scope)
+        {
+            using IDisposable ambientContext = scope.Resources.EnterAmbientContext();
+            await work(scope.Context, cancellationToken);
+        }
+    }
+
+    private async ValueTask<TResult> ExecuteBackgroundWorkAsync<TResult>(
+        ExtensionGenerationId generationId,
+        string userId,
+        Guid callerInvocationId,
+        Func<IExtensionContext, CancellationToken, ValueTask<TResult>> work,
+        CancellationToken cancellationToken
+    )
+    {
+        ValidateUserAndInvocation(userId, callerInvocationId);
+        ExtensionGeneration generation = GetGeneration(generationId);
+        InvocationScope scope = await BeginInvocationAsync(
+            generation,
+            allowDraining: false,
+            backgroundWork: true,
+            token => _availability.CanAcceptNewWorkAsync(CreatePin(generation), token),
+            cancellationToken,
+            userId,
+            callerInvocationId
+        );
+        await using (scope)
+        {
+            using IDisposable ambientContext = scope.Resources.EnterAmbientContext();
+            return await work(scope.Context, cancellationToken);
+        }
+    }
+
     private async ValueTask<InvocationScope> BeginInvocationAsync(
         ExtensionGeneration generation,
         bool allowDraining,
         bool backgroundWork,
         Func<CancellationToken, ValueTask<bool>> isAvailable,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string? userId = null,
+        Guid? callerInvocationId = null
     )
     {
         if (!generation.TryStartInvocation(allowDraining, backgroundWork, out Guid invocationId))
@@ -269,6 +323,7 @@ public sealed partial class ExtensionRuntime
                 generation.GenerationId,
                 generation.HostCapabilities,
                 currentUser,
+                hostScope.Value.ServiceProvider,
                 generation.Registration.JsonOptions,
                 generation.Logger
             );
@@ -276,8 +331,10 @@ public sealed partial class ExtensionRuntime
                 generation,
                 generationScope.Value,
                 hostScope.Value,
-                currentUser.UserId,
+                userId ?? currentUser.UserId,
                 invocationId,
+                callerInvocationId ?? invocationId,
+                _callerContext,
                 _logger,
                 () => ActiveCalls.Add(-1, metricTags)
             );

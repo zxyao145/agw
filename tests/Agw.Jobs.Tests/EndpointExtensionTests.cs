@@ -22,30 +22,24 @@ public class EndpointExtensionTests
         app.MapJobsApi();
 
         var routeBuilder = (IEndpointRouteBuilder)app;
-        var routes = routeBuilder
+        var patterns = routeBuilder
             .DataSources.SelectMany(dataSource => dataSource.Endpoints)
             .OfType<RouteEndpoint>()
-            .Select(endpoint =>
-                (
-                    Pattern: endpoint.RoutePattern.RawText,
-                    Method: endpoint.Metadata.GetMetadata<IHttpMethodMetadata>()!.HttpMethods.Single()
-                )
-            )
-            .OrderBy(route => route.Pattern)
-            .ThenBy(route => route.Method)
+            .Select(endpoint => endpoint.RoutePattern.RawText!)
+            .Order(StringComparer.Ordinal)
             .ToArray();
 
         Assert.Equal(
             [
-                ("api/jobs", "GET"),
-                ("api/jobs", "POST"),
-                ("api/jobs/{id:guid}", "DELETE"),
-                ("api/jobs/{id:guid}", "GET"),
-                ("api/jobs/{id:guid}", "PUT"),
-                ("api/jobs/{id:guid}/logs", "GET"),
-                ("api/jobs/enabled", "PUT"),
+                "api/jobs/create",
+                "api/jobs/delete",
+                "api/jobs/enable",
+                "api/jobs/get",
+                "api/jobs/list",
+                "api/jobs/runs/list",
+                "api/jobs/update",
             ],
-            routes
+            patterns
         );
     }
 }

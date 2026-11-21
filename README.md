@@ -23,7 +23,7 @@ This project is primarily built on [MAF](https://github.com/microsoft/agent-fram
 - **External agents:** Run Claude Code, Codex, or Pi, optionally through a Model Provider configured in Agw.
 - **Chat and Projects:** Conversations belong to Projects. Chat accepts images, lets you switch agents within one conversation, asks for tool approval according to the permission mode, and queues new input while a turn is running. The Files view browses the Project Workspace, shows Git changes, and sends line comments back to the agent.
 - **Agentflows:** Connect Agents, nested Agentflows, Human Gates, and concurrent, handoff, group-chat, and Magentic blocks into an executable graph with checkpoints.
-- **Jobs:** Run an Agent or Agentflow once, at a fixed interval, or on a Cron schedule evaluated in UTC, with retries and per-attempt execution logs.
+- **Jobs:** Schedule Agent and Agentflow runs with Events Timer sources; Events handles delivery retries and per-attempt history.
 - **Integrations:** Create per-user Connections from built-in Integrations (OAuth 2.0, API Key, or AK/SK), including GitHub, and bind them to Agents and Projects.
 - **Memory:** User Memory and Project Memory let agents save and reuse preferences and project knowledge.
 - **Authentication:** Administrator password, named API Tokens, and optional OIDC or OAuth2 sign-in. Each third-party account becomes an isolated local user.
@@ -169,7 +169,7 @@ git config core.hooksPath .githooks
 dotnet restore Agw.slnx
 dotnet tool restore
 
-cd src/clients
+cd src
 pnpm install
 ```
 
@@ -179,17 +179,17 @@ Run the backend with hot reload from the repository root. It listens on `http://
 dotnet watch --project src/server/Agw.Standalone.Host
 ```
 
-Start Web from `src/clients` in another terminal, then open `http://localhost:3001`:
+Start Web from `src` in another terminal, then open `http://localhost:3001`:
 
 ```bash
-cd src/clients
+cd src
 pnpm dev:web
 ```
 
 Web proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30816`.
 
-- **Desktop:** Keep the backend running and run `pnpm dev:desktop` from `src/clients`. The Desktop renderer runs on `http://localhost:3000`; it does not require the Web development server.
-- **Mobile:** Run `pnpm dev:mobile`, `pnpm android:mobile`, or `pnpm ios:mobile` from `src/clients`. Its native projects are generated through Expo CNG and are not hand-maintained.
+- To start **Desktop**, keep the backend running and run `pnpm dev:desktop` from `src`. Its renderer runs independently on `http://localhost:3000`.
+- **Mobile:** Run `pnpm dev:mobile`, `pnpm android:mobile`, or `pnpm ios:mobile` from `src`. Its native projects are generated through Expo CNG and are not hand-maintained.
 - **Split Hosts:** `dotnet run --project src/server/Agw.ControlPlane.Host` and `dotnet run --project src/server/Agw.DataPlane.Host` (Data Plane on `http://localhost:30817`). They require PostgreSQL and `Execution:Provider=Distributed`.
 
 Run the main verification commands before submitting a change:
@@ -200,20 +200,20 @@ dotnet build Agw.slnx
 dotnet test Agw.slnx
 dotnet csharpier check .
 
-# src/clients
+# src
 pnpm build
 pnpm lint
 pnpm test
 pnpm fmt:check
 ```
 
-After changing a backend API contract, run `pnpm gen:api` from `src/clients` to regenerate the typed client. After changing project references, module boundaries, persistence access, entities, or Behaviors, run `dotnet test tests/Agw.Architecture.Tests`. See the [Development Guide](docs/1.Development.md) for focused test commands, EF Core migration commands, PostgreSQL-backed tests, and package-specific tasks.
+After changing a backend API contract, run `pnpm gen:api` from `src` to regenerate the typed client. After changing project references, module boundaries, persistence access, entities, or Behaviors, run `dotnet test tests/Agw.Architecture.Tests`. See the [Development Guide](docs/1.Development.md) for focused test commands, EF Core migration commands, PostgreSQL-backed tests, and package-specific tasks.
 
 ### Debugging
 
 - **Backend:** Start `src/server/Agw.Standalone.Host` with its launch profile in a .NET debugger. It sets `ASPNETCORE_ENVIRONMENT=Development`; the Development-only OpenAPI and Scalar endpoints are then available. Server logs are written to the console and to role-specific files in `AgwLogDir`.
 - **Web:** Run `pnpm dev:web`, use the browser developer tools for client code and network requests, and inspect the Next.js terminal for server-side output. To target another backend, start Web with `BACKEND_API_BASE_URL=http://host:port pnpm dev:web`.
-- **Desktop:** Run `pnpm dev:desktop`. Main-process logs and build output appear in the terminal; preload and renderer code can be inspected with Electron DevTools.
+- For **Desktop** debugging, run `pnpm dev:desktop` from `src`. The terminal shows main-process logs and build output. Use Electron DevTools to inspect preload and renderer code.
 - **Focused tests:** Use `dotnet test tests/<Project> --filter "FullyQualifiedName~MethodName"` for a backend test, or `pnpm exec turbo run test --filter=@agw/web` (replace the package filter as needed) from `src/clients`.
 
 ## Publishing
@@ -287,7 +287,7 @@ Prereleases use `vX.Y.Z-preview.N`, `vX.Y.Z-alpha.N`, or `vX.Y.Z-beta.N`. The [r
 
 Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the shared Hosting Module that composes every module's registration. The executable Hosts are:
 
-- `Agw.ControlPlane.Host`: Setup, authentication management, management APIs, OpenAPI, the static Web UI, and Job scheduling.
+- `Agw.ControlPlane.Host`: Setup, authentication management, management APIs, OpenAPI, the static Web UI, and Events Timer and delivery workers.
 - `Agw.DataPlane.Host`: the SignalR execution hub `/api/hubs/exec`, A2A routes, and durable execution workers.
 - `Agw.Standalone.Host`: both roles in one process (assembly `agw-server`), defaulting to SQLite and InProcess execution.
 
@@ -299,7 +299,7 @@ Controller -> Application -> I<Module>DbContext / persistence adapter -> EF Core
 
 Cross-module calls go through interfaces in `Agw.<Module>.Contracts`. Entity types live centrally in `Agw.Data`, while each table has exactly one owning module.
 
-Simplified dependency overview for the backend and Pi SDK. Contracts projects, `Agw.Tools.Abstractions`, the `Agw.Tools.Generators` source generator, and their references are omitted, along with redundant references already represented by other paths. Test projects and NuGet packages are excluded. The diagram runs from top to bottom; `A --> B` means A references B:
+Simplified dependency overview for the backend and Pi SDK. Contracts projects are omitted except `Agw.Events.Contracts`, which shows the Jobs-to-Events boundary. `Agw.Tools.Abstractions`, the `Agw.Tools.Generators` source generator, and their references are omitted, along with redundant references already represented by other paths. Test projects and NuGet packages are excluded. The diagram runs from top to bottom; `A --> B` means A references B:
 
 ```mermaid
 flowchart TB
@@ -343,6 +343,10 @@ flowchart TB
         end
     end
 
+    subgraph contracts["Selected module contract"]
+        agwEventsContracts["Agw.Events.Contracts"]
+    end
+
     subgraph foundation["Data and shared"]
         agwData["Agw.Data"]
         agwShared["Agw.Shared"]
@@ -357,16 +361,16 @@ flowchart TB
     agwControlPlaneHost --> agwHost
     agwDataPlaneHost --> agwHost
     agwHost --> agwMigrationsPostgres & agwMigrationsSqlite & agwSetup
-    agwHost --> agwA2A & agwAgentsExecution
+    agwHost --> agwA2A & agwAgentsExecution & agwJobs
     agwMigrationsPostgres --> agwInfrastructure
     agwMigrationsSqlite --> agwInfrastructure
-    agwInfrastructure --> agwAgents & agwProjects & agwJobs
+    agwInfrastructure --> agwAgents & agwProjects
     agwInfrastructure --> agwIntegrations & agwProviders & agwSettings
     agwSetup --> agwAuth
     agwA2A --> agwAuth
     agwAgentsExecution --> agwAgents & agwIntegrations & agwProviders & agwSkills
     agwProjects --> agwFiles & agwAuth
-    agwJobs --> agwSkills & agwAuth
+    agwJobs --> agwEventsContracts & agwSkills & agwAuth
     agwAgents --> agwTools & piAgentSdkMAF
     agwIntegrations --> agwAuth
     agwProviders --> agwData
@@ -387,7 +391,7 @@ flowchart TB
 - **Agw.Integrations:** The built-in Integration catalog, per-user installations and Connections, OAuth, and connection-bound native and MCP tools.
 - **Agw.Projects:** Projects, conversations, and chat history. Every conversation belongs to a Project.
 - **Agw.Files:** Project-scoped file APIs and Git operations over the host-visible local Workspace.
-- **Agw.Jobs:** Scheduled Agent and Agentflow runs with Once, Interval, and Cron triggers, retries, and execution logs.
+- **Agw.Jobs:** Job management APIs and Agent tools over Events Timer sources and subscriptions. Events owns scheduling, delivery retries, and attempt records.
 - **Agw.A2A:** Exposes agents through the A2A protocol.
 - **Agw.Auth:** Administrator and OIDC/OAuth2 authentication, local users, API Tokens, CSRF protection, and authorization.
 - **Agw.Setup:** First-run administrator setup and database-backed initialization state.
@@ -395,7 +399,7 @@ flowchart TB
 
 ### Clients
 
-The pnpm Workspace at `src/clients` contains the `@agw/web`, `@agw/desktop`, and `@agw/mobile` applications plus shared packages under `src/clients/packages/`, with Turborepo orchestrating their tasks.
+The pnpm Workspace at `src` contains the `@agw/web`, `@agw/desktop`, and `@agw/mobile` applications, shared packages under `src/clients/packages/`, and extensions under `src/extensions/`, with Turborepo orchestrating their tasks.
 
 - `@agw/web` holds only routes, layouts, global CSS, and shell composition; business UI comes from `packages/*`.
 - `@agw/desktop` owns a secure Electron main/preload implementation and an independent React renderer under `desktop/renderer/`, with bridge contracts kept inside Desktop. Web and Desktop do not import, build, or consume artifacts from each other. See [`src/clients/desktop/README.md`](src/clients/desktop/README.md).

@@ -65,6 +65,7 @@ internal sealed class ExtensionDatabaseFactory<TContext, TMigrationsAssemblyMark
         }
 
         services.AddEntityFrameworkNamingConventions();
+        services.Replace(ServiceDescriptor.Scoped<IMigrationsAssembly, ExtensionMigrationsAssembly>());
         services.Replace(ServiceDescriptor.Scoped<IQueryCompiler, ExtensionQueryCompiler>());
 
         Type providerCacheKeyType =
@@ -107,6 +108,7 @@ internal sealed class ExtensionDatabaseFactory<TContext, TMigrationsAssemblyMark
             contextLifetime: ServiceLifetime.Scoped,
             optionsLifetime: ServiceLifetime.Scoped
         );
+        services.AddSingleton<IExtensionOutboxWorker, ExtensionOutboxDispatcher<TContext>>();
     }
 
     public IExtensionDatabaseGeneration Create(IServiceProvider services, ExtensionDatabaseOptions options)

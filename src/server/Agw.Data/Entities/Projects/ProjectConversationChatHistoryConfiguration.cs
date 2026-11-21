@@ -11,7 +11,6 @@ public class ProjectConversationChatHistoryConfiguration : IEntityTypeConfigurat
         builder.HasKey(e => e.Id);
         builder.Property(e => e.ConversationId).HasColumnName("project_conversation_id");
         builder.Property(e => e.TaskId).IsRequired();
-        builder.Property(e => e.JobId);
         builder.Property(e => e.Status).HasConversion<int>();
         builder.Property(e => e.TaskErrorMessage).HasMaxLength(2000);
         builder.Property(e => e.AgentName).HasMaxLength(200);

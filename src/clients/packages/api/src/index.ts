@@ -1,10 +1,12 @@
 export * from "./client";
 export * from "./quick-prompts";
 export * from "./lib/chat-target-options";
+export * from "./lib/event-source-names";
 export * from "./lib/guid";
 export * from "./lib/token-usage";
 export * from "./lib/uuid";
 export type { components, operations, paths } from "./openapi";
 export * from "./types/chat-target";
+export type * from "./types/events-notifications";
 export * from "./types/message";
 export * from "./utils";

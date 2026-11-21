@@ -21,6 +21,7 @@ import { AppSidebar, MenuItem, SidebarMenuGroupProps } from "./sidebar";
 import { SidebarProvider } from "@agw/components";
 import { AuthGate, getAuthSession } from "@agw/auth";
 import { useQuery } from "@agw/components/query";
+import { NotificationsLiveSync, useNotificationsUnreadCount } from "@agw/notifications";
 
 function menuItem(route: AppRoute): MenuItem {
   return { url: route.href, title: route.title, isActive: true, icon: <route.icon /> };
@@ -28,6 +29,10 @@ function menuItem(route: AppRoute): MenuItem {
 
 const navItems: SidebarMenuGroupProps[] = [
   { groupLable: "Overview", menus: [menuItem(APP_ROUTES.dashboard)] },
+  {
+    groupLable: "Activity",
+    menus: [APP_ROUTES.events, APP_ROUTES.notifications].map(menuItem),
+  },
   {
     groupLable: "Projects",
     menus: [APP_ROUTES.chat, APP_ROUTES.projects, APP_ROUTES.jobs].map(menuItem),
@@ -62,12 +67,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     queryKey: ["auth", "session"],
     queryFn: getAuthSession,
   });
-  const menus = navItems.map((group) =>
-    group.groupLable === "System" && session?.isAdmin
+  const unreadCount = useNotificationsUnreadCount();
+  const menus = navItems.map((group) => {
+    const activityMenus =
+      group.groupLable === "Activity"
+        ? group.menus.map((item) =>
+            item.url === APP_ROUTES.notifications.href
+              ? {
+                  ...item,
+                  title:
+                    unreadCount > 0
+                      ? `${APP_ROUTES.notifications.title} (${unreadCount})`
+                      : APP_ROUTES.notifications.title,
+                }
+              : item,
+          )
+        : group.menus;
+    const withNotifications = { ...group, menus: activityMenus };
+    return group.groupLable === "System" && session?.isAdmin
       ? {
-          ...group,
+          ...withNotifications,
           menus: [
-            ...group.menus,
+            ...withNotifications.menus,
             {
               url: "/extensions",
               title: "Server extensions",
@@ -76,8 +97,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             },
           ],
         }
-      : group,
-  );
+      : withNotifications;
+  });
   const isChatRoute = pathname === "/chat";
   const activeMenu = getActiveNavLabel(pathname, menus);
   const [sidebarOpen, setSidebarOpen] = React.useState(pathname !== "/chat");
@@ -90,6 +111,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthGate>
+      <NotificationsLiveSync />
       <SidebarProvider
         className={cn(isChatRoute && "h-dvh overflow-hidden")}
         open={sidebarOpen}

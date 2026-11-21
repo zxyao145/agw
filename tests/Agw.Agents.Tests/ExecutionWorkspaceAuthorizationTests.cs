@@ -24,6 +24,7 @@ using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
 using Agw.Integrations.Extensions;
 using Agw.Jobs;
+using Agw.Notifications;
 using Agw.Projects;
 using Agw.Projects.Application;
 using Agw.Projects.Contracts.Execution;
@@ -133,6 +134,7 @@ public sealed class ExecutionWorkspaceAuthorizationTests
             {
                 ExtensionId = extensionId,
                 Name = package.Manifest.Name,
+                DisplayName = package.Manifest.DisplayName,
                 Version = package.Manifest.Version,
                 ReleaseHash = package.ReleaseHash,
                 Epoch = 0,
@@ -468,6 +470,7 @@ public sealed class ExecutionWorkspaceAuthorizationTests
             services.AddScoped<IEntityAuditUserIdProvider, EntityAuditUserIdProvider>();
             services
                 .AddTools(configuration)
+                .AddNotifications(configuration, runWorkers: false)
                 .AddAgents(configuration)
                 .AddAgentExecution(
                     configuration,
@@ -480,7 +483,7 @@ public sealed class ExecutionWorkspaceAuthorizationTests
                 .AddFiles(configuration)
                 .AddInfrastructure(configuration)
                 .AddTestExtensions(configuration)
-                .AddJobs(configuration, new Agw.Jobs.DependencyInjection.RegistrationOptions(AddScheduler: false))
+                .AddJobs()
                 .AddProviders(configuration)
                 .AddSkills(configuration)
                 .AddProjects(configuration)

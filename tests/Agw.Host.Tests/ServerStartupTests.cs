@@ -362,7 +362,7 @@ public sealed class ServerStartupTests : IDisposable
         public async Task WaitUntilReadyAsync(string descriptor)
         {
             var deadline = TimeProvider.System.GetUtcNow() + StartupTimeout;
-            while (!File.Exists(descriptor))
+            while (!HasCurrentDescriptor(descriptor))
             {
                 Assert.False(
                     _process.HasExited,
@@ -380,6 +380,14 @@ public sealed class ServerStartupTests : IDisposable
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
 
+        private bool HasCurrentDescriptor(string descriptor)
+        {
+            if (!File.Exists(descriptor))
+                return false;
+            using var document = JsonDocument.Parse(File.ReadAllText(descriptor));
+            return document.RootElement.GetProperty("pid").GetInt32() == Id;
+        }
+
         public async Task<bool> IsInitializedAsync()
         {
             using var client = CreateClient();
@@ -395,6 +403,12 @@ public sealed class ServerStartupTests : IDisposable
             )!;
             await kill.WaitForExitAsync(CancellationToken);
             Assert.Equal(0, kill.ExitCode);
+            await WaitForExitAsync();
+        }
+
+        public async Task KillAsync()
+        {
+            _process.Kill(entireProcessTree: true);
             await WaitForExitAsync();
         }
 
@@ -442,7 +456,7 @@ public sealed class ServerStartupTests : IDisposable
             await _process.WaitForExitAsync(timeout.Token);
         }
 
-        private HttpClient CreateClient()
+        public HttpClient CreateClient()
         {
             var client = _services.GetRequiredService<IHttpClientFactory>().CreateClient();
             client.BaseAddress = new Uri($"http://127.0.0.1:{Port}");
@@ -463,7 +477,7 @@ public sealed class ServerStartupTests : IDisposable
                 return source.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         }
 
-        private string Output()
+        public string Output()
         {
             return $"stdout:{Environment.NewLine}{string.Join(Environment.NewLine, Lines(_output))}{Environment.NewLine}stderr:{Environment.NewLine}{string.Join(Environment.NewLine, Lines(_error))}";
         }

@@ -1,94 +1,22 @@
-import type { ExecutionMessage } from "./types";
-
-export type PermissionMode = "fullAccess" | "alwaysAsk" | "allowSameArguments";
-export type AgentMode = "plan" | "execute";
+import type {
+  AgentMode,
+  ExecutionCommandRequest,
+  ExecutionMessage,
+  ExecutionSettingCommandInput,
+  HumanResponseCommandInput,
+  PermissionMode,
+  ResumeCheckpointCommandInput,
+  TurnFinishedStatus,
+  TurnIdentity,
+  TurnPosition,
+} from "@agw/execution-types";
 
 export const DEFAULT_AGENT_MODE: AgentMode = "execute";
-
-export type ExecutionUserInput<T extends ExecutionMessage = ExecutionMessage> = Pick<
-  T,
-  "messageId" | "author" | "contents" | "createdAt"
->;
-
-export type ExecutionSettingCommandInput = {
-  projectId: string;
-  /** 连接所属的对话；客户端生成，首次受理时由服务端保存。 */
-  conversationId: string;
-  environmentVariables?: Record<string, string> | null;
-  permissionMode?: PermissionMode | null;
-  /** 只接收 result 消息，并拒绝本轮的人机交互。 */
-  resultOnly?: boolean | null;
-  /**
-   * 连接代表的 Desktop extension；只由宿主为 extension 的会话写入，宿主自己的会话不带。
-   * The Desktop extension the connection represents; written only by the host for extension sessions and omitted by host sessions.
-   */
-  extensionId?: string;
-};
-
-export type ExecutionCommandRequest<TInput = ExecutionUserInput> = {
-  conversationId: string;
-  agentId: string;
-  agentType: number;
-  turnId?: string;
-  stream?: boolean;
-  input: TInput;
-};
-
-export type TurnFinishedStatus = "completed" | "interrupted" | "failed";
 
 /** Turn 生命周期控制消息的类型，与服务端 AgwMessageTypes 一致。 */
 export const TURN_START_MESSAGE_TYPE = "agw-turn-start";
 export const TURN_FINISHED_MESSAGE_TYPE = "agw-turn-finished";
 export const STEP_DISCARDED_MESSAGE_TYPE = "agw-step-discarded";
-
-/** 服务端给 Turn 内每条消息加上的 Turn ID 与 Turn 内序号；序号用作断线恢复的游标。 */
-export type TurnPosition = {
-  turnId: string;
-  turnSequence: number;
-};
-
-/** Turn 生命周期消息所属的会话与 Turn。The conversation and turn of a turn lifecycle message. */
-export type TurnIdentity = {
-  conversationId: string;
-  turnId: string;
-};
-
-export type ApprovalScope = "Once" | "AlwaysTool" | "AlwaysArguments";
-export type InteractionSource = {
-  nodeId?: string;
-  nodeName?: string;
-  toolName?: string;
-  callId?: string;
-  providerRequestId?: string;
-  /** SDK workflow request port, independent of the business node ID. */
-  providerScopeId?: string;
-};
-type InteractionRequestBase = {
-  interactionId: string;
-  prompt: string;
-  source: InteractionSource;
-};
-export type InteractionRequest = InteractionRequestBase &
-  (
-    | { kind: "tool-approval"; arguments?: unknown }
-    | { kind: "workflow-gate"; mode: string; inputPreview?: string }
-    | { kind: "user-input"; inputKind: string; payload: unknown }
-  );
-export type InteractionResponse = { interactionId: string } & (
-  | { kind: "tool-approval"; approved: boolean; scope: ApprovalScope }
-  | { kind: "workflow-gate"; approved: boolean; responseText?: string }
-  | { kind: "user-input"; cancelled: boolean; responseData?: unknown }
-);
-export type HumanResponseCommandInput = {
-  turnId?: string;
-  response: InteractionResponse;
-};
-
-export type ResumeCheckpointCommandInput = {
-  checkpointOccurrenceId: string;
-  resumeTurnId: string;
-  agentflowId: string;
-};
 
 /** SignalR 断线后的基础重试间隔；数组耗尽后结束自动重试。 */
 export const executionReconnectDelaysMs = [

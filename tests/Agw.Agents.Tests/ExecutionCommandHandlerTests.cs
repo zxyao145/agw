@@ -623,11 +623,6 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
             CancellationToken cancellationToken = default
         ) => throw new NotSupportedException();
 
-        public Task<ProjectTaskSnapshot?> FinishAsync(
-            FinishProjectTaskRequest request,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
         public Task<IReadOnlyDictionary<Guid, Guid>> ResolveConversationIdsAsync(
             IReadOnlyCollection<Guid> taskIds,
             CancellationToken cancellationToken = default
@@ -676,7 +671,6 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
             task.ProjectConversationId,
             task.ProjectId,
             task.ContextId,
-            task.JobId,
             task.Title,
             ProjectTaskStatus.Pending,
             task.ErrorMessage,

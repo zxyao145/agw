@@ -19,6 +19,9 @@ import type { ViewOpenRequest } from "../../extensions/workspace-layout-store";
 import type { WorkspaceView } from "../../extensions/workspace-registry";
 import { ExtensionView, ExtensionViewInfo, reloadExtensionView } from "./extension-view";
 import { WindowFloatingChatButton } from "./window-floating-chat-button";
+import { JobsWorkspace } from "./jobs-workspace";
+import { EventsPage } from "@agw/events";
+import { NotificationsPage } from "@agw/notifications";
 
 export type MainWorkspaceProps = {
   host: ExtensionHost;
@@ -60,10 +63,15 @@ function SourceFloatingChatContext({
   return null;
 }
 
+function notificationIdFromRequest(value: unknown): string | null {
+  if (typeof value !== "object" || value === null || !("notificationId" in value)) return null;
+  return typeof value.notificationId === "string" ? value.notificationId : null;
+}
+
 /**
- * 渲染 `activeMainViewId` 对应的视图。内置对话视图常驻挂载、切走时隐藏；内置文件视图只在激活时挂载；
+ * 渲染 `activeMainViewId` 对应的视图。内置对话视图常驻挂载、切走时隐藏；内置文件与 Jobs 视图只在激活时挂载；
  * extension 主区视图按 `retainContextWhenHidden` 决定切走时隐藏或卸载。
- * Renders the `activeMainViewId` view. Chat stays mounted and hidden; File mounts only when active; extension
+ * Renders the `activeMainViewId` view. Chat stays mounted and hidden; File and Jobs mount only when active; extension
  * main views hide or unload according to `retainContextWhenHidden`.
  */
 export function MainWorkspace(props: MainWorkspaceProps) {
@@ -118,6 +126,27 @@ export function MainWorkspace(props: MainWorkspaceProps) {
           context={floatingChatMode === "floating" ? floatingChat?.context : undefined}
         />
       </FloatingChatPanel>
+      {activeView.id === BUILT_IN_VIEWS.jobs ? (
+        <JobsWorkspace
+          key={props.openRequests[BUILT_IN_VIEWS.jobs]?.sequence}
+          onOpenChat={() => props.host.layout.openMainView(BUILT_IN_VIEWS.chat)}
+        />
+      ) : null}
+      {activeView.id === BUILT_IN_VIEWS.events ? (
+        <div className="min-h-0 flex-1 overflow-y-auto agw-scrollbar">
+          <EventsPage />
+        </div>
+      ) : null}
+      {activeView.id === BUILT_IN_VIEWS.notifications ? (
+        <NotificationsPage
+          desktopBridge={typeof window === "undefined" ? null : window.agwDesktop}
+          serverId={props.host.context.snapshot().server.id}
+          initialNotificationId={notificationIdFromRequest(
+            props.openRequests[BUILT_IN_VIEWS.notifications]?.params,
+          )}
+          liveUpdatesEnabled={false}
+        />
+      ) : null}
       {activeView.id === BUILT_IN_VIEWS.file ? (
         <ChatFilePane
           fileViewers={fileViewers.map((view) => ({

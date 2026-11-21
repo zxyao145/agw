@@ -13,6 +13,8 @@ public sealed record ExtensionRuntimeLoadRequest
 
     public required string Name { get; init; }
 
+    public required string DisplayName { get; init; }
+
     public required string Version { get; init; }
 
     public required string ReleaseHash { get; init; }
@@ -26,6 +28,15 @@ public sealed record ExtensionRuntimeLoadRequest
     public required string EntryAssemblyPath { get; init; }
 
     public required string EntryType { get; init; }
+
+    public ExtensionEventPermissions EventPermissions { get; init; } = new();
+}
+
+public sealed record ExtensionEventPermissions
+{
+    public IReadOnlyList<string> Publish { get; init; } = [];
+
+    public bool PublishRoot { get; init; }
 }
 
 public enum ExtensionGenerationState
@@ -47,6 +58,8 @@ public sealed record ExtensionGenerationSnapshot
 
     public required string Name { get; init; }
 
+    public required string DisplayName { get; init; }
+
     public required string Version { get; init; }
 
     public required string ReleaseHash { get; init; }
@@ -60,6 +73,14 @@ public sealed record ExtensionGenerationSnapshot
     public required IReadOnlyList<ExtensionToolDescriptor> Tools { get; init; }
 
     public required IReadOnlyList<ExtensionSkillDescriptor> Skills { get; init; }
+
+    public IReadOnlyList<ExtensionEventHandlerDescriptor> EventHandlers { get; init; } = [];
+
+    public IReadOnlyList<ExtensionEventSourceProviderDescriptor> EventSourceProviders { get; init; } = [];
+
+    public IReadOnlyList<ExtensionNotificationChannelDescriptor> NotificationChannels { get; init; } = [];
+
+    public ExtensionEventPermissions EventPermissions { get; init; } = new();
 
     public int ActiveInvocations { get; init; }
 
@@ -76,6 +97,10 @@ public sealed record ExtensionEndpointDescriptor
 
     public string? Summary { get; init; }
 
+    public bool IsCallback { get; init; }
+
+    public bool IsBrowserPage { get; init; }
+
     public JsonElement? RequestSchema { get; init; }
 
     public JsonElement? ResponseSchema { get; init; }
@@ -88,6 +113,11 @@ public sealed record ExtensionEndpointRequest
     public required IReadOnlyDictionary<string, IReadOnlyList<string>> Query { get; init; }
 
     public JsonElement? Body { get; init; }
+
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> Headers { get; init; } =
+        new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+
+    public byte[]? RawBody { get; init; }
 }
 
 public sealed record ExtensionToolDescriptor
@@ -232,6 +262,24 @@ public interface IExtensionInvoker
     ValueTask<IExtensionInvocationResponse> InvokeSkillContentAsync(
         IExtensionGenerationLease generationLease,
         ExtensionSkillInvocation invocation,
+        CancellationToken cancellationToken = default
+    );
+
+    ValueTask<ExtensionEventHandlerResult> InvokeEventHandlerAsync(
+        IExtensionGenerationLease generationLease,
+        ExtensionEventHandlerInvocation invocation,
+        CancellationToken cancellationToken = default
+    );
+
+    ValueTask<ExtensionSourcePollResult> InvokeSourcePollAsync(
+        IExtensionGenerationLease generationLease,
+        ExtensionSourcePollInvocation invocation,
+        CancellationToken cancellationToken = default
+    );
+
+    ValueTask<ExtensionNotificationChannelResult> InvokeNotificationChannelAsync(
+        IExtensionGenerationLease generationLease,
+        ExtensionNotificationChannelInvocation invocation,
         CancellationToken cancellationToken = default
     );
 }

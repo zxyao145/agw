@@ -80,12 +80,17 @@ public sealed class ProjectConversationBehavior
         return true;
     }
 
-    public void TryBindJob(Guid? jobId)
+    public void SetOrigin(string kind, Guid? relateId)
     {
-        if (_conversation.JobId == null && jobId.HasValue)
+        var isNative = kind == ConversationKinds.Native;
+        var isEvent = ConversationKinds.IsEvent(kind);
+        if ((!isNative && !isEvent) || (isNative && relateId.HasValue) || (isEvent && !relateId.HasValue))
         {
-            _conversation.JobId = jobId.Value;
+            throw new AgwException(ErrorCodes.InvalidParam);
         }
+
+        _conversation.Kind = kind;
+        _conversation.RelateId = relateId;
     }
 
     public void StampUpdate(string user, DateTimeOffset now)

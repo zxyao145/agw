@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="CodexSdk.AppServer.MAF" />
+    <PackageReference Include="JsonSchema.Net" />
     <PackageReference Include="ClaudeCodeSdk.MAF" />
     <ProjectReference Include="../../sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/PiAgentSdk.MAF.csproj" />
   </ItemGroup>
@@ -29,6 +30,7 @@
     <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
     <ProjectReference Include="..\Agw.Agents.Contracts\Agw.Agents.Contracts.csproj" />
     <ProjectReference Include="../Agw.Extensions.Contracts/Agw.Extensions.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Events.Contracts/Agw.Events.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
     <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />
     <ProjectReference Include="..\Agw.Files\Agw.Files.csproj" />

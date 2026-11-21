@@ -6,10 +6,40 @@
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:55217/"
+      "url": "http://127.0.0.1:39827/"
     }
   ],
   "paths": {
+    "/api/events/webhooks/receive": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventWebhookReceiveResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health/live": {
       "get": {
         "tags": [
@@ -34,10 +64,20 @@
         }
       }
     },
-    "/api/jobs": {
+    "/api/jobs/list": {
       "get": {
         "tags": [
           "Jobs"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -45,13 +85,45 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob[]"
+                  "$ref": "#/components/schemas/ApiResultOfJobResponse[]"
                 }
               }
             }
           }
         }
-      },
+      }
+    },
+    "/api/jobs/get": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfJobResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/create": {
       "post": {
         "tags": [
           "Jobs"
@@ -72,7 +144,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
+                  "$ref": "#/components/schemas/ApiResultOfJobResponse"
                 }
               }
             }
@@ -80,49 +152,10 @@
         }
       }
     },
-    "/api/jobs/{id}": {
-      "get": {
+    "/api/jobs/update": {
+      "post": {
         "tags": [
           "Jobs"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "Jobs"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
         ],
         "requestBody": {
           "content": {
@@ -140,35 +173,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "Jobs"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
+                  "$ref": "#/components/schemas/ApiResultOfJobResponse"
                 }
               }
             }
@@ -176,38 +181,8 @@
         }
       }
     },
-    "/api/jobs/{id}/logs": {
-      "get": {
-        "tags": [
-          "Jobs"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJobLogResponse[]"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/jobs/enabled": {
-      "put": {
+    "/api/jobs/enable": {
+      "post": {
         "tags": [
           "Jobs"
         ],
@@ -215,7 +190,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JobEnabledUpdateRequest"
+                "$ref": "#/components/schemas/JobEnableRequest"
               }
             }
           },
@@ -227,7 +202,84 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
+                  "$ref": "#/components/schemas/ApiResultOfJobResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/delete": {
+      "post": {
+        "tags": [
+          "Jobs"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobIdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfJobResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/runs/list": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfJobRunResponse[]"
                 }
               }
             }
@@ -287,6 +339,1045 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/events/sources/list": {
+      "get": {
+        "tags": [
+          "Event Sources"
+        ],
+        "parameters": [
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfEventSourceResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sources/options": {
+      "get": {
+        "tags": [
+          "Event Sources"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventSourceOptionResponse[]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sources/providers": {
+      "get": {
+        "tags": [
+          "Event Sources"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventSourceProviderResponse[]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sources/http-poll-options": {
+      "get": {
+        "tags": [
+          "Event Sources"
+        ],
+        "parameters": [
+          {
+            "name": "cursorPath",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventHttpPollFormOptionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sources/get": {
+      "get": {
+        "tags": [
+          "Event Sources"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventSourceResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sources/create": {
+      "post": {
+        "tags": [
+          "Event Sources"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventSourceCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventSourceMutationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sources/update": {
+      "post": {
+        "tags": [
+          "Event Sources"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventSourceUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventSourceMutationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sources/delete": {
+      "post": {
+        "tags": [
+          "Event Sources"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventSourceVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sources/enable": {
+      "post": {
+        "tags": [
+          "Event Sources"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventSourceEnableRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventSourceMutationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sources/rotate-secret": {
+      "post": {
+        "tags": [
+          "Event Sources"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventSourceVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventSourceMutationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sources/test": {
+      "post": {
+        "tags": [
+          "Event Sources"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventSourceIdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventSourceTestResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/subscriptions/list": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "parameters": [
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfEventSubscriptionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/subscriptions/get": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventSubscriptionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/subscriptions/create": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventSubscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventSubscriptionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/subscriptions/update": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventSubscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventSubscriptionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/subscriptions/delete": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventSubscriptionDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/list": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "parameters": [
+          {
+            "name": "SourceId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Subject",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ChainId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "From",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "To",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "PageIndex",
+            "in": "query",
+            "schema": {
+              "type": [
+                "null",
+                "integer"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "type": [
+                "null",
+                "integer"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfEventResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/get": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/chain": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventResponse[]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/deliveries/list": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/EventDeliveryState"
+            }
+          },
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfEventDeliveryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/schedules/list": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "parameters": [
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfEventScheduleResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/deliveries/retry": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventIdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventDeliveryActionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/deliveries/cancel": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventIdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventDeliveryActionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/unpublished/list": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "parameters": [
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfUnpublishedEventRecord"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/unpublished/republish": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventRepublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/list": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [
+          {
+            "name": "unreadOnly",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfNotificationListItem[]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/get": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfNotificationDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/stream": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/notifications/read": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationReadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/answer": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfNotificationAnswerResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/delivered": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationDeliveredRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/channels": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfNotificationChannelResponse[]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/dispatches/retry": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationDispatchRetryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
           }
         }
       }
@@ -9376,7 +10467,8 @@
         }
       },
       "AgentRuntimeType": {
-        "type": "integer"
+        "type": "integer",
+        "description": "Agent Runtime Type"
       },
       "AgentSkillRelation": {
         "required": [
@@ -10577,6 +11669,355 @@
           }
         }
       },
+      "ApiResultOfEventDeliveryActionResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventDeliveryActionResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfEventHttpPollFormOptionsResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventHttpPollFormOptionsResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfEventResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfEventResponse[]": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EventResponse"
+            }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfEventSourceMutationResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventSourceMutationResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfEventSourceOptionResponse[]": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EventSourceOptionResponse"
+            }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfEventSourceProviderResponse[]": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EventSourceProviderResponse"
+            }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfEventSourceResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventSourceResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfEventSourceTestResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventSourceTestResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfEventSubscriptionResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventSubscriptionResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfEventWebhookReceiveResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventWebhookReceiveResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfExecutionPermissionCapabilities": {
         "required": [
           "code",
@@ -10925,7 +12366,7 @@
           }
         }
       },
-      "ApiResultOfJob": {
+      "ApiResultOfJobResponse": {
         "required": [
           "code",
           "title"
@@ -10938,7 +12379,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/Job"
+                "$ref": "#/components/schemas/JobResponse"
               }
             ]
           },
@@ -10957,7 +12398,7 @@
           }
         }
       },
-      "ApiResultOfJob[]": {
+      "ApiResultOfJobResponse[]": {
         "required": [
           "code",
           "title"
@@ -10970,7 +12411,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/Job"
+              "$ref": "#/components/schemas/JobResponse"
             }
           },
           "code": {
@@ -10988,7 +12429,7 @@
           }
         }
       },
-      "ApiResultOfJobLogResponse[]": {
+      "ApiResultOfJobRunResponse[]": {
         "required": [
           "code",
           "title"
@@ -11001,7 +12442,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/JobLogResponse"
+              "$ref": "#/components/schemas/JobRunResponse"
             }
           },
           "code": {
@@ -11130,6 +12571,132 @@
                 "$ref": "#/components/schemas/ModelProviderRelation"
               }
             ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfNotificationAnswerResult": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NotificationAnswerResult"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfNotificationChannelResponse[]": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/NotificationChannelResponse"
+            }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfNotificationDetail": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NotificationDetail"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfNotificationListItem[]": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/NotificationListItem"
+            }
           },
           "code": {
             "type": "integer",
@@ -11420,6 +12987,166 @@
           }
         }
       },
+      "ApiResultOfPagedResultOfEventDeliveryResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfEventDeliveryResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPagedResultOfEventResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfEventResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPagedResultOfEventScheduleResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfEventScheduleResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPagedResultOfEventSourceResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfEventSourceResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPagedResultOfEventSubscriptionResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfEventSubscriptionResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfPagedResultOfMcpServer": {
         "required": [
           "code",
@@ -11498,6 +13225,38 @@
               },
               {
                 "$ref": "#/components/schemas/PagedResultOfSkillResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPagedResultOfUnpublishedEventRecord": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfUnpublishedEventRecord"
               }
             ]
           },
@@ -12415,6 +14174,85 @@
           }
         }
       },
+      "CloudEventResponse": {
+        "required": [
+          "specversion",
+          "id",
+          "source",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "specversion": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "time": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "subject": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "datacontenttype": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dataschema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          },
+          "data_base64": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scope": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tags": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "ConnectionCreateRequest": {
         "required": [
           "pluginId",
@@ -12695,7 +14533,10 @@
             "format": "int64"
           },
           "stepIndex": {
-            "type": "integer",
+            "type": [
+              "null",
+              "integer"
+            ],
             "format": "int32"
           },
           "message": {
@@ -13073,9 +14914,961 @@
         "type": "integer",
         "description": "执行 Agent 的程序种类；数值与持久化的外部 Agent 种类保持一致。\nThe kind of program that executes an Agent; values match the persisted external Agent kind."
       },
+      "EventDeliveryActionResponse": {
+        "required": [
+          "accepted"
+        ],
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          }
+        }
+      },
+      "EventDeliveryResponse": {
+        "required": [
+          "id",
+          "eventId",
+          "subscriptionId",
+          "state",
+          "attempt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "subscriptionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "$ref": "#/components/schemas/EventDeliveryState"
+          },
+          "attempt": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nextAttemptAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "EventDeliveryState": {
+        "type": "integer"
+      },
+      "EventDispatchState": {
+        "type": "integer"
+      },
+      "EventHttpPollFormOptionsResponse": {
+        "required": [
+          "maxPages"
+        ],
+        "type": "object",
+        "properties": {
+          "maxPages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cursorPathValid": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "EventIdRequest": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "EventRepublishRequest": {
+        "required": [
+          "topic",
+          "entityId"
+        ],
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "EventResponse": {
+        "required": [
+          "id",
+          "sourceId",
+          "cloudEvent",
+          "receivedAt",
+          "chainId",
+          "hops",
+          "dispatchState",
+          "matchedCount"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cloudEvent": {
+            "$ref": "#/components/schemas/CloudEventResponse"
+          },
+          "summary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "link": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentEventId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "chainId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "hops": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "dispatchState": {
+            "$ref": "#/components/schemas/EventDispatchState"
+          },
+          "matchedCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "EventScheduleKind": {
+        "type": "integer"
+      },
+      "EventScheduleResponse": {
+        "required": [
+          "id",
+          "state",
+          "occurrence"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventScheduleKind"
+              }
+            ]
+          },
+          "dueAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "interval": {
+            "pattern": "^-?(\\d+\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cron": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "timeZone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "eventType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "subject": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "summary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/EventScheduleState"
+          },
+          "occurrence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "lastFiredAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "EventScheduleState": {
+        "type": "integer"
+      },
+      "EventSourceCreateRequest": {
+        "required": [
+          "name",
+          "kind",
+          "config",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EventSourceKind"
+          },
+          "config": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "providerExtensionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "providerId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "secret": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          }
+        }
+      },
+      "EventSourceEnableRequest": {
+        "required": [
+          "id",
+          "version",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "EventSourceIdRequest": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "EventSourceKind": {
+        "type": "integer"
+      },
+      "EventSourceMutationResponse": {
+        "required": [
+          "id",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "secret": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "EventSourceOptionResponse": {
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "managedBy",
+          "eventTypes"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EventSourceKind"
+          },
+          "managedBy": {
+            "type": "string"
+          },
+          "eventTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "EventSourceProviderConfigurationResponse": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "EventSourceProviderResponse": {
+        "required": [
+          "extensionId",
+          "extensionName",
+          "extensionDisplayName",
+          "providerId",
+          "eventTypes",
+          "configurations"
+        ],
+        "type": "object",
+        "properties": {
+          "extensionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "extensionName": {
+            "type": "string"
+          },
+          "extensionDisplayName": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "eventTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "configurations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventSourceProviderConfigurationResponse"
+            }
+          }
+        }
+      },
+      "EventSourceResponse": {
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "managedBy",
+          "ceSource",
+          "config",
+          "eventTypes",
+          "enabled",
+          "hasSecret",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EventSourceKind"
+          },
+          "providerExtensionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "providerId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "managedBy": {
+            "type": "string"
+          },
+          "managedKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ceSource": {
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "eventTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "baselineAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "nextRunAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastRunAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastDiscardedType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastDiscardedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "hasSecret": {
+            "type": "boolean"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "EventSourceTestResponse": {
+        "required": [
+          "itemCount"
+        ],
+        "type": "object",
+        "properties": {
+          "itemCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "EventSourceUpdateRequest": {
+        "required": [
+          "id",
+          "version",
+          "name",
+          "config"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "secret": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          }
+        }
+      },
+      "EventSourceVersionRequest": {
+        "required": [
+          "id",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "EventSubscriptionDeleteRequest": {
+        "required": [
+          "id",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "EventSubscriptionManagedState": {
+        "type": "integer"
+      },
+      "EventSubscriptionRequest": {
+        "required": [
+          "name",
+          "eventTypes",
+          "targetKind",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "eventTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "filter": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          },
+          "targetKind": {
+            "$ref": "#/components/schemas/EventSubscriptionTargetKind"
+          },
+          "agentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "permissionMode": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "handlerExtensionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "handlerId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "handlerConfig": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          }
+        }
+      },
+      "EventSubscriptionResponse": {
+        "required": [
+          "id",
+          "name",
+          "enabled",
+          "sourceIds",
+          "eventTypes",
+          "targetKind",
+          "managedBy",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "eventTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "filter": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          },
+          "targetKind": {
+            "$ref": "#/components/schemas/EventSubscriptionTargetKind"
+          },
+          "agentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "permissionMode": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "handlerExtensionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "handlerId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "handlerConfig": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          },
+          "managedBy": {
+            "type": "string"
+          },
+          "managedKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "managedVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "managedState": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventSubscriptionManagedState"
+              }
+            ]
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "EventSubscriptionTargetKind": {
+        "type": "integer"
+      },
+      "EventWebhookReceiveResponse": {
+        "required": [
+          "discarded"
+        ],
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "discarded": {
+            "type": "boolean"
+          }
+        }
+      },
       "ExecutionPermissionCapabilities": {
         "required": [
-          "supportedPermissionModes"
+          "supportedPermissionModes",
+          "supportsNoTools"
         ],
         "type": "object",
         "properties": {
@@ -13084,6 +15877,9 @@
             "items": {
               "$ref": "#/components/schemas/AgwPermissionMode"
             }
+          },
+          "supportsNoTools": {
+            "type": "boolean"
           },
           "reason": {
             "type": [
@@ -13231,7 +16027,10 @@
             "$ref": "#/components/schemas/ExtensionManagementState"
           },
           "errorCode": {
-            "type": "integer",
+            "type": [
+              "null",
+              "integer"
+            ],
             "format": "int32"
           },
           "errorMessage": {
@@ -13508,19 +16307,58 @@
         "type": "string",
         "format": "binary"
       },
-      "Job": {
+      "JobCreateRequest": {
+        "required": [
+          "enabled",
+          "projectId",
+          "targetKind",
+          "agentId"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetKind": {
+            "$ref": "#/components/schemas/AgentRuntimeType"
+          },
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "schedule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JobScheduleDto"
+              }
+            ]
+          }
+        }
+      },
+      "JobDeliveryResponse": {
         "required": [
           "id",
-          "projectId",
-          "name",
-          "triggerType",
-          "triggerValue",
-          "nextRunTime",
-          "status",
-          "isEnabled",
-          "retryCount",
-          "maxRetryCount",
-          "createTime"
+          "state",
+          "attempt"
         ],
         "type": "object",
         "properties": {
@@ -13528,57 +16366,11 @@
             "type": "string",
             "format": "uuid"
           },
-          "projectId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "agentType": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/AgentRuntimeType"
-              }
-            ]
-          },
-          "agentId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "prompt": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "triggerType": {
-            "$ref": "#/components/schemas/TriggerType"
-          },
-          "triggerValue": {
-            "type": "string"
-          },
-          "nextRunTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "status": {
-            "$ref": "#/components/schemas/JobStatus"
-          },
-          "isEnabled": {
-            "type": "boolean"
-          },
-          "retryCount": {
+          "state": {
             "type": "integer",
             "format": "int32"
           },
-          "maxRetryCount": {
+          "attempt": {
             "type": "integer",
             "format": "int32"
           },
@@ -13587,118 +16379,13 @@
               "null",
               "string"
             ]
-          },
-          "rowVersion": {
-            "type": "string",
-            "format": "byte"
-          },
-          "createTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "updateTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "updateBy": {
-            "type": [
-              "null",
-              "string"
-            ]
           }
         }
       },
-      "JobCreateRequest": {
-        "required": [
-          "projectId",
-          "name",
-          "triggerType",
-          "triggerValue",
-          "maxRetryCount",
-          "isEnabled"
-        ],
-        "type": "object",
-        "properties": {
-          "projectId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "agentType": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/AgentRuntimeType"
-              }
-            ]
-          },
-          "agentId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "prompt": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "triggerType": {
-            "$ref": "#/components/schemas/TriggerType"
-          },
-          "triggerValue": {
-            "type": "string"
-          },
-          "maxRetryCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "isEnabled": {
-            "type": "boolean"
-          }
-        }
-      },
-      "JobEnabledUpdateRequest": {
-        "required": [
-          "jobId",
-          "isEnabled"
-        ],
-        "type": "object",
-        "properties": {
-          "jobId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "isEnabled": {
-            "type": "boolean"
-          }
-        }
-      },
-      "JobLogResponse": {
+      "JobEnableRequest": {
         "required": [
           "id",
-          "jobId",
-          "conversationId",
-          "startTime",
-          "endTime",
-          "success",
-          "attempt",
-          "errorMessage"
+          "enabled"
         ],
         "type": "object",
         "properties": {
@@ -13706,9 +16393,126 @@
             "type": "string",
             "format": "uuid"
           },
-          "jobId": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "JobIdRequest": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "JobResponse": {
+        "required": [
+          "id",
+          "name",
+          "enabled",
+          "projectId",
+          "targetKind",
+          "agentId",
+          "instructions",
+          "schedule",
+          "scheduleCompleted"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetKind": {
+            "$ref": "#/components/schemas/AgentRuntimeType"
+          },
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/JobScheduleResponse"
+          },
+          "dueAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "scheduleCompleted": {
+            "type": "boolean"
+          },
+          "lastDelivery": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JobDeliveryResponse"
+              }
+            ]
+          }
+        }
+      },
+      "JobRunResponse": {
+        "required": [
+          "id",
+          "deliveryId",
+          "attempt",
+          "startedAt",
+          "endedAt",
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deliveryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "attempt": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "result": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "conversationId": {
             "type": [
@@ -13716,26 +16520,32 @@
               "string"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "JobScheduleDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
-          "startTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "endTime": {
+          "at": {
             "type": [
               "null",
               "string"
             ],
             "format": "date-time"
           },
-          "success": {
-            "type": "boolean"
+          "interval": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
-          "attempt": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "errorMessage": {
+          "cron": {
             "type": [
               "null",
               "string"
@@ -13743,66 +16553,85 @@
           }
         }
       },
-      "JobStatus": {
-        "type": "integer"
-      },
-      "JobUpdateRequest": {
+      "JobScheduleResponse": {
         "required": [
-          "projectId",
-          "name",
-          "triggerType",
-          "triggerValue",
-          "maxRetryCount",
-          "isEnabled",
-          "status"
+          "kind"
         ],
         "type": "object",
         "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "at": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "interval": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cron": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "JobUpdateRequest": {
+        "required": [
+          "id",
+          "enabled",
+          "projectId",
+          "targetKind",
+          "agentId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
           "projectId": {
             "type": "string",
             "format": "uuid"
           },
-          "agentType": {
+          "targetKind": {
+            "$ref": "#/components/schemas/AgentRuntimeType"
+          },
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "schedule": {
             "oneOf": [
               {
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AgentRuntimeType"
+                "$ref": "#/components/schemas/JobScheduleDto"
               }
             ]
-          },
-          "agentId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "prompt": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "triggerType": {
-            "$ref": "#/components/schemas/TriggerType"
-          },
-          "triggerValue": {
-            "type": "string"
-          },
-          "maxRetryCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "isEnabled": {
-            "type": "boolean"
-          },
-          "status": {
-            "$ref": "#/components/schemas/JobStatus"
           }
         }
       },
@@ -14438,6 +17267,521 @@
           }
         }
       },
+      "NotificationAnswerRequest": {
+        "required": [
+          "notificationId"
+        ],
+        "type": "object",
+        "properties": {
+          "notificationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "option": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "NotificationAnswerResult": {
+        "required": [
+          "notificationId",
+          "state",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "notificationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "$ref": "#/components/schemas/NotificationState"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "option": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answeredBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answeredVia": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answeredAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "NotificationChannelResponse": {
+        "required": [
+          "channelKey",
+          "name",
+          "extensionId",
+          "channelId",
+          "targetId"
+        ],
+        "type": "object",
+        "properties": {
+          "channelKey": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "extensionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "channelId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "targetId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "NotificationDeliveredRequest": {
+        "required": [
+          "notificationId",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "notificationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "NotificationDetail": {
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "title",
+          "text",
+          "link",
+          "readAt",
+          "changedAt",
+          "version",
+          "question",
+          "dispatches"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/NotificationKind"
+          },
+          "state": {
+            "$ref": "#/components/schemas/NotificationState"
+          },
+          "title": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "link": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "readAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "changedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "question": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NotificationQuestionResponse"
+              }
+            ]
+          },
+          "dispatches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationDispatchResponse"
+            }
+          }
+        }
+      },
+      "NotificationDispatchAttemptResponse": {
+        "required": [
+          "id",
+          "attempt",
+          "messageVersion",
+          "startedAt",
+          "finishedAt",
+          "result",
+          "externalMessageId",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "attempt": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "messageVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "result": {
+            "$ref": "#/components/schemas/NotificationDispatchAttemptResult"
+          },
+          "externalMessageId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "NotificationDispatchAttemptResult": {
+        "type": "integer"
+      },
+      "NotificationDispatchResponse": {
+        "required": [
+          "id",
+          "channelKey",
+          "state",
+          "externalMessageId",
+          "messageVersion",
+          "sentVersion",
+          "attempt",
+          "nextAttemptAt",
+          "lastError",
+          "attempts"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "channelKey": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/NotificationDispatchState"
+          },
+          "externalMessageId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "messageVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "sentVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "attempt": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nextAttemptAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationDispatchAttemptResponse"
+            }
+          }
+        }
+      },
+      "NotificationDispatchRetryRequest": {
+        "required": [
+          "dispatchId"
+        ],
+        "type": "object",
+        "properties": {
+          "dispatchId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "NotificationDispatchState": {
+        "type": "integer"
+      },
+      "NotificationKind": {
+        "type": "integer"
+      },
+      "NotificationListItem": {
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "title",
+          "text",
+          "link",
+          "readAt",
+          "changedAt",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/NotificationKind"
+          },
+          "state": {
+            "$ref": "#/components/schemas/NotificationState"
+          },
+          "title": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "link": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "readAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "changedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "NotificationOption": {
+        "required": [
+          "label",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "NotificationQuestionResponse": {
+        "required": [
+          "options",
+          "recommend",
+          "allowText",
+          "answerOption",
+          "answerText",
+          "answeredBy",
+          "answeredVia",
+          "answeredAt"
+        ],
+        "type": "object",
+        "properties": {
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationOption"
+            }
+          },
+          "recommend": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "allowText": {
+            "type": "boolean"
+          },
+          "answerOption": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "answerText": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answeredBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answeredVia": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answeredAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "NotificationReadRequest": {
+        "required": [
+          "notificationId"
+        ],
+        "type": "object",
+        "properties": {
+          "notificationId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "NotificationState": {
+        "type": "integer"
+      },
       "OAuth2AuthorizationCodeResponse": {
         "required": [
           "authorizationEndpoint",
@@ -14728,6 +18072,171 @@
           }
         }
       },
+      "PagedResultOfEventDeliveryResponse": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventDeliveryResponse"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfEventResponse": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventResponse"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfEventScheduleResponse": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventScheduleResponse"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfEventSourceResponse": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventSourceResponse"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfEventSubscriptionResponse": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventSubscriptionResponse"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "PagedResultOfMcpServer": {
         "required": [
           "items",
@@ -14807,6 +18316,39 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SkillResponse"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfUnpublishedEventRecord": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnpublishedEventRecord"
             }
           },
           "total": {
@@ -15041,7 +18583,10 @@
             ]
           },
           "status": {
-            "type": "integer",
+            "type": [
+              "null",
+              "integer"
+            ],
             "format": "int32"
           },
           "detail": {
@@ -15169,7 +18714,8 @@
           "projectId",
           "conversationId",
           "contextId",
-          "jobId",
+          "kind",
+          "relateId",
           "title",
           "latestStatus",
           "executionCount",
@@ -15194,7 +18740,10 @@
           "contextId": {
             "type": "string"
           },
-          "jobId": {
+          "kind": {
+            "type": "string"
+          },
+          "relateId": {
             "type": [
               "null",
               "string"
@@ -15293,7 +18842,8 @@
           "projectId",
           "conversationId",
           "contextId",
-          "jobId",
+          "kind",
+          "relateId",
           "title",
           "latestStatus",
           "executionCount",
@@ -15316,7 +18866,10 @@
           "contextId": {
             "type": "string"
           },
-          "jobId": {
+          "kind": {
+            "type": "string"
+          },
+          "relateId": {
             "type": [
               "null",
               "string"
@@ -16672,6 +20225,9 @@
           },
           {
             "$ref": "#/components/schemas/ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolBlockDefinitionNotificationToolBlockDefinition"
           }
         ],
         "discriminator": {
@@ -16683,7 +20239,8 @@
             "user-memory": "#/components/schemas/ToolBlockDefinitionUserMemoryToolBlockDefinition",
             "file-readonly-access": "#/components/schemas/ToolBlockDefinitionFileReadonlyAccessToolBlockDefinition",
             "file-access": "#/components/schemas/ToolBlockDefinitionFileAccessToolBlockDefinition",
-            "background-agents": "#/components/schemas/ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"
+            "background-agents": "#/components/schemas/ToolBlockDefinitionBackgroundAgentsToolBlockDefinition",
+            "notification": "#/components/schemas/ToolBlockDefinitionNotificationToolBlockDefinition"
           }
         }
       },
@@ -16747,6 +20304,23 @@
           "name": {
             "enum": [
               "mode"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolBlockDefinitionNotificationToolBlockDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "notification"
             ],
             "type": "string"
           },
@@ -17120,8 +20694,30 @@
           }
         }
       },
-      "TriggerType": {
-        "type": "integer"
+      "UnpublishedEventRecord": {
+        "required": [
+          "topic",
+          "entityId",
+          "state",
+          "recoverAfter"
+        ],
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string"
+          },
+          "recoverAfter": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       },
       "UsageDetails": {
         "type": "object",
@@ -17395,12 +20991,18 @@
             "type": "boolean"
           },
           "ahead": {
-            "type": "integer",
+            "type": [
+              "null",
+              "integer"
+            ],
             "description": "相对上游分支的领先、落后提交数；没有上游时为 null。Commits ahead of and behind the upstream; null without one.",
             "format": "int32"
           },
           "behind": {
-            "type": "integer",
+            "type": [
+              "null",
+              "integer"
+            ],
             "format": "int32"
           },
           "branches": {
@@ -17450,6 +21052,9 @@
   },
   "tags": [
     {
+      "name": "Events"
+    },
+    {
       "name": "agw-server"
     },
     {
@@ -17457,6 +21062,12 @@
     },
     {
       "name": "A2A"
+    },
+    {
+      "name": "Event Sources"
+    },
+    {
+      "name": "Notifications"
     },
     {
       "name": "Agentflows"

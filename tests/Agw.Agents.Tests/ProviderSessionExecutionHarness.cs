@@ -18,6 +18,7 @@ using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
 using Agw.Integrations.Extensions;
 using Agw.Jobs;
+using Agw.Notifications;
 using Agw.Projects;
 using Agw.Projects.Application;
 using Agw.Projects.Contracts.Execution;
@@ -186,6 +187,7 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
         services.AddScoped<IEntityAuditUserIdProvider, AuditUserIdProvider>();
         services
             .AddTools(configuration)
+            .AddNotifications(configuration, runWorkers: false)
             .AddAgents(configuration)
             .AddAgentExecution(
                 configuration,
@@ -198,7 +200,7 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
             .AddFiles(configuration)
             .AddInfrastructure(configuration)
             .AddTestExtensions(configuration)
-            .AddJobs(configuration, new Agw.Jobs.DependencyInjection.RegistrationOptions(AddScheduler: false))
+            .AddJobs()
             .AddProviders(configuration)
             .AddSkills(configuration)
             .AddProjects(configuration)

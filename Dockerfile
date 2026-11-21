@@ -1,13 +1,14 @@
 FROM node:24-bookworm-slim AS web-build
-WORKDIR /src/src/clients
+WORKDIR /src/src
 RUN corepack enable
-COPY src/clients/package.json src/clients/pnpm-lock.yaml src/clients/pnpm-workspace.yaml ./
+COPY src/package.json src/pnpm-lock.yaml src/pnpm-workspace.yaml ./
 # pnpm resolves workspace patchedDependencies during fetch.
-COPY src/clients/patches ./patches
-COPY src/clients/turbo.json src/clients/tsconfig.json src/clients/tsconfig.react.json src/clients/tsconfig.next.json ./
+COPY src/clients/patches ./clients/patches
+COPY src/turbo.json ./
+COPY src/clients/tsconfig.json src/clients/tsconfig.react.json src/clients/tsconfig.next.json ./clients/
 RUN pnpm fetch
-COPY src/clients/web ./web
-COPY src/clients/packages ./packages
+COPY src/clients/web ./clients/web
+COPY src/clients/packages ./clients/packages
 RUN pnpm install --offline --frozen-lockfile --filter @agw/clients --filter @agw/web...
 RUN NEXT_OUTPUT_MODE=export pnpm exec turbo run build --filter=@agw/web...
 
@@ -20,6 +21,8 @@ COPY src/server/Agw.Agents.Contracts/Agw.Agents.Contracts.csproj ./src/server/Ag
 COPY src/server/Agw.Agents/Agw.Agents.csproj ./src/server/Agw.Agents/
 COPY src/server/Agw.Agents.Execution/Agw.Agents.Execution.csproj ./src/server/Agw.Agents.Execution/
 COPY src/server/Agw.Auth/Agw.Auth.csproj ./src/server/Agw.Auth/
+COPY src/server/Agw.Events.Contracts/Agw.Events.Contracts.csproj ./src/server/Agw.Events.Contracts/
+COPY src/server/Agw.Events/Agw.Events.csproj ./src/server/Agw.Events/
 COPY src/server/Agw.Data/Agw.Data.csproj ./src/server/Agw.Data/
 COPY src/server/Agw.Extensions.Contracts/Agw.Extensions.Contracts.csproj ./src/server/Agw.Extensions.Contracts/
 COPY src/server/Agw.Extensions.Sdk/Agw.Extensions.Sdk.csproj ./src/server/Agw.Extensions.Sdk/
@@ -35,6 +38,8 @@ COPY src/server/Agw.Jobs.Contracts/Agw.Jobs.Contracts.csproj ./src/server/Agw.Jo
 COPY src/server/Agw.Jobs/Agw.Jobs.csproj ./src/server/Agw.Jobs/
 COPY src/server/Agw.Migrations.Postgres/Agw.Migrations.Postgres.csproj ./src/server/Agw.Migrations.Postgres/
 COPY src/server/Agw.Migrations.Sqlite/Agw.Migrations.Sqlite.csproj ./src/server/Agw.Migrations.Sqlite/
+COPY src/server/Agw.Notifications.Contracts/Agw.Notifications.Contracts.csproj ./src/server/Agw.Notifications.Contracts/
+COPY src/server/Agw.Notifications/Agw.Notifications.csproj ./src/server/Agw.Notifications/
 COPY src/server/Agw.Projects.Contracts/Agw.Projects.Contracts.csproj ./src/server/Agw.Projects.Contracts/
 COPY src/server/Agw.Projects/Agw.Projects.csproj ./src/server/Agw.Projects/
 COPY src/server/Agw.Providers.Contracts/Agw.Providers.Contracts.csproj ./src/server/Agw.Providers.Contracts/

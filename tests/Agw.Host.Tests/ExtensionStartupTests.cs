@@ -255,7 +255,11 @@ public sealed class ExtensionStartupTests
                 HttpCompletionOption.ResponseHeadersRead,
                 TestContext.Current.CancellationToken
             );
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+                Assert.Fail($"{response.StatusCode}: {body}\n{host.Diagnostics}");
+            }
             await using var stream = await response.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken);
             var firstByte = new byte[1];
             Assert.Equal(1, await stream.ReadAsync(firstByte, TestContext.Current.CancellationToken));

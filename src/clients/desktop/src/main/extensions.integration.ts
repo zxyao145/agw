@@ -100,7 +100,22 @@ async function overlayState(frame: FrameHandle): Promise<string> {
   );
   const visibility = runtime().views.get(frame.frameId)?.visibility;
   const documentState = await evalHost<string>("document.visibilityState");
-  return `overlays ${overlays}; slot ${slot}; visible ${frame.view.getVisible()}; visibility ${JSON.stringify(visibility)}; document ${documentState}`;
+  const frameDocumentState = await evalFrame<string>(frame, "document.visibilityState");
+  const window = hooks.mainWindow();
+  const windowState = window
+    ? {
+        visible: window.isVisible(),
+        focused: window.isFocused(),
+        minimized: window.isMinimized(),
+        bounds: window.getBounds(),
+        views: window.contentView.children.map((view) => ({
+          bounds: view.getBounds(),
+          visible: view.getVisible(),
+          target: view === frame.view,
+        })),
+      }
+    : null;
+  return `overlays ${overlays}; slot ${slot}; visible ${frame.view.getVisible()}; visibility ${JSON.stringify(visibility)}; document ${documentState}; frameDocument ${frameDocumentState}; window ${JSON.stringify(windowState)}`;
 }
 
 /** 占位组件中的截图已加载。The snapshot in the frame's slot has loaded. */
@@ -544,6 +559,7 @@ async function boot(): Promise<void> {
       console.log(`[host ${event.level}] ${event.message}`);
   });
   // 窗口被其他窗口遮住时页面处于 hidden 状态，动画帧与计时器会暂停。An occluded window pauses frames and timers.
+  hooks.mainWindow()!.setAlwaysOnTop(true);
   app.focus({ steal: true });
   hooks.mainWindow()!.show();
   hooks.mainWindow()!.focus();
@@ -580,6 +596,9 @@ async function beforeEnabling(): Promise<void> {
   assert.deepEqual(entries, [
     "agw.ribbon.conversations",
     "agw.ribbon.files",
+    "agw.ribbon.jobs",
+    "agw.ribbon.events",
+    "agw.ribbon.notifications",
     `${EXTENSION_IDS.bareRepository}:repositories`,
   ]);
   const hostInstanceId = runtime().registry.hostInstanceId;
@@ -1381,6 +1400,104 @@ async function viewsAndLayout(): Promise<void> {
   pass("views follow their slots and retained main views keep their page state");
 }
 
+/**
+ * Events 视图铺满 Main Workspace，Sources 按页显示，滚轮可以滚动到翻页栏。
+ * The Events view fills the Main Workspace, pages its sources and scrolls to the pagination bar.
+ */
+async function eventsViewLayout(): Promise<void> {
+  type SourceVersion = { id: string; version: number | string };
+  const sources: SourceVersion[] = [];
+  for (let index = 1; index <= 30; index += 1) {
+    sources.push(
+      await hostSend<SourceVersion>("POST", "/api/events/sources/create", {
+        name: `Layout source ${index}`,
+        kind: 1,
+        config: { format: "cloudevents", auth: { kind: "BearerToken" } },
+        secret: `layout-token-${index}`,
+        enabled: true,
+      }),
+    );
+  }
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
+  await clickHost('.agw-ribbon [data-entry-id="agw.ribbon.events"]');
+  const page = `[...document.querySelectorAll('.agw-main-workspace[data-view-id="agw.events"] h1')].find((item) => item.textContent === "Events")?.closest("section")`;
+  await untilHost(`Boolean(${page})`, "the Events view");
+  // Radix Tabs 在 mousedown 时切换。Radix Tabs switch on mousedown.
+  await evalHost(`(() => {
+    const tab = [...document.querySelectorAll('.agw-main-workspace [role="tab"]')].find((item) => item.textContent === "Sources");
+    tab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+    return true;
+  })()`);
+  const pagination = `document.querySelector('.agw-main-workspace [aria-label="Rows per page"]')`;
+  await untilHost(
+    `document.querySelectorAll('.agw-main-workspace button[aria-label^="Delete Layout source"]').length === 20`,
+    "the first page of Layout sources",
+  );
+  const workspaceText = await evalHost<string>(
+    `document.querySelector(".agw-main-workspace").textContent`,
+  );
+  assert.match(workspaceText, /Showing 1–20 of 30/u);
+  assert.equal(await evalHost<boolean>(`Boolean(${pagination})`), true);
+
+  host().setZoomFactor(0.75);
+  await untilHost("window.innerWidth > 1800", "the zoomed-out host");
+  const widths = await evalHost<{ main: number; scroller: number; client: number; page: number }>(
+    `(() => {
+      const page = ${page};
+      const scroller = page.parentElement;
+      return {
+        main: document.querySelector(".agw-main-workspace").getBoundingClientRect().width,
+        scroller: scroller.getBoundingClientRect().width,
+        client: scroller.clientWidth,
+        page: page.getBoundingClientRect().width,
+      };
+    })()`,
+  );
+  host().setZoomFactor(1);
+  await untilHost("window.innerWidth <= 1440", "the host at zoom 1");
+  assert.ok(widths.main > 1300, `the zoomed-out Main Workspace is wider than 1300: ${widths.main}`);
+  assert.ok(Math.abs(widths.scroller - widths.main) <= 1, JSON.stringify(widths));
+  assert.ok(Math.abs(widths.page - widths.client) <= 1, JSON.stringify(widths));
+
+  const position = () =>
+    evalHost<{
+      visible: boolean;
+      scrollHeight: number;
+      clientHeight: number;
+      point: { x: number; y: number };
+    }>(`(() => {
+      const scroller = (${page}).parentElement;
+      const area = scroller.getBoundingClientRect();
+      const button = (${pagination}).getBoundingClientRect();
+      return {
+        visible: button.top >= area.top && button.bottom <= area.bottom,
+        scrollHeight: scroller.scrollHeight,
+        clientHeight: scroller.clientHeight,
+        point: { x: Math.round(area.left + area.width / 2), y: Math.round(area.top + area.height / 2) },
+      };
+    })()`);
+  const start = await position();
+  assert.ok(start.scrollHeight > start.clientHeight, JSON.stringify(start));
+  assert.equal(start.visible, false);
+  host().sendInputEvent({ type: "mouseMove", ...start.point });
+  await until(async () => {
+    host().sendInputEvent({ type: "mouseWheel", ...start.point, deltaX: 0, deltaY: -600 });
+    return (await position()).visible;
+  }, "the wheel to scroll the pagination bar into view");
+
+  for (const source of sources) {
+    await hostSend("POST", "/api/events/sources/delete", {
+      id: source.id,
+      version: source.version,
+    });
+  }
+  await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.sample}:open"]`);
+  await until(() => main.view.getVisible(), "the sample main view to show");
+  pass(
+    "the Events view fills the Main Workspace, pages its rows and scrolls to its pagination bar",
+  );
+}
+
 async function hostOverlays(): Promise<void> {
   await goToChat();
   const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
@@ -1764,18 +1881,82 @@ async function floatingChat(): Promise<void> {
       globalY: parent.y + bounds.y + event.y,
     });
   };
+  const describeButton = async (view: WebContentsView): Promise<string> =>
+    JSON.stringify({
+      windowFocused: hooks.mainWindow()!.isFocused(),
+      visible: view.getVisible(),
+      bounds: view.getBounds(),
+      document: await view.webContents.executeJavaScript(
+        `({
+          focused: document.hasFocus(),
+          visibility: document.visibilityState,
+          button: document.querySelector(${JSON.stringify(chatButton)})?.getBoundingClientRect().toJSON(),
+          gesture: window.chatGestureTrace,
+        })`,
+      ),
+    });
+  const focusButton = async (view: WebContentsView): Promise<void> => {
+    const window = hooks.mainWindow()!;
+    app.focus({ steal: true });
+    window.focus();
+    view.webContents.focus();
+    await until(
+      async () =>
+        window.isFocused() &&
+        view.getVisible() &&
+        (await view.webContents.executeJavaScript(
+          `document.visibilityState === "visible" && document.hasFocus()`,
+        )),
+      "the native Chat button to be visible and focused",
+      undefined,
+      () => describeButton(view),
+    );
+    await view.webContents.executeJavaScript(`(async () => {
+      if (!window.chatGestureTrace) {
+        const record = (entry) => {
+          if (window.chatGestureTrace.length < 16) {
+            window.chatGestureTrace.push({ at: Date.now(), ...entry });
+          }
+        };
+        for (const type of ["pointerdown", "pointercancel", "lostpointercapture", "pointerup"]) {
+          document.addEventListener(type, (event) => record({
+            type,
+            x: event.clientX,
+            y: event.clientY,
+            buttons: event.buttons,
+            hit: event.composedPath().includes(document.querySelector(${JSON.stringify(chatButton)})),
+          }), true);
+        }
+        window.addEventListener("blur", () => record({ type: "documentBlur" }));
+        window.agwFloatingChatButton.onState(({ dragging }) => {
+          if (dragging === window.lastChatDragging) return;
+          window.lastChatDragging = dragging;
+          record({ type: "dragState", dragging });
+        });
+      }
+      window.chatGestureTrace = [];
+      window.lastChatDragging = (await window.agwFloatingChatButton.getState()).dragging;
+    })()`);
+  };
   const clickWithMouse = async (
     view: WebContentsView,
     point: { x: number; y: number },
   ): Promise<void> => {
-    const contents = view.webContents;
+    await focusButton(view);
     const before = view.getBounds();
-    contents.focus();
     mouse(view, { type: "mouseMove", ...point });
-    mouse(view, { type: "mouseDown", ...point, button: "left", clickCount: 1 });
+    mouse(view, {
+      type: "mouseDown",
+      ...point,
+      button: "left",
+      clickCount: 1,
+      modifiers: ["leftbuttondown"],
+    });
     await until(
       () => view.getBounds().width === hooks.mainWindow()!.getContentSize()[0],
       "the Chat click layer",
+      undefined,
+      () => describeButton(view),
     );
     mouse(view, {
       type: "mouseUp",
@@ -1798,17 +1979,27 @@ async function floatingChat(): Promise<void> {
     start: { x: number; y: number },
     end: { x: number; y: number },
   ): Promise<void> => {
-    const contents = view.webContents;
+    await focusButton(view);
     const origin = view.getBounds();
     const localStart = { x: start.x - origin.x, y: start.y - origin.y };
-    contents.focus();
     mouse(view, { type: "mouseMove", ...localStart });
-    mouse(view, { type: "mouseDown", ...localStart, button: "left", clickCount: 1 });
-    await until(() => {
-      const [width, height] = hooks.mainWindow()!.getContentSize();
-      const bounds = view.getBounds();
-      return bounds.width === width && bounds.height === height;
-    }, "the Chat drag layer across the application window");
+    mouse(view, {
+      type: "mouseDown",
+      ...localStart,
+      button: "left",
+      clickCount: 1,
+      modifiers: ["leftbuttondown"],
+    });
+    await until(
+      () => {
+        const [width, height] = hooks.mainWindow()!.getContentSize();
+        const bounds = view.getBounds();
+        return bounds.width === width && bounds.height === height;
+      },
+      "the Chat drag layer across the application window",
+      undefined,
+      () => describeButton(view),
+    );
     for (let step = 1; step <= 5; step += 1) {
       mouse(view, {
         type: "mouseMove",
@@ -4191,12 +4382,15 @@ async function clickInFrame(
   element: string,
   modifiers: ("meta" | "control")[] = [],
 ): Promise<void> {
-  hooks.mainWindow()!.focus();
+  const window = hooks.mainWindow()!;
+  app.focus({ steal: true });
+  window.focus();
   await until(
     async () =>
+      window.isFocused() &&
       frame.view.getVisible() &&
       (await evalFrame<boolean>(frame, `document.visibilityState === "visible"`)),
-    `frame ${frame.frameId} to be visible before clicking ${element}`,
+    `frame ${frame.frameId} to be visible in the focused window before clicking ${element}`,
     undefined,
     () => overlayState(frame),
   );
@@ -6075,7 +6269,7 @@ async function themeSelection(): Promise<void> {
   );
   await chooseTheme(SOFT_THEME);
   const softFile = await readJson<Record<"common" | "light", Record<string, string>>>(
-    resolve("../packages/extensions/soft-theme/themes/soft.json"),
+    resolve("../../extensions/soft-theme/themes/soft.json"),
   );
   const softNames = new Set([...Object.keys(softFile.common), ...Object.keys(softFile.light)]);
   const derived = [
@@ -10111,6 +10305,7 @@ async function run(): Promise<void> {
   await enableSample();
   await processIsolation();
   await viewsAndLayout();
+  await eventsViewLayout();
   await hostOverlays();
   await leaveChatRoute();
   await contextAndFiles();

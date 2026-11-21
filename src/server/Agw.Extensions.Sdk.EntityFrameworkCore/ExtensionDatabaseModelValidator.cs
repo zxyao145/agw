@@ -51,6 +51,14 @@ internal static partial class ExtensionDatabaseModelValidator
             {
                 throw MigrationInvalid("Every extension table entity must declare user ownership.");
             }
+            if (
+                requireOwnership
+                && entityType.GetTableName() is { } tableName
+                && (tableName == options.TablePrefix + "__inbox" || tableName == options.TablePrefix + "__outbox")
+                && entityType.ClrType != typeof(ExtensionInboxRow)
+                && entityType.ClrType != typeof(ExtensionOutboxRow)
+            )
+                throw MigrationInvalid("SDK messaging tables must use the SDK entity types.");
         }
 
         foreach (var table in relationalModel.Tables)
@@ -112,6 +120,11 @@ internal static partial class ExtensionDatabaseModelValidator
         }
 
         var shortName = name[prefix.Length..];
+        if (shortName is "__inbox" or "__outbox")
+        {
+            ValidateIdentifier(name, maximumIdentifierBytes);
+            return;
+        }
         if (
             shortName.StartsWith("__", StringComparison.Ordinal)
             || shortName.StartsWith("zext_", StringComparison.Ordinal)
@@ -128,7 +141,7 @@ internal static partial class ExtensionDatabaseModelValidator
     {
         if (
             string.IsNullOrEmpty(name)
-            || !SnakeCaseIdentifier.IsMatch(name)
+            || !SnakeCaseIdentifier.IsMatch(NormalizeMessagingIdentifier(name))
             || Encoding.UTF8.GetByteCount(name) > maximumIdentifierBytes
         )
         {
@@ -142,7 +155,7 @@ internal static partial class ExtensionDatabaseModelValidator
     {
         if (
             string.IsNullOrEmpty(name)
-            || !DatabaseIdentifier.IsMatch(name)
+            || !DatabaseIdentifier.IsMatch(NormalizeMessagingIdentifier(name))
             || Encoding.UTF8.GetByteCount(name) > maximumIdentifierBytes
         )
         {
@@ -151,6 +164,10 @@ internal static partial class ExtensionDatabaseModelValidator
             );
         }
     }
+
+    private static string NormalizeMessagingIdentifier(string name) =>
+        name.Replace("___inbox", "_inbox", StringComparison.Ordinal)
+            .Replace("___outbox", "_outbox", StringComparison.Ordinal);
 
     internal static void ValidateConstraintName(
         string? name,
@@ -208,7 +225,11 @@ internal static partial class ExtensionDatabaseModelValidator
         {
             var property = mapping.Property;
             var storeObject = StoreObjectIdentifier.Table(column.Table.Name, column.Table.Schema);
-            Type clrType = property.GetValueConverter()?.ProviderClrType ?? property.ClrType;
+            Type clrType =
+                property.GetProviderClrType()
+                ?? property.GetValueConverter()?.ProviderClrType
+                ?? property.GetTypeMapping().Converter?.ProviderClrType
+                ?? property.ClrType;
             var typeMapping = typeMappingSource.FindMapping(
                 clrType,
                 storeTypeName: null,

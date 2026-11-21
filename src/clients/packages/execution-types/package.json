@@ -1,0 +1,19 @@
+{
+  "name": "@agw/execution-types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.type-tests.json",
+    "lint": "oxlint -c ../../.oxlintrc.json ./src ./type-tests",
+    "format": "oxfmt -c ../../.oxfmtrc.json ./src ./type-tests *.json",
+    "format:check": "oxfmt -c ../../.oxfmtrc.json --check ./src ./type-tests *.json"
+  }
+}

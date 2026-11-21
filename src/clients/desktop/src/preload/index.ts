@@ -6,6 +6,7 @@ import type {
   DesktopRuntimeState,
   DesktopSettingsUpdate,
   DesktopUpdateCheckResult,
+  DesktopNotificationFrame,
   ExtensionEvent,
   ExtensionPortMessage,
   ImageContextMenuRequest,
@@ -59,6 +60,12 @@ const bridge: AgwDesktopBridge = {
   showWindow: () => ipcRenderer.invoke("agw:show-window") as Promise<void>,
   showTurnNotification: (request: TurnNotificationRequest) =>
     ipcRenderer.invoke("agw:show-turn-notification", request) as Promise<void>,
+  onNotification: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, frame: DesktopNotificationFrame) =>
+      listener(frame);
+    ipcRenderer.on("agw:notification", handler);
+    return () => ipcRenderer.off("agw:notification", handler);
+  },
   quitDesktop: () => ipcRenderer.invoke("agw:quit-desktop") as Promise<void>,
 
   attachExtensionHost: (hostInstanceId) =>

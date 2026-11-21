@@ -24,6 +24,9 @@ public interface IAgentCatalogFacade
         CancellationToken cancellationToken = default
     );
 
+    Task<bool> SupportsNoToolsAsync(AgentRuntimeType type, Guid id, CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+
     Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default);
 }
 

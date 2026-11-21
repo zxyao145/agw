@@ -16,7 +16,8 @@
   "dependencies": {
     "@agw/api": "workspace:*",
     "@agw/chat": "workspace:*",
-    "@agw/components": "workspace:*"
+    "@agw/components": "workspace:*",
+    "iso8601-duration": "catalog:"
   },
   "peerDependencies": {
     "lucide-react": "catalog:",

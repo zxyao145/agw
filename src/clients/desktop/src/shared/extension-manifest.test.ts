@@ -116,6 +116,12 @@ function sampleManifestV2(): Record<string, unknown> {
   };
 }
 
+function withServerPermissions(permissions: unknown): Record<string, unknown> {
+  const manifest = sampleManifestV2();
+  (manifest.server as Record<string, unknown>).permissions = permissions;
+  return manifest;
+}
+
 function withChange(change: (manifest: Record<string, unknown>) => void): Record<string, unknown> {
   const manifest = sampleManifest();
   change(manifest);
@@ -147,6 +153,46 @@ test("a manifest v2 uses Desktop-specific contributions while preserving its tec
   assert.deepEqual(manifestPackagePaths(result.manifest!), [
     { path: "desktop/index.html", field: "contributes.mainViews[0].entry", kind: "entry" },
   ]);
+});
+
+test("a manifest v2 accepts the TaskPilot and Feishu Server permission objects", () => {
+  const manifests = [
+    ["TaskPilot", { events: { publish: ["taskpilot.*"], publishRoot: true } }],
+    ["Feishu", { events: { publish: [], publishRoot: false } }],
+  ] as const;
+
+  for (const [name, permissions] of manifests) {
+    const result = evaluateExtensionManifest(withServerPermissions(permissions), APP_VERSION);
+
+    assert.deepEqual(result.errors, [], name);
+    assert.equal(result.validation, "valid", name);
+  }
+});
+
+test("a manifest v2 rejects malformed Server event permissions", () => {
+  const cases = [
+    ["permissions array", ["taskpilot.*"]],
+    ["events array", { events: [] }],
+    ["publish string", { events: { publish: "taskpilot.*", publishRoot: true } }],
+    ["publishRoot string", { events: { publish: ["taskpilot.*"], publishRoot: "true" } }],
+    [
+      "unknown event permission",
+      { events: { publish: ["taskpilot.*"], publishRoot: true, unknownPermission: true } },
+    ],
+  ] as const;
+
+  for (const [name, permissions] of cases) {
+    const result = evaluateExtensionManifest(withServerPermissions(permissions), APP_VERSION);
+
+    assert.equal(result.validation, "invalid", name);
+    assert.ok(
+      result.errors.some(
+        (error) =>
+          error.path === "server.permissions" || error.path?.startsWith("server.permissions."),
+      ),
+      name,
+    );
+  }
 });
 
 test("manifest v2 preserves unknown top-level and Server metadata", () => {
@@ -636,9 +682,23 @@ test("package paths referenced by the manifest are listed with their fields", ()
 test("the generated JSON Schema validates the same samples", () => {
   const ajv = new Ajv2020({ allErrors: true, strict: false, validateFormats: false });
   const validate = ajv.compile(extensionManifestJsonSchema());
+  const taskPilotPermissions = withServerPermissions({
+    events: { publish: ["taskpilot.*"], publishRoot: true },
+  });
+  const feishuPermissions = withServerPermissions({ events: { publish: [], publishRoot: false } });
+  const malformedServerPermissions = withServerPermissions({
+    events: { publish: "taskpilot.*", publishRoot: true },
+  });
+  const unknownServerEventPermission = withServerPermissions({
+    events: { publish: ["taskpilot.*"], publishRoot: true, unknownPermission: true },
+  });
   const samples: [string, Record<string, unknown>, boolean][] = [
     ["complete", sampleManifest(), true],
     ["unified v2", sampleManifestV2(), true],
+    ["TaskPilot Server permissions", taskPilotPermissions, true],
+    ["Feishu Server permissions", feishuPermissions, true],
+    ["malformed Server event permissions", malformedServerPermissions, false],
+    ["unknown Server event permission", unknownServerEventPermission, false],
     ["v2 metadata", { ...sampleManifestV2(), metadata: { owner: "Agw" } }, true],
     ["unknown field", withChange((manifest) => (manifest.permision = [])), false],
     [
