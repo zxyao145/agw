@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="../IsolatedTestConnections.cs" Link="IsolatedTestConnections.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio">
@@ -20,7 +21,6 @@
       Include="../Agw.Extensions.Runtime.Tests/Fixture/Agw.Extensions.Runtime.TestExtension.csproj"
       ReferenceOutputAssembly="false"
     />
-    <Compile Include="../IsolatedTestConnections.cs" Link="IsolatedTestConnections.cs" />
   </ItemGroup>
 
   <Target Name="CopyExtensionDatabaseTestExtension" AfterTargets="Build">
