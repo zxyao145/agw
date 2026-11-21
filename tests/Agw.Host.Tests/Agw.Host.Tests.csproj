@@ -18,6 +18,10 @@
     <ProjectReference Include="../../src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj" />
     <Compile Include="../IsolatedTestConnections.cs" Link="IsolatedTestConnections.cs" />
     <Compile Include="../ModuleCompositionTestHost.cs" Link="ModuleCompositionTestHost.cs" />
+    <ProjectReference
+      Include="../Agw.Extensions.Runtime.Tests/Fixture/Agw.Extensions.Runtime.TestExtension.csproj"
+      ReferenceOutputAssembly="false"
+    />
   </ItemGroup>
 
   <!--

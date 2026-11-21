@@ -125,7 +125,6 @@ jobs:
           cache: pnpm
           cache-dependency-path: src/pnpm-lock.yaml
       - uses: actions/setup-dotnet@v5
-        if: matrix.flavor == 'full'
         with:
           dotnet-version: "10.0.x"
       - name: Install Linux packaging tools

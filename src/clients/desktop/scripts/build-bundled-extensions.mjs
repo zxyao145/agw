@@ -119,9 +119,10 @@ export async function buildBundledExtensions() {
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
+  // Server 扩展共享 MSBuild 的输出目录。Server extensions share MSBuild output directories.
   await run(
     pnpmCommand,
-    [...pnpmArguments, "--filter", "./extensions/*", "run", "build"],
+    [...pnpmArguments, "--filter", "./extensions/*", "--workspace-concurrency=1", "run", "build"],
     workspaceDirectory,
   );
 
