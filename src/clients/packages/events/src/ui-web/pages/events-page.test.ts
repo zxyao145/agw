@@ -372,7 +372,7 @@ test("applying filters and showing a chain return the event stream to page 1", a
   await act(async () => {
     fireEvent.click(event);
   });
-  await screen.findByRole("button", { name: "Show chain" });
+  await screen.findByText("event-21");
   await clickButton("Show chain");
   await waitFor(() => {
     const query = lastQuery("/api/events/list");
