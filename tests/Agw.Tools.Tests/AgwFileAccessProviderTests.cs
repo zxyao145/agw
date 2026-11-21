@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
@@ -7,7 +6,6 @@ using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
 using Agw.Testing;
 using Agw.Tools.Impl.ToolBlocks.FileAccess;
-using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.Tests;
@@ -66,21 +64,22 @@ public sealed class AgwFileAccessProviderTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_primary, "docs"));
         await File.WriteAllTextAsync(Path.Combine(_primary, "docs", "guide.md"), "alpha\r\nneedle\rgamma\n", token);
 
-        var searchResult = Assert.Single(
-            ResultList<AgwFileSearchResult>(
-                await InvokeAsync(AgwFileAccessProvider.GrepToolName, ("regexPattern", "NEEDLE"), ("directory", "docs"))
-            )
+        var searchResult = Assert.IsType<JsonElement>(
+            await InvokeAsync(AgwFileAccessProvider.GrepToolName, ("regexPattern", "NEEDLE"), ("directory", "docs"))
         );
-        var match = Assert.Single(searchResult.MatchingLines);
+        var file = Assert.Single(searchResult.GetProperty("files").EnumerateArray().ToArray());
+        var match = Assert.Single(file.GetProperty("matchingLines").EnumerateArray().ToArray());
+        var fileName = file.GetProperty("fileName").GetString();
+        var lineNumber = match.GetProperty("lineNumber").GetInt32();
         var lines = await InvokeAsync(
             AgwFileAccessProvider.ReadLinesToolName,
-            ("fileName", searchResult.FileName),
-            ("startLine", match.LineNumber),
-            ("endLine", match.LineNumber)
+            ("fileName", fileName),
+            ("startLine", lineNumber),
+            ("endLine", lineNumber)
         );
 
-        Assert.Equal("docs/guide.md", searchResult.FileName);
-        Assert.Equal(2, match.LineNumber);
+        Assert.Equal("docs/guide.md", fileName);
+        Assert.Equal(2, lineNumber);
         Assert.Equal("2\tneedle\r", ResultText(lines));
     }
 
@@ -302,12 +301,7 @@ public sealed class AgwFileAccessProviderTests : IDisposable
     private async Task<object?> InvokeAsync(string toolName, params (string Name, object? Value)[] arguments)
     {
         var token = TestContext.Current.CancellationToken;
-        var agent = new ChatClientAgent(new StubChatClient());
-        var context = await _provider.InvokingAsync(
-            new AIContextProvider.InvokingContext(agent, null, new AIContext()),
-            token
-        );
-        var tool = Assert.IsAssignableFrom<AIFunction>(Assert.Single(context.Tools!, tool => tool.Name == toolName));
+        var tool = Assert.IsAssignableFrom<AIFunction>(Assert.Single(_provider.Tools, tool => tool.Name == toolName));
         return await tool.InvokeAsync(
             new AIFunctionArguments(
                 arguments.ToDictionary(static argument => argument.Name, static argument => argument.Value)
@@ -338,30 +332,6 @@ public sealed class AgwFileAccessProviderTests : IDisposable
                     ? snapshot.Workspace
                     : snapshot.AdditionalDirectories.Single(directory => directory.Id == directoryId).Path;
             return Task.FromResult<IAgwFileSystem?>(TestFileSystems.Local(path));
-        }
-    }
-
-    private sealed class StubChatClient : IChatClient
-    {
-        public void Dispose() { }
-
-        public object? GetService(Type serviceType, object? serviceKey = null) =>
-            serviceType.IsInstanceOfType(this) ? this : null;
-
-        public Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, "done")]));
-
-        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default
-        )
-        {
-            await Task.Yield();
-            yield return new ChatResponseUpdate(ChatRole.Assistant, "done");
         }
     }
 }

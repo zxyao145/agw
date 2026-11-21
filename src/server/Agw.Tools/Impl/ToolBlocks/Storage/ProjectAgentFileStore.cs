@@ -23,7 +23,10 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
     private const long MaxSearchTotalBytes = 128 * 1024 * 1024;
     private const int MaxSearchLineCharacters = 4 * 1024;
     private const int MaxSearchResultCharacters = 64 * 1024;
+    internal const int SearchPageSize = 20;
     private const string TruncatedLineSuffix = "... [truncated]";
+
+    internal sealed record SearchPage(IReadOnlyList<AgwFileSearchResult> Results, bool HasMore);
 
     private static readonly string[] ExcludedSearchDirectoryNames =
     [
@@ -168,29 +171,64 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
         CancellationToken cancellationToken = default
     )
     {
+        var searchPage = await SearchCoreAsync(
+                directory,
+                CreateSearchOptions(regexPattern, globPattern, recursive, MaxSearchHits),
+                true,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return searchPage.Results;
+    }
+
+    internal Task<SearchPage> SearchForAccessAsync(
+        string directory,
+        string regexPattern,
+        string? globPattern,
+        FileSearchPosition? continuation,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var searchOptions = CreateSearchOptions(regexPattern, globPattern, true, SearchPageSize + 1) with
+        {
+            OrderByPath = true,
+            After = continuation,
+        };
+        return SearchCoreAsync(directory, searchOptions, false, cancellationToken);
+    }
+
+    private static SearchOptions CreateSearchOptions(
+        string regexPattern,
+        string? globPattern,
+        bool recursive,
+        int maxHits
+    ) =>
+        new(
+            regexPattern,
+            IsRegex: true,
+            CaseInsensitive: true,
+            FilenameGlob: globPattern,
+            MaxHits: maxHits,
+            Recursive: recursive,
+            ExcludedDirectoryNames: ExcludedSearchDirectoryNames,
+            MaxFiles: MaxSearchFiles,
+            MaxFileSizeBytes: MaxSearchFileSizeBytes,
+            MaxTotalBytes: MaxSearchTotalBytes
+        );
+
+    private async Task<SearchPage> SearchCoreAsync(
+        string directory,
+        SearchOptions searchOptions,
+        bool countSnippetInBudget,
+        CancellationToken cancellationToken
+    )
+    {
         var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
         var results = new List<AgwFileSearchResult>();
         var resultCharacters = 0;
         var budgetExhausted = false;
         await foreach (
-            var fileResult in fileSystem
-                .SearchAsync(
-                    directory,
-                    new SearchOptions(
-                        regexPattern,
-                        IsRegex: true,
-                        CaseInsensitive: true,
-                        FilenameGlob: globPattern,
-                        MaxHits: MaxSearchHits,
-                        Recursive: recursive,
-                        ExcludedDirectoryNames: ExcludedSearchDirectoryNames,
-                        MaxFiles: MaxSearchFiles,
-                        MaxFileSizeBytes: MaxSearchFileSizeBytes,
-                        MaxTotalBytes: MaxSearchTotalBytes
-                    ),
-                    cancellationToken
-                )
-                .ConfigureAwait(false)
+            var fileResult in fileSystem.SearchAsync(directory, searchOptions, cancellationToken).ConfigureAwait(false)
         )
         {
             // 按字符预算截断返回给模型的命中行；预算用完时停止整个搜索。
@@ -198,11 +236,12 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
             AgwFileSearchResult? result = null;
             foreach (var match in fileResult.MatchingLines)
             {
+                var maxLineCharacters = MaxSearchLineCharacters;
                 var fixedCharacters = result == null ? fileResult.FileName.Length : 0;
-                var lineCopies = result == null ? 2 : 1;
+                var lineCopies = countSnippetInBudget && result == null ? 2 : 1;
                 var availableLineCharacters =
                     (MaxSearchResultCharacters - resultCharacters - fixedCharacters) / lineCopies;
-                var maxLineCharacters = Math.Min(MaxSearchLineCharacters, availableLineCharacters);
+                maxLineCharacters = Math.Min(maxLineCharacters, availableLineCharacters);
                 if (
                     maxLineCharacters <= 0
                     || (match.Line.Length > maxLineCharacters && maxLineCharacters <= TruncatedLineSuffix.Length)
@@ -222,7 +261,7 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
                         MatchingLines = [],
                     };
                     results.Add(result);
-                    resultCharacters += fixedCharacters + line.Length;
+                    resultCharacters += fixedCharacters + (countSnippetInBudget ? line.Length : 0);
                 }
 
                 result.MatchingLines.Add(new AgwFileSearchMatch { LineNumber = match.LineNumber, Line = line });
@@ -235,7 +274,12 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
             }
         }
 
-        return results.OrderBy(static result => result.FileName, StringComparer.OrdinalIgnoreCase).ToArray();
+        return new SearchPage(
+            searchOptions.OrderByPath
+                ? results
+                : results.OrderBy(static result => result.FileName, StringComparer.OrdinalIgnoreCase).ToArray(),
+            budgetExhausted
+        );
     }
 
     public override async Task<int?> ReplaceTextAsync(

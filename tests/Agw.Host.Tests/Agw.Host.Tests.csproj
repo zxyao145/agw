@@ -16,6 +16,10 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj" />
+    <ProjectReference
+      Include="../Agw.Extensions.Runtime.Tests/Fixture/Agw.Extensions.Runtime.TestExtension.csproj"
+      ReferenceOutputAssembly="false"
+    />
   </ItemGroup>
 
   <!--

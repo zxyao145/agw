@@ -462,7 +462,7 @@ Pi 通过显式加载随应用发布的 `agw-model-provider.mjs` 注册进程内
 
 运行时使用 `ContextWindowCompactionPipeline` 构建两阶段策略，不调用额外的总结模型：
 
-- 达到有效输入预算的 50% 时，`ToolResultEvictionCompactionStrategy` 由旧到新把 Tool call 组中的普通 result 正文替换为占位文本 `[Tool result removed from context by compaction]`，直到回到阈值以下；`ask_user_question` 按 `CallId` 保留完整交互结果，包括答案、备注和取消状态。Assistant 消息中的推理、调用和 `CallId` 配对原样保留，最近 2 个非 System 组不处理；
+- 输入 Token 估算值超过 `min(有效输入预算 × 50%, 64_000)` 时，`ToolResultEvictionCompactionStrategy` 从最早的 Tool call 组开始，将普通 result 正文替换为 `[Tool result removed from context by compaction]`，直到估算值回到预算内或可清理的结果用尽。`ask_user_question` 按 `CallId` 保留完整交互结果，包括答案、备注和取消状态。Assistant 的推理与调用、最近两个非 System 组都会保留。
 - 达到 80% 时，MAF 的 `TruncationCompactionStrategy` 截断较旧的消息组，同样保留最近 2 个组；
 - Tool call 与对应 result 始终作为原子消息组处理。
 
@@ -479,6 +479,8 @@ Provider 状态保存在现有 `AgentSession.StateBag`，并随 `AgentSessionSta
 Anthropic 路径使用 `AnthropicReasoningChatClient` 在响应及流式片段的 `AdditionalProperties` 中保留原始 thinking 类型，供聚合与历史持久化后回放。空文本加签名仍可能是普通 `thinking`，不能按文本是否为空推断为 `redacted_thinking`；请求通过原生内容块保留普通 thinking 的空文本及签名，真正的 redacted 数据保持不变。仅对 `api.deepseek.com`，没有类型标记的旧推理按该端点支持的普通 thinking 回放，没有推理记录的旧 Assistant 消息补空 thinking；其他端点不做此推断或补块。请求适配只修改副本，不改写历史，不借用其他消息的推理。历史持久化保留所有 `TextReasoningContent`，包括空文本、纯空白和只有签名的内容；界面展示仍可过滤空文本，不能将展示过滤应用到模型协议历史。
 
 DeepSeek 的 Responses 端点使用 `OpenAiResponsesReasoningChatClient`：普通响应从 `reasoning.content` 读取文本，流式响应沿用 SDK 的 `reasoning_text.delta` 转换，工具续接与历史回放通过原生 reasoning item 写回 `content`。该端点不支持 `summary` 或 `encrypted_content`，因此出站副本只携带可读推理，保留 item ID 与工具调用对应关系，不改写存储中的不透明数据。此投影仅匹配 `api.deepseek.com`；官方 OpenAI、Azure 和自定义 Responses 网关保持 SDK 行为。
+
+Definition Agent 和 Result Summary 通过 Anthropic Messages 发送请求时，都会在请求体顶层设置 `"cache_control": {"type": "ephemeral"}`，使用默认的 5 分钟提示缓存。此设置适用于所有采用该格式的模型和端点。供应商返回的 `cache_creation_input_tokens` 和 `cache_read_input_tokens` 分别记录本次缓存写入与读取的 Token 数。
 
 ### Result Summary
 
