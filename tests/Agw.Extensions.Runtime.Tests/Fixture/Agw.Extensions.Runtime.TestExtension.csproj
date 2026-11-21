@@ -11,6 +11,7 @@
     <PackageReference Include="Semver" />
     <PackageReference Include="System.IO.Hashing" />
     <ProjectReference Include="../../../src/server/Agw.Projects.Contracts/Agw.Projects.Contracts.csproj" />
+    <ProjectReference Include="../../../src/server/Agw.Events.Contracts/Agw.Events.Contracts.csproj" />
     <ProjectReference Include="../../../src/server/Agw.Extensions.Sdk/Agw.Extensions.Sdk.csproj" />
     <ProjectReference Include="../../../src/server/Agw.Extensions.Sdk.EntityFrameworkCore/Agw.Extensions.Sdk.EntityFrameworkCore.csproj" />
   </ItemGroup>

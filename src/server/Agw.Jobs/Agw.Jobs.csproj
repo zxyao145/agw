@@ -4,6 +4,7 @@
     <PackageReference Include="Microsoft.Agents.AI" />
     <ProjectReference Include="..\Agw.Agents.Contracts\Agw.Agents.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
+    <ProjectReference Include="..\Agw.Events.Contracts\Agw.Events.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Jobs.Contracts\Agw.Jobs.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Projects.Contracts\Agw.Projects.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />

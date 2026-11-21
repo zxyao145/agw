@@ -5,6 +5,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
+    <ProjectReference Include="../Agw.Events.Contracts/Agw.Events.Contracts.csproj" />
     <ProjectReference Include="../Agw.Events/Agw.Events.csproj" />
     <ProjectReference Include="../Agw.Notifications/Agw.Notifications.csproj" />
     <ProjectReference Include="../Agw.Extensions/Agw.Extensions.csproj" />
