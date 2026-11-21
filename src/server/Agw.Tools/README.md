@@ -34,6 +34,9 @@ Current Tool Blocks:
   visible to other users.
 - `file-access`: file read and write tools bound to the turn's directory snapshot. Optional `directoryId` selects an additional Project directory; omission uses the primary `Project.Workspace`. Project Memory remains in the primary directory. Docker Shell mounts additional roots at `/project-directories/{id}` and reports these paths in its context. It includes `file-readonly-access`.
 - `file-readonly-access`: only the `file_access_read`, `file_access_read_lines`, `file_access_ls`, and `file_access_grep` tools of `file-access`, with the same tool instances and member declarations.
+  `file_access_grep` returns up to 20 matching lines per page, grouped by file. Continue the same search with
+  the returned `continuation` value. Use `file_access_read_lines` with `startLine` and `endLine` to read the surrounding code.
+  A search considers up to 10,000 eligible files. Use `directory` and `globPattern` to focus on the relevant files in larger workspaces.
 - `background-agents`: one-level background delegation tools.
 - All `background-agents` members declare `ReadOnly` and require no parent-tool approval, including starting, continuing, and clearing tasks. Plan-mode availability remains independently declared.
 
@@ -188,15 +191,13 @@ The compaction strategy calculates the effective input budget as:
 InputBudget = MaxContextWindowTokens - MaxOutputTokens
 ```
 
-The MAF core `ContextWindowCompactionStrategy` uses its default thresholds
-against that budget. At 50%, it compacts older Tool call/result content. At
-80%, it truncates older messages. A Tool call and its corresponding result are
-treated as an atomic message group and are never retained independently. The
-framework uses an estimated token count, which is not equivalent to character
-count and may differ slightly from the provider's final token accounting.
+`ContextWindowCompactionPipeline` evicts older tool results when estimated
+input tokens exceed `min(InputBudget × 50%, 64_000)`. Above 80% of the input
+budget, it truncates older message groups, keeping each tool call with its
+result. The provider reports the final token count.
 
 With the defaults of `256_000 / 64_000`, the effective input budget is
-`192_000`, so the two thresholds are approximately `96_000` and `153_600`
+`192_000`, so the two thresholds are `64_000` and `153_600`
 input tokens. The Compaction Provider runs inside the function-invocation loop
 and after per-service-call history persistence, so every model request before
 and after a Tool invocation re-evaluates the budget. Compaction changes only

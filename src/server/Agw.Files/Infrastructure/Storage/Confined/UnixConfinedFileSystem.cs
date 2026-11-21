@@ -293,10 +293,14 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
     public Task<Stream> OpenReadAsync(string path, CancellationToken ct)
     {
         using var walk = Locate(path, createDirectories: false);
-        var handle = OpenExistingFile(walk, UnixNative.O_RDONLY, path);
+        return Task.FromResult<Stream>(CreateReadStream(OpenExistingFile(walk, UnixNative.O_RDONLY, path)));
+    }
+
+    private static FileStream CreateReadStream(SafeFileHandle handle)
+    {
         try
         {
-            return Task.FromResult<Stream>(new FileStream(handle, FileAccess.Read));
+            return new FileStream(handle, FileAccess.Read);
         }
         catch
         {
@@ -539,6 +543,7 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
             opened.Handle,
             searchRoot,
             options.Recursive,
+            options.OrderByPath,
             excludedDirectoryNames,
             ct
         );
@@ -552,31 +557,51 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
         SafeFileHandle directory,
         string searchRoot,
         bool recursive,
+        bool orderByPath,
         HashSet<string>? excludedDirectoryNames,
         CancellationToken ct
     )
     {
         var searchPrefix = searchRoot.Length == 0 ? 0 : searchRoot.Length + 1;
-        foreach (var entry in EnumerateEntries(directory, searchRoot, recursive, excludedDirectoryNames, ct))
+        foreach (var candidate in EnumerateEntries(directory, searchRoot, recursive, excludedDirectoryNames, ct))
         {
-            // 句柄在候选被真正打开时移交给搜索流；未被消费的候选在这里释放。
-            // The handle is handed over to the search stream when the candidate is actually opened; a candidate that is
-            // not consumed is released here.
-            if (entry.Handle == null || entry.Status.IsDirectory || !entry.Status.IsRegularFile)
+            if (candidate.Handle == null || !candidate.Status.IsRegularFile)
             {
-                entry.Dispose();
                 continue;
             }
 
-            var candidate = entry;
+            var path = candidate.Path;
+            var identity = candidate.Status.Identity;
+            var length = candidate.Status.Size;
             yield return new SearchCandidate(
-                entry.Path,
-                entry.Path[searchPrefix..],
-                entry.Status.Size,
-                () => new FileStream(candidate.TakeHandle(), FileAccess.Read)
+                path,
+                path[searchPrefix..],
+                length,
+                orderByPath
+                    ? () => OpenOrderedSearchFile(path, identity, length)
+                    : () => CreateReadStream(candidate.TakeHandle())
             );
-            candidate.Dispose();
         }
+    }
+
+    // 排序后按受限路径重新打开文件，并核对枚举时记录的文件身份和大小。
+    // Reopen through the confined path after sorting and verify the identity and size recorded during enumeration.
+    private Stream? OpenOrderedSearchFile(string path, FileIdentity identity, long length)
+    {
+        using var walk = Locate(path, createDirectories: false);
+        var file = OpenFinal(walk, UnixNative.O_RDONLY | UnixNative.O_NONBLOCK, path);
+        if (
+            file.Handle == null
+            || !file.Status.IsRegularFile
+            || file.Status.Identity != identity
+            || file.Status.Size != length
+        )
+        {
+            file.Dispose();
+            return null;
+        }
+
+        return CreateReadStream(file.Handle);
     }
 
     /// <summary>
@@ -624,7 +649,7 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
 
             var handle = UnixNative.WrapFd(fd);
             var status = UnixNative.Stat(handle);
-            var entry = new DirectoryEntryHandle(name, entryPath, handle, status);
+            using var entry = new DirectoryEntryHandle(name, entryPath, handle, status);
             // 递归时先产出子目录的内容，再产出该目录本身，目录句柄在此期间保持打开。
             // When recursing, the contents of a subdirectory are yielded before the directory itself, and its handle
             // stays open meanwhile.

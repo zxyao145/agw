@@ -33,10 +33,9 @@ internal sealed class AgwFileReadonlyAccessProvider : AIContextProvider
         You can read files in the Project directories via `file_access_read`, `file_access_read_lines`, `file_access_ls`,
         and `file_access_grep`. You cannot create, modify, or delete files with these tools.
 
-        - Files may be organized into subdirectories. Use `file_access_ls` to explore the tree level by level,
-          or `file_access_grep` to search file contents recursively across the whole store.
-        - To look at part of a file, find the line numbers with `file_access_grep`, then read the range around them
-          with `file_access_read_lines`. Reading the whole file first is rarely necessary.
+        - Use `file_access_ls` to locate directories. Search for specific names or phrases with `file_access_grep`,
+          limiting the search with `directory` or `globPattern`. Pass the returned `continuation` to read the next page.
+        - Use `file_access_read_lines` with `startLine` and `endLine` to read the code around a match.
         - File paths are relative to the selected Project directory. Omit `directoryId` for the primary directory;
           use a `directoryId` from the Project directory list for an additional directory.
         """;
