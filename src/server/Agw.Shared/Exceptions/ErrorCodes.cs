@@ -452,6 +452,11 @@ public static class ErrorCodes
         "User memory content is required.",
         HttpStatusCode.BadRequest
     );
+    public static readonly ErrorCode SteerNotSupported = new(
+        400_0079,
+        "The execution target does not support steering a running turn.",
+        HttpStatusCode.BadRequest
+    );
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(
         401_0001,
@@ -685,6 +690,16 @@ public static class ErrorCodes
     public static readonly ErrorCode RepositoryMergeConflict = new(
         409_0026,
         "The merge has conflicts. Merge the default branch into the feature branch and resolve them first.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode SteerNoActiveTurn = new(
+        409_0036,
+        "The turn to steer is not running.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode SteerLimitExceeded = new(
+        409_0037,
+        "Too many steering messages are waiting for delivery. Wait for them to be delivered and try again.",
         HttpStatusCode.Conflict
     );
 

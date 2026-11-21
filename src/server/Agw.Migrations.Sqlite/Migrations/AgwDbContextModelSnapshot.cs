@@ -1984,6 +1984,60 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.ToTable("durable_execution", (string)null);
                 });
 
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Executions.DurableExecutionSteerRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<long>("CreateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("InputJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("input_json");
+
+                    b.Property<string>("ReturnReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("return_reason");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("status");
+
+                    b.Property<int?>("StepIndex")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("step_index");
+
+                    b.Property<Guid>("TurnId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("turn_id");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_execution_steer");
+
+                    b.HasIndex("TurnId", "Status")
+                        .HasDatabaseName("ix_execution_steer_turn_id_status");
+
+                    b.ToTable("execution_steer", (string)null);
+                });
+
             modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.Connection", b =>
                 {
                     b.Property<Guid>("Id")

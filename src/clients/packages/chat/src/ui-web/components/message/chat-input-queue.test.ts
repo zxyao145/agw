@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { setupDomEnvironment } from "@agw/test-harness";
+import type { AiMessage } from "@agw/api";
 import { createUserMessage } from "@agw/chat-core";
 import {
   ExecutionSessionManager,
@@ -50,6 +51,7 @@ async function renderQueue(withComposer = false) {
         executed.push(request);
         active = true;
       },
+      steer: async () => undefined,
       listAgentflowCheckpoints: async () => [],
       resumeCheckpoint: async () => "turn-resumed",
       setMode: async () => undefined,
@@ -111,7 +113,8 @@ async function renderQueue(withComposer = false) {
     });
   const text = (request: ExecutionRequest | undefined) =>
     request?.input.contents.find((content) => content.type === "TextContent")?.content;
-  return { handle, executed, finish, text };
+  const emit = (message: AiMessage) => act(() => handlers.onMessage(message));
+  return { handle, executed, finish, text, emit };
 }
 
 test("the queue lists entries in order with their attachments", async () => {
@@ -226,4 +229,84 @@ test("a failed turn pauses the queue until Continue queue is pressed", async () 
   assert.deepEqual(executed.map(text), ["running", "next"]);
   assert.equal(screen.queryByRole("status"), null);
   assert.equal(screen.queryAllByRole("listitem").length, 0);
+});
+
+function steerControl(
+  type: "steer-delivered" | "steer-returned",
+  turnId: string,
+  steerId: string,
+): AiMessage {
+  return {
+    messageId: `${type}-${steerId}`,
+    role: "system",
+    contents: [{ type: "TextContent", content: "" }],
+    additionalProperties: { type, turnId, steerId, conversationId: key.conversationId },
+  };
+}
+
+test("a Steer waits in a Steering section above the queue without edit or remove actions", async () => {
+  const { handle, executed } = await renderQueue();
+  await act(async () => {
+    handle.submit(submission("running"));
+  });
+  await act(async () => {
+    handle.submit(submission("use the other file", 1, 2), "steer");
+    handle.submit(submission("queued after"));
+  });
+
+  const steering = screen.getByRole("region", { name: "Steering messages" });
+  const steerRows = Array.from(steering.querySelectorAll("li"));
+  assert.equal(steerRows.length, 1);
+  assert.match(steerRows[0]!.textContent ?? "", /use the other file/);
+  assert.match(steerRows[0]!.textContent ?? "", /2 images/);
+  assert.match(steerRows[0]!.textContent ?? "", /1 code comment/);
+  assert.match(steerRows[0]!.textContent ?? "", /Waiting for delivery/);
+  assert.equal(steering.querySelectorAll("button").length, 0);
+  // The queue section keeps its own list and actions.
+  assert.ok(screen.getByRole("button", { name: "Edit queued message 1" }));
+  assert.ok(screen.getByRole("button", { name: "Remove queued message 1" }));
+  assert.equal(
+    steering.compareDocumentPosition(screen.getByLabelText("Queued message 1")) &
+      window.Node.DOCUMENT_POSITION_FOLLOWING,
+    window.Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+  assert.equal(executed.length, 1);
+});
+
+test("a delivered Steer disappears from the Steering section", async () => {
+  const { handle, executed, emit } = await renderQueue();
+  await act(async () => {
+    handle.submit(submission("running"));
+  });
+  await act(async () => {
+    handle.submit(submission("use the other file"), "steer");
+  });
+  const steerId = handle.getQueue().steers[0]!.id;
+
+  await emit(steerControl("steer-delivered", executed[0]!.turnId!, steerId));
+
+  assert.equal(screen.queryByRole("region", { name: "Steering messages" }), null);
+  assert.equal(screen.queryAllByRole("listitem").length, 0);
+});
+
+test("a returned Steer moves to the queue head with a notice that it was not delivered", async () => {
+  const { handle, executed, emit } = await renderQueue();
+  await act(async () => {
+    handle.submit(submission("running"));
+  });
+  await act(async () => {
+    handle.submit(submission("queued before"));
+    handle.submit(submission("use the other file"), "steer");
+  });
+  const steerId = handle.getQueue().steers[0]!.id;
+
+  await emit(steerControl("steer-returned", executed[0]!.turnId!, steerId));
+
+  assert.equal(screen.queryByRole("region", { name: "Steering messages" }), null);
+  const rows = screen.getAllByRole("listitem");
+  assert.equal(rows.length, 2);
+  assert.match(rows[0]!.textContent ?? "", /use the other file/);
+  assert.match(rows[0]!.textContent ?? "", /Not delivered, added to the queue/);
+  assert.match(rows[1]!.textContent ?? "", /queued before/);
+  assert.doesNotMatch(rows[1]!.textContent ?? "", /Not delivered/);
 });

@@ -25,6 +25,31 @@ public sealed class ExecutionRuntimeOptions
     /// 获取或设置分布式执行协调配置。
     /// </summary>
     public DistributedExecutionOptions Distributed { get; set; } = new();
+
+    /// <summary>
+    /// 获取或设置执行中追加输入（Steer）的配置。
+    /// Gets or sets the configuration of input steered into a running turn.
+    /// </summary>
+    public SteerExecutionOptions Steer { get; set; } = new();
+}
+
+/// <summary>
+/// 执行中追加输入（Steer）的配置。
+/// The configuration of input steered into a running turn.
+/// </summary>
+public sealed class SteerExecutionOptions
+{
+    /// <summary>
+    /// 单个 Turn 同时等待送达的 Steer 数量上限，必须大于 0。
+    /// The maximum number of steering inputs waiting for delivery in one turn; it must be greater than 0.
+    /// </summary>
+    public int MaxPendingPerTurn { get; set; } = DefaultMaxPendingPerTurn;
+
+    /// <summary>
+    /// MaxPendingPerTurn 的默认值。
+    /// The default of MaxPendingPerTurn.
+    /// </summary>
+    public const int DefaultMaxPendingPerTurn = 8;
 }
 
 /// <summary>

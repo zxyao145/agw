@@ -35,6 +35,15 @@ export type ExecutionCommandRequest<TInput = ExecutionUserInput> = {
   input: TInput;
 };
 
+export type SteerCommandInput<TInput = ExecutionUserInput> = {
+  conversationId: string;
+  /** 客户端正在跟踪的活动 Turn。The active turn the client tracks. */
+  turnId: string;
+  /** 客户端生成；服务端按它只受理一次，也是送达后用户消息的 messageId。Client generated; the server accepts it once, and it is the delivered user message's messageId. */
+  steerId: string;
+  input: TInput;
+};
+
 export type TurnFinishedStatus = "completed" | "interrupted" | "failed";
 
 /**

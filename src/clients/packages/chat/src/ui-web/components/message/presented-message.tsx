@@ -8,7 +8,8 @@ import {
   type PresentedContent,
   type PresentedMessage,
 } from "@agw/chat-core";
-import { isResultMessage } from "@agw/execution-core";
+import { isResultMessage, isSteerUserMessage } from "@agw/execution-core";
+import { Navigation } from "lucide-react";
 
 import { MessageCitations, ToolState, isToolStateMessage } from "./tool-state";
 import DataContent from "./renders/data-content";
@@ -141,11 +142,23 @@ function PresentedMessageView({
     (content) => content.type === MessageContentType.FunctionResultContent,
   );
   const title = isResult ? "Result" : isToolResult ? "Tool result" : isToolUse ? "Tool use" : "";
+  const isSteered = isSteerUserMessage(message.source);
   const messageContent = (
     <>
       {title ? (
         <div className={cn("flex items-center gap-2", isUser && "justify-end")}>
           <span className={cn("text-xs opacity-40 agw-msg-title")}>{title}</span>
+        </div>
+      ) : null}
+      {isSteered ? (
+        <div className={cn("flex items-center gap-2", isUser && "justify-end")}>
+          <span
+            className="inline-flex items-center gap-1 text-xs opacity-60 agw-msg-title"
+            title="Sent while the task was running"
+          >
+            <Navigation className="size-3" aria-hidden="true" />
+            Steered
+          </span>
         </div>
       ) : null}
       {message.source.contents.map((content, index) => (

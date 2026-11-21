@@ -20,6 +20,7 @@ public sealed class PiSession : IAsyncDisposable
 
     private int _started;
     private int _activeRun;
+    private int _acceptingSteer;
     private int _faulted;
     private int _disposed;
 
@@ -157,12 +158,14 @@ public sealed class PiSession : IAsyncDisposable
                 throw;
             }
 
+            Volatile.Write(ref _acceptingSteer, 1);
             while (true)
             {
                 var evt = await _connection.Events.ReadAsync(cancellationToken).ConfigureAwait(false);
                 if (evt is PiMarkerEvent { Type: "agent_settled" })
                 {
                     settled = true;
+                    Volatile.Write(ref _acceptingSteer, 0);
                 }
 
                 yield return evt;
@@ -174,6 +177,7 @@ public sealed class PiSession : IAsyncDisposable
         }
         finally
         {
+            Volatile.Write(ref _acceptingSteer, 0);
             if (promptSent && !settled)
             {
                 await AbortAndDrainAsync().ConfigureAwait(false);
@@ -181,6 +185,35 @@ public sealed class PiSession : IAsyncDisposable
 
             Volatile.Write(ref _activeRun, 0);
         }
+    }
+
+    /// <summary>Queues a steering message for the active run.</summary>
+    /// <param name="message">The nonempty message text.</param>
+    /// <param name="images">Optional base64 image attachments.</param>
+    /// <param name="cancellationToken">Cancels sending or awaiting the steer command.</param>
+    /// <returns>
+    /// <see langword="true"/> when Pi accepted the message; <see langword="false"/> when no run accepts steering,
+    /// either before Pi accepted the prompt or after the run settled.
+    /// </returns>
+    /// <remarks>
+    /// Pi delivers a steering message after the current assistant turn finishes its tool calls and before the next
+    /// model call. Messages still queued when a run is aborted are cleared, so they never start work after the abort.
+    /// </remarks>
+    public async Task<bool> SteerAsync(
+        string message,
+        IReadOnlyList<PiImage>? images = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        ThrowIfUnavailable();
+        if (Volatile.Read(ref _acceptingSteer) == 0)
+        {
+            return false;
+        }
+
+        await _connection.SendCommandAsync(PiCommands.Steer(message, images), cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>Runs a prompt to settlement and collects its authoritative messages, final text, and usage.</summary>
@@ -299,6 +332,8 @@ public sealed class PiSession : IAsyncDisposable
             // Start draining first so a full bounded event channel cannot prevent the stdout pump from parsing the
             // abort response that shares the same JSONL stream.
             var settledTask = DrainUntilSettledAsync(timeout.Token);
+            // Pi continues queued messages after an abort, so the queue is cleared first.
+            await _connection.SendCommandAsync(PiCommands.ClearQueue(), timeout.Token).ConfigureAwait(false);
             var abortTask = _connection.SendCommandAsync(PiCommands.Abort(), timeout.Token);
             await Task.WhenAll(settledTask, abortTask).ConfigureAwait(false);
         }

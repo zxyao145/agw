@@ -362,3 +362,19 @@ test("Claude Code native Result renders indented JSON without an Agw resultForma
   assert.match(pre.textContent ?? "", /\n  "issues": \[\n    \{\n      "line": 3/);
   assert.equal(view.container.querySelector(".msg-content-md"), null);
 });
+
+test("a delivered Steer user message carries a Steered marker and an ordinary user message does not", () => {
+  const user = (source: Partial<AiMessage>) =>
+    presented(
+      [{ type: "markdown", markdown: "use the other file", sourceType: "TextContent" }],
+      { messageId: "steer-1", role: "user", ...source },
+      { alignment: "right" },
+    );
+
+  const steered = renderMessage(user({ additionalProperties: { steerId: "steer-1" } }));
+  assert.ok(steered.getByText("Steered"));
+  steered.unmount();
+
+  renderMessage(user({}));
+  assert.equal(screen.queryByText("Steered"), null);
+});

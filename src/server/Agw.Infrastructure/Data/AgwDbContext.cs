@@ -102,6 +102,7 @@ public partial class AgwDbContext
     /// 获取 PostgreSQL event stream 实现的 append-only execution 消息集合。
     /// </summary>
     public DbSet<DurableExecutionEventRecord> DurableExecutionEvents => Set<DurableExecutionEventRecord>();
+    public DbSet<DurableExecutionSteerRecord> DurableExecutionSteers => Set<DurableExecutionSteerRecord>();
 
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<RemoteSkillCache> RemoteSkillCaches => Set<RemoteSkillCache>();
@@ -277,16 +278,17 @@ public partial class AgwDbContext
                 .Entity<ProjectConversationTurn>()
                 .Property(turn => turn.UsageSettlesAt)
                 .HasConversion(new DateTimeOffsetToBinaryConverter());
-            ConfigureEventTimestampColumns(modelBuilder);
+            ConfigureUtcTimestampColumns(modelBuilder);
         }
     }
 
-    private static void ConfigureEventTimestampColumns(ModelBuilder modelBuilder)
+    private static void ConfigureUtcTimestampColumns(ModelBuilder modelBuilder)
     {
         var converter = new ValueConverter<DateTimeOffset, long>(
             value => value.UtcTicks,
             value => new DateTimeOffset(value, TimeSpan.Zero)
         );
+        modelBuilder.Entity<DurableExecutionSteerRecord>().Property(steer => steer.CreateTime).HasConversion(converter);
         foreach (
             var entityType in modelBuilder
                 .Model.GetEntityTypes()

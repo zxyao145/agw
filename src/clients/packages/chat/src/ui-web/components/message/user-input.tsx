@@ -1,7 +1,25 @@
 "use client";
 
-import { ArrowUp, Blocks, FileText, Maximize2, Minimize2, Wrench } from "lucide-react";
-import { Button } from "@agw/components";
+import {
+  ArrowUp,
+  ArrowUpToLine,
+  Blocks,
+  Check,
+  ChevronUp,
+  FileText,
+  Maximize2,
+  Minimize2,
+  Target,
+  Wrench,
+} from "lucide-react";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@agw/components";
 import { Textarea } from "@agw/components";
 import {
   ClipboardEvent,
@@ -15,6 +33,20 @@ import React from "react";
 import { Item, ItemContent, ItemGroup } from "@agw/components";
 import { Badge } from "@agw/components";
 import { replaceSuggestion, type SuggestionItem } from "@agw/chat-core";
+import type { SubmissionMode } from "@agw/chat-runtime";
+import {
+  ALTERNATE_SUBMIT_SHORTCUT,
+  getComposerPlaceholder,
+  getSendOptionLabel,
+  getSubmitButtonLabel,
+  getSubmitShortcutHint,
+  PRIMARY_SUBMIT_SHORTCUT,
+  resolveComposerKey,
+  resolveComposerSubmit,
+  SUBMIT_MODE_LABELS,
+  type ComposerSubmitState,
+  type SteerAvailability,
+} from "./composer-submit";
 
 export type { SuggestionItem } from "@agw/chat-core";
 
@@ -33,9 +65,19 @@ export interface UserInputProps {
   canSubmitWithoutText?: boolean;
 
   // Actions
-  /** 提交当前文字；受理后清空并收起输入框，保持焦点。Submits the text; acceptance clears and collapses the input while keeping focus. */
-  onExecute?: (value: string) => boolean;
+  /** 提交当前文字；受理后清空并收起输入框，保持焦点。mode 是这次提交使用的方式。Submits the text; acceptance clears and collapses the input while keeping focus. mode is the submission mode of this send. */
+  onExecute?: (value: string, mode: SubmissionMode) => boolean;
   onStop?: () => void;
+  /**
+   * 目标对 Steer 的支持情况。提供后，执行中有内容的发送按钮变成分体按钮，可以选择 Queue 或 Steer；省略时只有普通发送。
+   * Whether the target supports Steer. When given, the send button of a running turn with content becomes a split button offering Queue or Steer; omitted, there is only the plain send.
+   */
+  steerAvailability?: SteerAvailability;
+  /** 默认提交方式，回车使用它；默认 queue。The default submission mode Enter uses; queue by default. */
+  preferredSubmitMode?: SubmissionMode;
+  onPreferredSubmitModeChange?: (mode: SubmissionMode) => void;
+  /** 备用快捷键选中了不可用的方式时报告原因，这时不发送。Reports the reason when the alternate shortcut picks an unavailable mode; nothing is sent. */
+  onSubmitBlocked?: (reason: string) => void;
   onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   /**
    * 用户编辑输入（含发送后清空）时通知新值；ref 的 setInput 不触发。
@@ -84,8 +126,12 @@ interface UserInputRootProps {
   onInputChange: (value: string, caretIndex: number) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
-  onSend: () => void;
+  onSend: (mode?: SubmissionMode) => void;
   onStop?: () => void;
+  /** 执行期间的提交状态；没有提供 Steer 支持信息时为 null，保持普通发送。The submit state of a running turn; null without Steer support information, which keeps the plain send. */
+  submitState: ComposerSubmitState | null;
+  preferredSubmitMode: SubmissionMode;
+  onPreferredSubmitModeChange?: (mode: SubmissionMode) => void;
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
@@ -111,6 +157,9 @@ function UserInputRoot({
   onPaste,
   onSend,
   onStop,
+  submitState,
+  preferredSubmitMode,
+  onPreferredSubmitModeChange,
   textareaRef,
 }: UserInputRootProps) {
   const { context, topLeft, topRight, bottomLeft, help, sender, queue } = slots;
@@ -127,6 +176,11 @@ function UserInputRoot({
     }
     onSend();
   };
+  const shortcutHint = submitState ? getSubmitShortcutHint(submitState) : null;
+  // 输入框为空时才显示占位文字，这时按钮是停止，所以占位文字跟随执行中的主方式而不是按钮状态。
+  // The placeholder shows only while the input is empty, when the button is Stop, so it follows the running turn's primary mode and not the button state.
+  const effectivePlaceholder =
+    submitState && isExecuting ? getComposerPlaceholder(submitState.primaryMode) : placeholder;
   const expandButton = (
     <Button
       type="button"
@@ -195,7 +249,7 @@ function UserInputRoot({
             aria-expanded={hasSuggestions}
             aria-controls={hasSuggestions ? suggestionListId : undefined}
             aria-activedescendant={hasSuggestions ? activeSuggestionId : undefined}
-            placeholder={placeholder}
+            placeholder={effectivePlaceholder}
             rows={rows}
             className={`${isExpanded ? "h-0 flex-1 field-sizing-fixed" : maxHeight} agw-scrollbar min-h-[1lh] resize-none overflow-x-hidden
             overflow-y-auto rounded-none 
@@ -211,23 +265,182 @@ function UserInputRoot({
             <div className="flex min-w-0 items-center">{bottomLeft}</div>
             <div className="flex shrink-0 items-center gap-2">
               {expandButton}
-              <Button
-                size="icon-sm"
-                className="rounded-full size-7"
-                onClick={handleClick}
-                disabled={isSendDisabled}
-                aria-label={isStopAction ? "Stop execution" : "Send message"}
-              >
-                {isStopAction && sender.length > 0 ? <>{sender}</> : <ArrowUp className="size-5" />}
-              </Button>
+              {submitState && submitState.action === "split" ? (
+                <SplitSendButton
+                  state={submitState}
+                  preferredMode={preferredSubmitMode}
+                  disabled={isSendDisabled}
+                  onSend={onSend}
+                  onPreferredModeChange={onPreferredSubmitModeChange}
+                  onMenuClosed={() => textareaRef?.current?.focus()}
+                />
+              ) : (
+                <Button
+                  size="icon-sm"
+                  className="rounded-full size-7"
+                  onClick={handleClick}
+                  disabled={isSendDisabled}
+                  aria-label={isStopAction ? "Stop execution" : "Send message"}
+                >
+                  {isStopAction && sender.length > 0 ? (
+                    <>{sender}</>
+                  ) : (
+                    <ArrowUp className="size-5" />
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </div>
       </div>
       {/* Helper text */}
-      {help.length > 0 ? (
-        <div className="grid shrink-0 text-xs text-muted-foreground mt-2">{help}</div>
+      {help.length > 0 || shortcutHint || submitState?.fallbackNote ? (
+        <div className="grid shrink-0 text-xs text-muted-foreground mt-2">
+          {help}
+          {shortcutHint ? <p>{shortcutHint}</p> : null}
+          {submitState?.fallbackNote ? <p role="status">{submitState.fallbackNote}</p> : null}
+        </div>
       ) : null}
+    </div>
+  );
+}
+
+function SubmitModeIcon({ mode, className }: { mode: SubmissionMode; className?: string }) {
+  return mode === "steer" ? (
+    <Target className={className} aria-hidden="true" />
+  ) : (
+    <ArrowUpToLine className={className} aria-hidden="true" />
+  );
+}
+
+/** 菜单中两种方式的顺序与说明。The order and descriptions of the two modes in the menu. */
+const SUBMIT_MODE_MENU: ReadonlyArray<{
+  mode: SubmissionMode;
+  description: string;
+  iconClassName: string;
+}> = [
+  { mode: "steer", description: "Process this message now", iconClassName: "text-primary" },
+  {
+    mode: "queue",
+    description: "Run after current work finishes",
+    iconClassName: "text-amber-700 dark:text-amber-500",
+  },
+];
+
+/**
+ * 执行中有内容时的分体发送按钮：主按钮使用默认方式，箭头菜单提供另一种方式与默认方式的切换。
+ * The split send button for a running turn with content: the primary button uses the default mode, and the arrow menu offers the other mode and the switch of the default.
+ */
+function SplitSendButton({
+  state,
+  preferredMode,
+  disabled,
+  onSend,
+  onPreferredModeChange,
+  onMenuClosed,
+}: {
+  state: ComposerSubmitState;
+  preferredMode: SubmissionMode;
+  disabled: boolean;
+  onSend: (mode: SubmissionMode) => void;
+  onPreferredModeChange?: (mode: SubmissionMode) => void;
+  /** 菜单关闭后把焦点交还输入框。Hands focus back to the input after the menu closes. */
+  onMenuClosed: () => void;
+}) {
+  const { primaryMode, alternateMode, alternateBlockedReason } = state;
+  if (alternateMode === null) throw new Error("A split send button needs an alternate mode.");
+  const label = getSubmitButtonLabel(primaryMode);
+
+  return (
+    <div
+      role="group"
+      aria-label="Send"
+      className="flex h-7 items-stretch overflow-hidden rounded-full"
+    >
+      <Button
+        type="button"
+        className="h-7 w-9 rounded-none px-0"
+        onClick={() => onSend(primaryMode)}
+        disabled={disabled}
+        aria-label={label}
+        title={`${label} (${PRIMARY_SUBMIT_SHORTCUT})`}
+      >
+        <SubmitModeIcon mode={primaryMode} className="size-4" />
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            className="h-7 w-7 rounded-none border-l border-primary-foreground/30 px-0 brightness-90 hover:brightness-75"
+            disabled={disabled}
+            aria-label="More send options"
+            title="More send options"
+          >
+            <ChevronUp className="size-4" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          side="top"
+          align="end"
+          className="w-72 rounded-2xl p-2"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            onMenuClosed();
+          }}
+        >
+          {onPreferredModeChange ? (
+            <>
+              {SUBMIT_MODE_MENU.map((entry) => {
+                const blockedReason = entry.mode === "steer" ? alternateBlockedReason : null;
+                const selected = entry.mode === primaryMode;
+                return (
+                  <DropdownMenuItem
+                    key={entry.mode}
+                    role="menuitemradio"
+                    aria-checked={selected}
+                    disabled={blockedReason !== null}
+                    className="cursor-pointer items-start gap-3 rounded-lg px-3 py-2"
+                    onSelect={() => {
+                      if (entry.mode !== preferredMode) onPreferredModeChange(entry.mode);
+                    }}
+                  >
+                    <SubmitModeIcon
+                      mode={entry.mode}
+                      className={`mt-0.5 size-5 shrink-0 ${entry.iconClassName}`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">
+                        {SUBMIT_MODE_LABELS[entry.mode]}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {blockedReason ?? entry.description}
+                      </span>
+                    </span>
+                    {selected ? (
+                      <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                    ) : null}
+                  </DropdownMenuItem>
+                );
+              })}
+              <DropdownMenuSeparator />
+            </>
+          ) : null}
+          <DropdownMenuItem
+            disabled={alternateBlockedReason !== null}
+            className="cursor-pointer gap-3 rounded-lg px-3 py-2"
+            onSelect={() => onSend(alternateMode)}
+          >
+            <kbd className="shrink-0 rounded border bg-muted px-1 font-mono text-11 text-muted-foreground">
+              {ALTERNATE_SUBMIT_SHORTCUT}
+            </kbd>
+            <span className="min-w-0 text-sm">
+              {onPreferredModeChange
+                ? getSendOptionLabel(alternateMode)
+                : (alternateBlockedReason ?? getSendOptionLabel(alternateMode))}
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -409,6 +622,10 @@ function UserInputContainer({
   expandOverlay = false,
   children,
   onSuggestion,
+  steerAvailability,
+  preferredSubmitMode = "queue",
+  onPreferredSubmitModeChange,
+  onSubmitBlocked,
   inputRef,
 }: UserInputProps & { inputRef: React.Ref<UserInputRef> }) {
   const [input, setInput] = React.useState("");
@@ -524,13 +741,22 @@ function UserInputContainer({
     />
   );
 
+  const submitState = steerAvailability
+    ? resolveComposerSubmit({
+        isExecuting,
+        hasContent: hasSubmittableInput(input, canSubmitWithoutText),
+        preferredMode: preferredSubmitMode,
+        steer: steerAvailability,
+      })
+    : null;
+
   // 发送按钮与键盘快捷键共用这个入口；被拒绝时保留草稿。
   // The send button and keyboard shortcuts share this entry; a rejected submission keeps the draft.
-  const handleSend = () => {
+  const handleSend = (mode: SubmissionMode = submitState?.primaryMode ?? "queue") => {
     if (isDisabled || isSubmitDisabled || !hasSubmittableInput(input, canSubmitWithoutText)) {
       return;
     }
-    if (!onExecute?.(input)) {
+    if (!onExecute?.(input, mode)) {
       return;
     }
     suggestionRequestRef.current += 1;
@@ -589,6 +815,23 @@ function UserInputContainer({
     }
 
     if (
+      submitState &&
+      event.key === "Enter" &&
+      event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.shiftKey
+    ) {
+      // 备用快捷键：用另一种提交方式发送；该方式不可用时只报告原因。
+      // The alternate shortcut sends with the other mode; when that mode is unavailable it only reports the reason.
+      event.preventDefault();
+      const action = resolveComposerKey(submitState, "alternate");
+      if (action.type === "submit") handleSend(action.mode);
+      else if (action.type === "blocked") onSubmitBlocked?.(action.reason);
+      return;
+    }
+
+    if (
       !isExpanded &&
       event.key === "Enter" &&
       !event.shiftKey &&
@@ -636,6 +879,9 @@ function UserInputContainer({
         onPaste={onPaste}
         onSend={handleSend}
         onStop={onStop}
+        submitState={submitState}
+        preferredSubmitMode={preferredSubmitMode}
+        onPreferredSubmitModeChange={onPreferredSubmitModeChange}
         textareaRef={textareaRef}
       />
     </div>

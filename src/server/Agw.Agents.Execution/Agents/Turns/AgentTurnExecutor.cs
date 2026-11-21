@@ -8,6 +8,7 @@ using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Messaging;
+using Agw.Agents.Execution.Steering;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.History;
@@ -170,6 +171,14 @@ public sealed class AgentTurnExecutor
                     )
                 )
                 {
+                    // 外部引擎在运行中接收的 Steer 输入：向客户端写出用户消息与 steer-delivered，不计入本次响应。
+                    // A Steer input the external engine accepted mid-run: the user message and steer-delivered go to the client and stay out of this response.
+                    if (SteerDelivery.GetDeliveredEntry(update) is { } steered)
+                    {
+                        yield return SteerMessages.CreateUserMessage(scope, steered);
+                        yield return SteerMessages.CreateDelivered(scope, steered, scope.StepIndex);
+                        continue;
+                    }
                     turnPersistence.Record(ToolStateSnapshots.ToMessage(update));
                     responseUpdates.Add(update);
                     approvals.AddRange(update.Contents.OfType<ToolApprovalRequestContent>());
@@ -191,6 +200,16 @@ public sealed class AgentTurnExecutor
                 }
                 if (approvals.Count == 0)
                 {
+                    // 模型不再请求工具：此时到达的 Steer 作为新的 Step 继续同一个 Turn，没有则关闭集合后结束。
+                    // The model requests no more tools: Steer inputs that arrived meanwhile continue the same turn as a new Step; with none the inbox closes and the turn ends.
+                    if (
+                        scope.Steers is { } steers
+                        && await steers.TakePendingOrCloseAsync(cancellationToken) is { Count: > 0 } late
+                    )
+                    {
+                        currentRequestMessages = await SteerDelivery.DeliverAsync(scope, late, cancellationToken);
+                        continue;
+                    }
                     break;
                 }
 

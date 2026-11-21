@@ -219,6 +219,35 @@ public sealed class PiAgentAIAgent : AIAgent, IAsyncDisposable
         }
     }
 
+    /// <summary>Queues user messages as steering input for the run active in a session.</summary>
+    /// <param name="session">The MAF session whose Pi run receives the messages.</param>
+    /// <param name="messages">The user messages to deliver; text and images are sent.</param>
+    /// <param name="cancellationToken">Cancels sending or awaiting the steer command.</param>
+    /// <returns>
+    /// <see langword="true"/> when Pi accepted the messages; <see langword="false"/> when the session has no run that
+    /// accepts steering.
+    /// </returns>
+    public async Task<bool> SteerAsync(
+        AgentSession session,
+        IEnumerable<ChatMessage> messages,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(messages);
+        if (session is not PiAgentSession piSession)
+        {
+            throw new InvalidOperationException($"Expected {nameof(PiAgentSession)} but got {session.GetType().Name}.");
+        }
+
+        var prompt =
+            PiMafPromptBuilder.Create(messages as IReadOnlyList<ChatMessage> ?? messages.ToList())
+            ?? throw new ArgumentException("Steering input needs text or images.", nameof(messages));
+        return piSession.BoundSession is { } bound
+            && await bound.SteerAsync(prompt.Text, prompt.Images, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Disposes every live Pi session and terminates its owned RPC process.</summary>
     /// <returns>A task representing asynchronous cleanup.</returns>
     public async ValueTask DisposeAsync()

@@ -18,6 +18,7 @@ import {
   buildSetModeCommand,
   buildSetPermissionModeCommand,
   buildSettingCommand as buildCoreSettingCommand,
+  buildSteerCommand,
   buildSubscribeTurnCommand as buildCoreSubscribeTurnCommand,
   DEFAULT_AGENT_MODE,
   executionReconnectDelaysMs,
@@ -184,6 +185,14 @@ export type ExecutionRequest = ExecutionTarget & {
 
 export type { TurnFinishedStatus };
 
+/** 发往进行中 Turn 的 Steer；steerId 同时是 input.messageId。A Steer for the running turn; the steerId is also input.messageId. */
+export type ExecutionSteerRequest = {
+  conversationId: string;
+  turnId: string;
+  steerId: string;
+  input: ExecutionUserInput;
+};
+
 export type ExecutionHubHandlers = {
   onMessage: (message: AiMessage) => void;
   onError?: (error: Error) => void;
@@ -245,9 +254,18 @@ type ExecutionProviderCapability = "in-process" | "distributed" | null;
 type DurableRestoreResult = "active" | "finished" | "missing";
 
 /** 服务端以 AgwException 拒绝的命令在 SignalR 错误中带有 HubException 标记。 */
-function isServerRejection(error: unknown): boolean {
+export function isServerRejection(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes("HubException:");
+}
+
+/**
+ * 读取 HubException 消息中的七位错误码；不是服务端拒绝时返回 null。
+ * Reads the seven-digit code from a HubException message; returns null when the error is not a server rejection.
+ */
+export function getHubErrorCode(error: unknown): string | null {
+  const message = error instanceof Error ? error.message : String(error);
+  return /HubException: (\d{7})\b/u.exec(message)?.[1] ?? null;
 }
 
 function getAttachmentServer(runtime: ExecutionRuntimeConfig): string {
@@ -578,6 +596,14 @@ export class ExecutionSession {
       if (await this.reconcileStartFailure(turnId, error)) return;
       throw error;
     }
+  }
+
+  /**
+   * 把输入送入进行中的 Turn；成功只表示服务端已受理，不表示已送达。Hub 拒绝时抛出带七位错误码的 HubException。
+   * Sends input into the running turn; success only means the server accepted it, not that it was delivered. A Hub rejection throws a HubException carrying the seven-digit code.
+   */
+  public async steer(request: ExecutionSteerRequest): Promise<void> {
+    await this.dispatch(buildSteerCommand(request));
   }
 
   public async listAgentflowCheckpoints(
