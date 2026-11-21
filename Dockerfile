@@ -21,6 +21,9 @@ COPY src/server/Agw.Agents/Agw.Agents.csproj ./src/server/Agw.Agents/
 COPY src/server/Agw.Agents.Execution/Agw.Agents.Execution.csproj ./src/server/Agw.Agents.Execution/
 COPY src/server/Agw.Auth/Agw.Auth.csproj ./src/server/Agw.Auth/
 COPY src/server/Agw.Data/Agw.Data.csproj ./src/server/Agw.Data/
+COPY src/server/Agw.Extensions.Contracts/Agw.Extensions.Contracts.csproj ./src/server/Agw.Extensions.Contracts/
+COPY src/server/Agw.Extensions.Sdk/Agw.Extensions.Sdk.csproj ./src/server/Agw.Extensions.Sdk/
+COPY src/server/Agw.Extensions/Agw.Extensions.csproj ./src/server/Agw.Extensions/
 COPY src/server/Agw.Files/Agw.Files.csproj ./src/server/Agw.Files/
 COPY src/server/Agw.ControlPlane.Host/Agw.ControlPlane.Host.csproj ./src/server/Agw.ControlPlane.Host/
 COPY src/server/Agw.DataPlane.Host/Agw.DataPlane.Host.csproj ./src/server/Agw.DataPlane.Host/
