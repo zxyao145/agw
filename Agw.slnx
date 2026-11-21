@@ -30,7 +30,6 @@
     <Project Path="src/server/Agw.Migrations.Sqlite/Agw.Migrations.Sqlite.csproj" />
   </Folder>
   <Folder Name="/4.Modules/">
-    <Project Path="src/server/Agw.Events/Agw.Events.csproj" />
     <Project Path="src/server/Agw.Notifications/Agw.Notifications.csproj" />
     <Project Path="src/server/Agw.Agents.Execution/Agw.Agents.Execution.csproj" />
     <Project Path="src/server/Agw.Files/Agw.Files.csproj" />
@@ -52,7 +51,6 @@
   </Folder>
   <Folder Name="/5.Shared/Contracts/">
     <Project Path="src/server/Agw.Notifications.Contracts/Agw.Notifications.Contracts.csproj" />
-    <Project Path="src/server/Agw.Events.Contracts/Agw.Events.Contracts.csproj" />
     <Project Path="src/server/Agw.Tools.Generators/Agw.Tools.Generators.csproj" />
     <Project Path="src/server/Agw.Providers.Contracts/Agw.Providers.Contracts.csproj" />
     <Project Path="src/server/Agw.Skills.Contracts/Agw.Skills.Contracts.csproj" />
@@ -73,10 +71,7 @@
     <Project Path="src/sdks/pi-agent-sdk-csharp/tests/PiAgentSdk.MAF.Tests/PiAgentSdk.MAF.Tests.csproj" />
     <Project Path="src/sdks/pi-agent-sdk-csharp/tests/PiAgentSdk.Tests/PiAgentSdk.Tests.csproj" />
   </Folder>
-  <Folder Name="/8.Extensions/">
-    <Project Path="src/extensions/feishu/server/Agw.Extensions.Feishu.csproj" />
-    <Project Path="src/extensions/taskpilot/server/Agw.Extensions.TaskPilot.csproj" />
-  </Folder>
+  <Folder Name="/8.Extensions/" />
   <Folder Name="/Tests/">
     <Project Path="tests/Agw.Extensions.Feishu.Tests/Agw.Extensions.Feishu.Tests.csproj" />
     <Project Path="tests/Agw.Extensions.TaskPilot.Runtime.Tests/Agw.Extensions.TaskPilot.Runtime.Tests.csproj" />
