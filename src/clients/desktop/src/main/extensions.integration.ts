@@ -19,7 +19,7 @@ import {
   nativeTheme,
   session,
   type WebContents,
-  type WebContentsView,
+  WebContentsView,
 } from "electron";
 import iconv from "iconv-lite";
 
@@ -1220,6 +1220,7 @@ async function bundledDefaults(): Promise<void> {
   const settings = await readJson<SettingsFile>(join(config.userData, "settings.json"));
   assert.equal(settings.extensions[EXTENSION_IDS.markdown].enabled, true);
   assert.deepEqual([...settings.extensions[EXTENSION_IDS.markdown].grantedPermissions].sort(), [
+    "chat.composer",
     "fs.cloud.read",
     "fs.cloud.write",
   ]);
@@ -1744,27 +1745,203 @@ async function chatContributions(): Promise<void> {
 }
 
 async function floatingChat(): Promise<void> {
-  await openFileInTree("src/app.ts");
-  await clickHost('button[aria-label="Open chat"]');
-  await untilHost(
-    `Boolean(document.querySelector('[data-slot="floating-chat-panel"]'))`,
-    "the Source floating Chat panel",
+  const chatButton = 'button[aria-label="Open chat"]';
+  const chatPanel = '[data-slot="floating-chat-panel"]';
+  type ButtonBounds = {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    viewportWidth: number;
+    viewportHeight: number;
+  };
+  const mouse = (view: WebContentsView, event: Electron.MouseInputEvent): void => {
+    const parent = hooks.mainWindow()!.getContentBounds();
+    const bounds = view.getBounds();
+    view.webContents.sendInputEvent({
+      ...event,
+      globalX: parent.x + bounds.x + event.x,
+      globalY: parent.y + bounds.y + event.y,
+    });
+  };
+  const clickWithMouse = async (
+    view: WebContentsView,
+    point: { x: number; y: number },
+  ): Promise<void> => {
+    const contents = view.webContents;
+    const before = view.getBounds();
+    contents.focus();
+    mouse(view, { type: "mouseMove", ...point });
+    mouse(view, { type: "mouseDown", ...point, button: "left", clickCount: 1 });
+    await until(
+      () => view.getBounds().width === hooks.mainWindow()!.getContentSize()[0],
+      "the Chat click layer",
+    );
+    mouse(view, {
+      type: "mouseUp",
+      x: before.x + point.x,
+      y: before.y + point.y,
+      button: "left",
+      clickCount: 1,
+    });
+  };
+  const nativeButton = (): WebContentsView | undefined =>
+    hooks
+      .mainWindow()
+      ?.contentView.children.find(
+        (view): view is WebContentsView =>
+          view instanceof WebContentsView &&
+          view.webContents.getURL().startsWith("agw-floating-chat://app/"),
+      );
+  const dragWithMouse = async (
+    view: WebContentsView,
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+  ): Promise<void> => {
+    const contents = view.webContents;
+    const origin = view.getBounds();
+    const localStart = { x: start.x - origin.x, y: start.y - origin.y };
+    contents.focus();
+    mouse(view, { type: "mouseMove", ...localStart });
+    mouse(view, { type: "mouseDown", ...localStart, button: "left", clickCount: 1 });
+    await until(() => {
+      const [width, height] = hooks.mainWindow()!.getContentSize();
+      const bounds = view.getBounds();
+      return bounds.width === width && bounds.height === height;
+    }, "the Chat drag layer across the application window");
+    for (let step = 1; step <= 5; step += 1) {
+      mouse(view, {
+        type: "mouseMove",
+        x: Math.round(start.x + ((end.x - start.x) * step) / 5),
+        y: Math.round(start.y + ((end.y - start.y) * step) / 5),
+        modifiers: ["leftbuttondown"],
+      });
+    }
+    mouse(view, { type: "mouseUp", ...end, button: "left", clickCount: 1 });
+  };
+  const buttonBounds = async (): Promise<ButtonBounds | null> => {
+    const view = nativeButton();
+    if (!view?.getVisible()) return null;
+    const rect: {
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+    } | null = await view.webContents.executeJavaScript(`(() => {
+      const button = document.querySelector(${JSON.stringify(chatButton)});
+      if (!button) return null;
+      const {left, top, width, height} = button.getBoundingClientRect();
+      return {left, top, width, height};
+    })()`);
+    if (!rect) return null;
+    const [viewportWidth, viewportHeight] = hooks.mainWindow()!.getContentSize();
+    return {
+      ...rect,
+      left: view.getBounds().x + rect.left,
+      top: view.getBounds().y + rect.top,
+      viewportWidth,
+      viewportHeight,
+    };
+  };
+  const clickButton = async () => {
+    await until(buttonBounds, "the window Chat icon button");
+    const view = nativeButton()!;
+    const point: { x: number; y: number } = await view.webContents.executeJavaScript(`(() => {
+      const rect = document.querySelector(${JSON.stringify(chatButton)}).getBoundingClientRect();
+      return {x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2)};
+    })()`);
+    await clickWithMouse(view, point);
+  };
+  const buttonFocused = async () => {
+    const view = nativeButton();
+    return (
+      view?.getVisible() &&
+      view.webContents.executeJavaScript(
+        `document.hasFocus() && document.activeElement?.getAttribute("aria-label") === "Open chat"`,
+      )
+    );
+  };
+  const centerOfButton = (bounds: ButtonBounds) => ({
+    x: Math.round(bounds.left + bounds.width / 2),
+    y: Math.round(bounds.top + bounds.height / 2),
+  });
+  const dragAndSnap = async (side: "left" | "right", verticalPosition: number, label: string) => {
+    const before = await until(buttonBounds, `the ${label} floating Chat button`);
+    await dragWithMouse(nativeButton()!, centerOfButton(before), {
+      x: side === "left" ? 40 : before.viewportWidth - 40,
+      y: Math.round(before.viewportHeight * verticalPosition),
+    });
+    const after = await until(async () => {
+      const [bounds, panelOpen] = await Promise.all([
+        buttonBounds(),
+        evalHost<boolean>(`Boolean(document.querySelector(${JSON.stringify(chatPanel)}))`),
+      ]);
+      return bounds &&
+        !panelOpen &&
+        (side === "left"
+          ? bounds.left <= 24
+          : bounds.left + bounds.width >= bounds.viewportWidth - 24)
+        ? bounds
+        : null;
+    }, `the ${label} button to snap ${side} without opening Chat`);
+    assert.ok(Math.abs(after.top - before.top) > 20);
+    return after;
+  };
+  const sendAndAssertContext = async (text: string, path: string, label: string) => {
+    await setInput('textarea[role="combobox"]', text);
+    await clickHost('button[aria-label="Send message"]');
+    await until(
+      async () =>
+        (await serviceState()).echoInputs.some(
+          (request) =>
+            request.includes(text) && request.includes(`"projectRelativePath": "${path}"`),
+        ),
+      label,
+    );
+  };
+  const closeChat = async (label: string) => {
+    await clickHost('button[aria-label="Close chat"]');
+    await untilHost(`!document.querySelector(${JSON.stringify(chatPanel)})`, label);
+  };
+  const waitForPanel = (label: string) =>
+    untilHost(`Boolean(document.querySelector(${JSON.stringify(chatPanel)}))`, label);
+
+  await openMainView("agw.chat");
+  await showSidebarView("agw.conversations", "agw.ribbon.conversations");
+  await clickHost(
+    '.agw-left-sidebar[data-view-id="agw.conversations"] .tools button:has(svg.lucide-plus)',
   );
-  await setInput('textarea[role="combobox"]', "source floating chat context");
-  await clickHost('button[aria-label="Send message"]');
-  await until(
-    async () =>
-      (await serviceState()).echoInputs.some(
-        (text) =>
-          text.includes("source floating chat context") &&
-          text.includes('"projectRelativePath": "src/app.ts"'),
-      ),
+  await untilHost(
+    `!new URLSearchParams(location.search).get("conversationId")`,
+    "a fresh conversation for floating Chat",
+  );
+  await selectHostTarget("Echo");
+
+  await openFileInTree("src/app.ts");
+  await focusHostWindow();
+  await dragAndSnap("left", 0.42, "Source");
+  await dragAndSnap("right", 0.58, "Source");
+
+  await clickButton();
+  await waitForPanel("the Source floating Chat panel");
+  await sendAndAssertContext(
+    "source floating chat context",
+    "src/app.ts",
     "the Source file path in the floating Chat request",
   );
-  await clickHost('button[aria-label="Close chat"]');
+  await closeChat("the Source floating Chat panel to close");
+  await until(buttonFocused, "the Source Chat button to regain focus");
+
+  await openMainView("agw.chat");
   await untilHost(
-    `!document.querySelector('[data-slot="floating-chat-panel"]')`,
-    "the Source floating Chat panel to close",
+    `!document.querySelector(${JSON.stringify(chatPanel)})`,
+    "Chat to stay closed while Source hides",
+  );
+  await openFileInTree("src/app.ts");
+  await until(buttonBounds, "the Source Chat button after showing the file");
+  await untilHost(
+    `!document.querySelector(${JSON.stringify(chatPanel)})`,
+    "Chat to stay closed after showing Source",
   );
 
   await openMainView(`${EXTENSION_IDS.sample}:app`);
@@ -1775,45 +1952,101 @@ async function floatingChat(): Promise<void> {
       context: { projectRelativePath: "extension/sample.md" },
     }); return true;`,
   );
-  await until(
-    () =>
-      evalFrame<boolean>(main, `Boolean(document.querySelector('button[aria-label="Open chat"]'))`),
-    "the SDK floating Chat button",
-  );
-  await evalFrame(main, `document.querySelector('button[aria-label="Open chat"]').click(); true`);
-  await untilHost(
-    `Boolean(document.querySelector('[data-slot="floating-chat-panel"]'))`,
-    "the extension floating Chat panel",
-  );
-  await setInput('textarea[role="combobox"]', "extension floating chat context");
-  await clickHost('button[aria-label="Send message"]');
-  await until(
-    async () =>
-      (await serviceState()).echoInputs.some(
-        (text) =>
-          text.includes("extension floating chat context") &&
-          text.includes('"projectRelativePath": "extension/sample.md"'),
-      ),
+  await until(buttonBounds, "the SDK floating Chat button");
+  await clickButton();
+  await waitForPanel("the extension floating Chat panel");
+  await sendAndAssertContext(
+    "extension floating chat context",
+    "extension/sample.md",
     "the extension context in the floating Chat request",
   );
-  await clickHost('button[aria-label="Close chat"]');
+  await closeChat("the extension floating Chat panel to close");
   await until(
-    async () =>
-      main.view.getVisible() &&
-      (await evalFrame<string | null>(
-        main,
-        "document.activeElement?.getAttribute('aria-label') ?? null",
-      )) === "Open chat",
+    async () => main.view.getVisible() && (await buttonFocused()),
     "the extension view and floating Chat button to regain focus",
   );
   await api(main, "await window.floatingChatHandle.dispose(); return true;");
+  await until(() => !nativeButton()?.getVisible(), "the extension floating Chat button to dispose");
+
+  await openFileInTree("notes/edit.md");
+  await selectViewer(MIXED_VIEWER);
+  const mixed = await mixedShowing("true", "notes/edit.md in Mixed for floating Chat");
+  await focusHostWindow();
+  const mixedLeft = await dragAndSnap("left", 0.42, "Mixed");
+  const workspaceLeft = await evalHost<number>(
+    `document.querySelector('.agw-main-workspace').getBoundingClientRect().left`,
+  );
+  assert.ok(mixedLeft.left < workspaceLeft);
+  assert.ok(mixed.view.getVisible());
+  await openMenuAndWait(MORE_BUTTON);
   await until(
-    () => evalFrame<boolean>(main, `!document.querySelector('button[aria-label="Open chat"]')`),
-    "the extension floating Chat button to dispose",
+    () => !nativeButton()?.getVisible(),
+    "the Chat icon to hide while a file menu is open",
+  );
+  await pressEscape();
+  await until(buttonBounds, "the Chat icon after dismissing the file menu");
+  await until(
+    () => mixed.view.getVisible(),
+    "Mixed to remain interactive after dismissing the menu",
+  );
+  await dragAndSnap("right", 0.58, "Mixed");
+
+  await clickButton();
+  await waitForPanel("the Mixed floating Chat panel");
+  await sendAndAssertContext(
+    "mixed floating chat initial context",
+    "notes/edit.md",
+    "the initial Mixed file path in the floating Chat request",
+  );
+  await closeChat("the Mixed Chat panel to close");
+  await until(
+    () => mixed.view.getVisible() && buttonFocused(),
+    "the Mixed view and Chat button to regain focus",
+  );
+
+  await selectViewer("source");
+  await until(() => !mixed.view.getVisible(), "Mixed to hide safely");
+  await selectViewer(MIXED_VIEWER);
+  const restoredMixed = await mixedShowing("true", "Mixed to show again for floating Chat");
+  await until(buttonBounds, "the Mixed Chat button after showing the viewer");
+  await clickButton();
+  await waitForPanel("the restored Mixed floating Chat panel");
+  await sendAndAssertContext(
+    "mixed floating chat restored context",
+    "notes/edit.md",
+    "the restored Mixed file path in the floating Chat request",
+  );
+  await closeChat("the restored Mixed Chat panel to close");
+  await until(
+    () => restoredMixed.view.getVisible() && buttonFocused(),
+    "the restored Mixed view and Chat button to regain focus",
+  );
+
+  await openFileInTree("readme.md");
+  await selectViewer(MIXED_VIEWER);
+  const switchedMixed = await mixedShowing("true", "readme.md in Mixed after switching files");
+  await until(buttonBounds, "the Mixed Chat button after switching files");
+  await clickButton();
+  await waitForPanel("the switched-file Mixed floating Chat panel");
+  await sendAndAssertContext(
+    "mixed floating chat switched file context",
+    "readme.md",
+    "the switched Mixed file path in the floating Chat request",
+  );
+  await closeChat("the switched-file Mixed Chat panel to close");
+  await until(
+    () => switchedMixed.view.getVisible() && buttonFocused(),
+    "the switched Mixed view and Chat button to regain focus",
+  );
+
+  await openMainView("agw.chat");
+  await untilHost(
+    `!document.querySelector(${JSON.stringify(chatPanel)})`,
+    "the floating Chat panel to close before returning to Chat",
   );
   await showSidebarView("agw.conversations", "agw.ribbon.conversations");
   pass(
-    "Source and extension floating Chat buttons send their file context and return focus on close",
+    "Source and Mixed Chat icons snap to the application edges, preserve editor interaction, send file context, and regain focus",
   );
 }
 

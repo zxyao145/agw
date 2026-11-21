@@ -159,6 +159,24 @@ test("a loaded file viewer gets onShow when it is shown again after being hidden
   assert.deepEqual(hooks(page), ["view.onLoad", "view.onHide", "view.onShow"]);
 });
 
+test("Source registers the window Chat button with the current file context", () => {
+  host.setSourceFloatingChatContext({ projectRelativePath: "first.md" });
+  assert.deepEqual(host.getSnapshot().floatingChatButton, {
+    owner: "source",
+    obscured: false,
+  });
+  host.setObscuredFrames(new Set(), true);
+  assert.equal(host.getSnapshot().floatingChatButton?.obscured, true);
+  host.setObscuredFrames(new Set(), false);
+  assert.equal(host.getSnapshot().floatingChatButton?.obscured, false);
+  host.setSourceFloatingChatContext({ projectRelativePath: "second.md" });
+  assert.deepEqual(host.getSnapshot().floatingChat?.context, {
+    projectRelativePath: "second.md",
+  });
+  host.closeSourceFloatingChat();
+  assert.equal(host.getSnapshot().floatingChatButton, null);
+});
+
 test("floating Chat handles survive retained-view hide and keep registrations per view", async () => {
   const file = fileNamed("notes.md");
   const viewer = await showLoaded(VIEWER, file);
@@ -168,6 +186,8 @@ test("floating Chat handles survive retained-view hide and keep registrations pe
   ).chat.createFloatingChat({
     context: { projectRelativePath: "viewer.md" },
   });
+  const viewerOwner = host.getSnapshot().floatingChatButton?.owner;
+  assert.ok(viewerOwner);
   const outlineChat = await (
     await outline.page.api
   ).chat.createFloatingChat({
@@ -176,15 +196,18 @@ test("floating Chat handles survive retained-view hide and keep registrations pe
 
   viewer.release();
   await until(() => hooks(viewer.page).includes("view.onHide"), "the viewer to hide");
+  assert.notEqual(host.getSnapshot().floatingChatButton?.owner, viewerOwner);
   await viewerChat.setContext({ projectRelativePath: "viewer-after-hide.md" });
   const showAgain = acquire(VIEWER);
   await until(() => hooks(viewer.page).includes("view.onShow"), "the viewer to show again");
+  assert.equal(host.getSnapshot().floatingChatButton?.owner, viewerOwner);
 
   await assert.rejects(viewerChat.open(), { code: "ERR_UNAVAILABLE" });
   await viewerChat.close();
   await viewerChat.dispose();
   await outlineChat.setContext({ projectRelativePath: "outline-still-available.md" });
   await outlineChat.dispose();
+  assert.equal(host.getSnapshot().floatingChatButton, null);
   showAgain();
   outline.release();
 });

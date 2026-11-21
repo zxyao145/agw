@@ -54,6 +54,34 @@ test("floating mode has the overlay slot and Escape requests close", () => {
   act(() => view.unmount());
 });
 
+test("the new conversation action keeps floating Chat open and its content mounted", () => {
+  let conversations = 0;
+  let closes = 0;
+  const view = render(
+    React.createElement(FloatingChatPanel, {
+      mode: "floating",
+      onNewConversation: () => {
+        conversations += 1;
+      },
+      onClose: () => {
+        closes += 1;
+      },
+      children: React.createElement("textarea", { role: "combobox" }),
+    }),
+  );
+  const input = screen.getByRole("combobox");
+  const button = screen.getByRole("button", { name: "New conversation" });
+
+  assert.equal(button.textContent, "new");
+  fireEvent.click(button);
+
+  assert.equal(conversations, 1);
+  assert.equal(closes, 0);
+  assert.ok(document.querySelector('[data-slot="floating-chat-panel"]'));
+  assert.strictEqual(screen.getByRole("combobox"), input);
+  act(() => view.unmount());
+});
+
 test("floating mode focuses the chat textarea instead of the Agent selector", () => {
   const view = render(
     React.createElement(FloatingChatPanel, {

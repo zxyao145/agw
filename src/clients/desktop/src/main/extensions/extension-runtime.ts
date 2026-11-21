@@ -78,6 +78,7 @@ export type ExtensionRuntimeOptions = {
   /** 安装与启用的权限批准使用的确认服务。The confirmation service for install and enable approvals. */
   confirmations: ConfirmationService;
   getMainWindow(): BrowserWindow | null;
+  onViewAdded?(): void;
   /** extension 设置写入后通知 index.ts 重新读取设置。Tells index.ts to reload settings after an extension settings write. */
   onSettingsChanged(): Promise<void>;
   log(message: string): void;
@@ -158,6 +159,7 @@ export class ExtensionRuntime {
     });
     this.views = new ExtensionViewManager({
       getMainWindow: options.getMainWindow,
+      onViewAdded: options.onViewAdded,
       registry: this.registry,
       sessions: this.sessions,
       preloadPath: options.extensionPreloadPath,
