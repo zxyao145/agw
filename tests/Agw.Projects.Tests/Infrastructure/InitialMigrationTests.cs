@@ -50,6 +50,8 @@ public sealed class InitialMigrationTests
                 "is_active = TRUE",
                 "project_conversation_turn",
                 "durable_execution",
+                "execution_steer",
+                "ix_execution_steer_turn_id_status",
                 "scope_backfilled",
                 "generation",
                 "ix_durable_execution_scope_backfilled_user_id_id",
@@ -204,6 +206,7 @@ public sealed class InitialMigrationTests
         Assert.True(await TableExistsAsync(connection, "project_conversation_binding", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "task_session_binding", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "durable_execution", cancellationToken));
+        Assert.True(await TableExistsAsync(connection, "execution_steer", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "execution_stream_entry", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "agentflow_checkpoint", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "api_token", cancellationToken));

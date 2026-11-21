@@ -302,6 +302,7 @@ public class EncryptedDataPersistenceTests
                 $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.ResponsesJson)}",
                 $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.TurnCheckpointJson)}",
                 $"{typeof(DurableExecutionEventRecord).FullName}.{nameof(DurableExecutionEventRecord.PayloadJson)}",
+                $"{typeof(DurableExecutionSteerRecord).FullName}.{nameof(DurableExecutionSteerRecord.InputJson)}",
                 $"{typeof(ConnectionCredential).FullName}.{nameof(ConnectionCredential.Value)}",
                 $"{typeof(PluginInstallationCredential).FullName}.{nameof(PluginInstallationCredential.Value)}",
                 $"{typeof(NotificationQuestion).FullName}.{nameof(NotificationQuestion.AnswerText)}",
