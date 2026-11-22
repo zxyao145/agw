@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Agw.Agents.Contracts.Execution;
 using Agw.Auth.Contracts;
 using Agw.Events.Application;
@@ -78,6 +79,9 @@ public sealed class EventJobFacadeTests
 
     [Theory]
     [InlineData("Interval", "PT0S", null)]
+    [InlineData("Interval", "PT29S", null)]
+    [InlineData("Interval", "PT45S", null)]
+    [InlineData("Interval", "PT30.5S", null)]
     [InlineData("Interval", "P2147483647D", null)]
     [InlineData("Interval", "P10675198D", null)]
     [InlineData("Cron", null, "not a cron")]
@@ -185,20 +189,66 @@ public sealed class EventJobFacadeTests
         Assert.Empty(await db.EventSchedules.ToListAsync(Ct));
     }
 
-    [Fact]
-    public async Task CreateAsync_IntervalWithDays_SchedulesAfterOneDay()
+    [Theory]
+    [InlineData("PT30S", 30)]
+    [InlineData("PT1M30S", 90)]
+    [InlineData("P1D", 86_400)]
+    [InlineData("P12M", 31_536_000)]
+    public async Task CreateAsync_ValidInterval_SchedulesAfterInterval(string interval, int seconds)
     {
         using var user = PushUser();
-        await using var fixture = await Fixture.CreateAsync();
+        var clock = new TestTimeProvider(new DateTimeOffset(2026, 11, 14, 0, 15, 0, TimeSpan.Zero));
+        await using var fixture = await Fixture.CreateAsync(clock);
         var definition = Definition() with
         {
-            Schedule = new EventJobSchedule { Kind = "Interval", Interval = "P1D" },
+            Schedule = new EventJobSchedule { Kind = "Interval", Interval = interval },
         };
-        var before = TimeProvider.System.GetUtcNow();
 
         var job = await fixture.Jobs.CreateAsync(definition, Ct);
 
-        Assert.InRange(job.DueAt!.Value - before, TimeSpan.FromDays(1), TimeSpan.FromDays(1) + TimeSpan.FromMinutes(1));
+        Assert.Equal(clock.GetUtcNow().AddSeconds(seconds), job.DueAt);
+        Assert.Equal(TimeSpan.FromSeconds(seconds), (await fixture.JobScheduleAsync(job.Id)).Interval);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_InstructionsWithLegacyInterval_KeepsIntervalDueAtAndRevision()
+    {
+        using var user = PushUser();
+        var clock = new TestTimeProvider(new DateTimeOffset(2026, 11, 14, 0, 15, 0, TimeSpan.Zero));
+        await using var fixture = await Fixture.CreateAsync(clock);
+        var job = await fixture.Jobs.CreateAsync(
+            Definition() with
+            {
+                Schedule = new EventJobSchedule { Kind = "Interval", Interval = "PT1M" },
+            },
+            Ct
+        );
+        const string legacyInterval = "PT45.5S";
+        var source = await fixture.Db.EventSources.SingleAsync(Ct);
+        var config = JsonNode.Parse(source.ConfigJson)!.AsObject();
+        config["interval"] = legacyInterval;
+        source.ConfigJson = config.ToJsonString();
+        var schedule = await fixture.Db.EventSchedules.SingleAsync(Ct);
+        schedule.Interval = TimeSpan.FromSeconds(45.5);
+        schedule.DueAt = clock.GetUtcNow().AddSeconds(45.5);
+        await fixture.Db.SaveChangesAsync(Ct);
+        fixture.Db.ChangeTracker.Clear();
+        var existing = Assert.IsType<EventJob>(await fixture.Jobs.FindAsync(job.Id, Ct));
+        clock.SetUtcNow(clock.GetUtcNow().AddSeconds(5));
+
+        var updated = await fixture.Jobs.UpdateAsync(
+            job.Id,
+            existing.Definition with
+            {
+                Instructions = "Updated instructions",
+            },
+            Ct
+        );
+
+        Assert.Equal("Updated instructions", updated.Definition.Instructions);
+        Assert.Equal(legacyInterval, updated.Definition.Schedule.Interval);
+        Assert.Equal(schedule.DueAt, updated.DueAt);
+        Assert.Equal(schedule.Revision, (await fixture.JobScheduleAsync(job.Id)).Revision);
     }
 
     [Fact]

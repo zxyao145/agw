@@ -2,7 +2,7 @@
 title: "Scheduled jobs"
 description: "Schedule Agent or Agentflow runs with Events Timers and inspect delivery attempts."
 weight: 70
-lastmod: 2026-11-14
+lastmod: 2026-11-22
 translationKey: docs/guides/jobs
 ---
 
@@ -19,10 +19,10 @@ Before scheduling a Job, confirm its Project, target, instructions, model, and t
 | Schedule kind | Example | Time semantics |
 | --- | --- | --- |
 | `Once` | `2026-11-15T01:00:00Z` | `at` is an RFC 3339 timestamp. If it is in the past, the timer fires once as soon as Events processes the schedule. |
-| `Interval` | `PT15M` | `interval` is a positive ISO 8601 duration. The first trigger is 15 minutes after scheduling; each later trigger is based on the time Events processes the previous occurrence. |
+| `Interval` | `PT15M` | `interval` is a positive ISO 8601 duration that uses 30-second steps for new or changed intervals. The first trigger is 15 minutes after scheduling; each later trigger is based on the time Events processes the previous occurrence. |
 | `Cron` | `0 1 * * *` | `cron` is a standard five-field expression evaluated in UTC; this example fires daily at 01:00 UTC. |
 
-All Jobs Timer schedules use UTC. `Interval` accepts a positive ISO 8601 duration such as `PT15M`, not an hours:minutes:seconds value. The Server validates the Timer configuration and rejects invalid schedule fields. Interval triggers do not wait for the previous execution to finish. A `Once` schedule becomes completed after its event fires and `dueAt` becomes `null`; re-enabling a disabled Once Job after its `at` time causes one immediate trigger.
+All Jobs Timer schedules use UTC. In the Job form, enter `Interval` as `HH:mm:ss`, such as `00:15:00`. Hours can exceed 23. Leaving the field or saving rounds a new value to the nearest multiple of 30 seconds, with a minimum of 30 seconds. Ties round up. The form displays a notice when it adjusts the value. The Server validates the Timer configuration and rejects invalid schedule fields. Interval triggers do not wait for the previous execution to finish. A `Once` schedule becomes completed after its event fires and `dueAt` becomes `null`; re-enabling a disabled Once Job after its `at` time causes one immediate trigger.
 
 ![AGW Desktop: an unsaved Cron Job example. Choose an execution target and confirm the schedule and prompt before creating it.](/images/screenshots/job-create.png)
 {caption="AGW Desktop: an unsaved Cron Job example. Choose an execution target and confirm the schedule and prompt before creating it."}
@@ -85,7 +85,7 @@ Closing Chat does not automatically cancel execution, but the Server and its exe
 
 ## Jobs API
 
-Jobs endpoints return Bens.Results envelopes. Schedule fields are the Events Timer fields: `kind` is `Once`, `Interval`, or `Cron`; `at` is an RFC 3339 timestamp; `interval` is a positive ISO 8601 duration; and `cron` is a five-field UTC expression.
+Jobs endpoints return Bens.Results envelopes. Schedule fields are the Events Timer fields: `kind` is `Once`, `Interval`, or `Cron`; `at` is an RFC 3339 timestamp; `interval` is a positive ISO 8601 duration; and `cron` is a five-field UTC expression. A new or changed `interval` must be a positive multiple of 30 seconds, such as `PT1M30S`. When editing other fields, send the stored `interval` as returned by the API.
 
 | Method and path | Purpose |
 | --- | --- |

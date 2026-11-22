@@ -180,6 +180,57 @@ public class JobsApiTests
     }
 
     [Fact]
+    public async Task Create_IntervalBetweenSteps_ReturnsInvalidParamAndSavesNothing()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var fixture = await JobsApiFixture.CreateAsync(cancellationToken);
+        var targets = await fixture.SeedTargetsAsync("tester", cancellationToken);
+        var request = CreateRequest(
+            targets,
+            "interval-job",
+            new JobScheduleDto { Kind = "Interval", Interval = "PT45S" }
+        );
+
+        var response = await fixture.Client.PostAsJsonAsync("/api/jobs/create", request, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await AssertErrorAsync(response, ErrorCodes.InvalidParam.Code, cancellationToken);
+        Assert.Empty(await fixture.ListEventSourcesAsync("tester", cancellationToken));
+    }
+
+    [Fact]
+    public async Task Update_IntervalBetweenSteps_ReturnsInvalidParamAndKeepsSchedule()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var fixture = await JobsApiFixture.CreateAsync(cancellationToken);
+        var targets = await fixture.SeedTargetsAsync("tester", cancellationToken);
+        var job = await fixture.CreateViaApiAsync(
+            CreateRequest(targets, "interval-job", new JobScheduleDto { Kind = "Interval", Interval = "PT30S" }),
+            cancellationToken
+        );
+        var request = new JobUpdateRequest
+        {
+            Id = job.Id,
+            Name = job.Name,
+            ProjectId = job.ProjectId,
+            AgentId = job.AgentId,
+            TargetKind = job.TargetKind,
+            Instructions = job.Instructions,
+            Schedule = new JobScheduleDto { Kind = "Interval", Interval = "PT45S" },
+        };
+
+        var response = await fixture.Client.PostAsJsonAsync("/api/jobs/update", request, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await AssertErrorAsync(response, ErrorCodes.InvalidParam.Code, cancellationToken);
+        using var getResponse = await fixture.Client.GetAsync($"/api/jobs/get?id={job.Id:D}", cancellationToken);
+        using var jobBody = await ReadBodyAsync(getResponse, cancellationToken);
+        var saved = jobBody.RootElement.GetProperty("data");
+        Assert.Equal("PT30S", saved.GetProperty("schedule").GetProperty("interval").GetString());
+        Assert.Equal(job.DueAt, saved.GetProperty("dueAt").GetDateTimeOffset());
+    }
+
+    [Fact]
     public async Task Create_ProjectOfOtherUser_ReturnsResourceNotFound()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

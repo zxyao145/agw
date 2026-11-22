@@ -37,6 +37,8 @@ public enum EventJobTargetKind
 
 public sealed record EventJobSchedule
 {
+    public const int IntervalStepSeconds = 30;
+
     public required string Kind { get; init; }
     public DateTimeOffset? At { get; init; }
     public string? Interval { get; init; }

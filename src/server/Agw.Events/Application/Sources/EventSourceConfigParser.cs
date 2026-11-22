@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Xml;
 using Agw.Events.Configuration;
+using Agw.Events.Domain.ValueObjects;
 using Agw.Extensions.Contracts;
 using Agw.Shared.Contracts.Events;
 using Agw.Shared.Exceptions;
@@ -244,7 +245,11 @@ public static class EventSourceConfigParser
         return parsed;
     }
 
-    public static EventTimerSourceConfig ParseTimer(JsonElement config)
+    public static EventTimerSourceConfig ParseTimer(JsonElement config) => ParseTimerWithInterval(config).Config;
+
+    internal static (EventTimerSourceConfig Config, EventTimerInterval? Interval) ParseTimerWithInterval(
+        JsonElement config
+    )
     {
         var parsed = Deserialize<EventTimerSourceConfig>(config);
         if (
@@ -275,13 +280,15 @@ public static class EventSourceConfigParser
             throw new AgwException(ErrorCodes.InvalidParam, "Once timer sources require at.");
         }
 
+        EventTimerInterval? interval = null;
         if (parsed.Kind == "Interval")
         {
-            var interval = ParseInterval(parsed.Interval);
-            if (interval <= TimeSpan.Zero)
+            var parsedInterval = ParseInterval(parsed.Interval);
+            if (parsedInterval.Duration <= TimeSpan.Zero)
             {
                 throw new AgwException(ErrorCodes.InvalidParam, "Timer source interval must be positive.");
             }
+            interval = parsedInterval;
         }
 
         if (parsed.Kind == "Cron")
@@ -318,7 +325,7 @@ public static class EventSourceConfigParser
             }
         }
 
-        return parsed;
+        return (parsed, interval);
     }
 
     public static JsonElement ParseSecret(string? secretJson)
@@ -447,7 +454,7 @@ public static class EventSourceConfigParser
         }
     }
 
-    private static TimeSpan ParseInterval(string? interval)
+    private static EventTimerInterval ParseInterval(string? interval)
     {
         if (string.IsNullOrWhiteSpace(interval))
         {
@@ -456,7 +463,7 @@ public static class EventSourceConfigParser
 
         try
         {
-            return XmlConvert.ToTimeSpan(interval);
+            return new EventTimerInterval { Text = interval, Duration = XmlConvert.ToTimeSpan(interval) };
         }
         catch (Exception exception) when (exception is FormatException or OverflowException)
         {

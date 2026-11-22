@@ -2,7 +2,7 @@
 title: "Jobs 定时任务"
 description: "通过 Events Timer 安排 Agent 或 Agentflow，并查看投递尝试。"
 weight: 70
-lastmod: 2026-11-14
+lastmod: 2026-11-22
 translationKey: docs/guides/jobs
 ---
 
@@ -19,10 +19,10 @@ Job 管理一个 Events Timer 来源和一条 Agent 或 Agentflow 订阅。Timer
 | 计划类型 | 示例 | 时间语义 |
 | --- | --- | --- |
 | `Once` | `2026-11-15T01:00:00Z` | `at` 使用 RFC 3339 时间。时间已过时，Events 处理计划后会立即触发一次。 |
-| `Interval` | `PT15M` | `interval` 使用大于零的 ISO 8601 时长。首次在建立计划 15 分钟后触发；后续触发时间按 Events 处理上一次触发的时间计算。 |
+| `Interval` | `PT15M` | `interval` 使用大于零的 ISO 8601 时长。新建或修改间隔时，时长必须是 30 秒的整数倍。首次在建立计划 15 分钟后触发；后续触发时间按 Events 处理上一次触发的时间计算。 |
 | `Cron` | `0 1 * * *` | `cron` 使用 UTC 计算的标准五段表达式；此例每天 UTC 01:00 触发。 |
 
-所有 Jobs Timer 计划都使用 UTC。`Interval` 接受 `PT15M` 等大于零的 ISO 8601 时长，不接受“小时:分钟:秒”值。Server 按 Events Timer 配置规则校验计划字段，无效值会被拒绝。Interval 触发不等待上一次执行结束。`Once` 计划发布事件后会变为已完成，`dueAt` 显示为空；已停用的 Once Job 在时间已过后重新启用，会立即触发一次。
+所有 Jobs Timer 计划都使用 UTC。Job 表单中的 `Interval` 使用 `HH:mm:ss`，例如 `00:15:00`，小时可以超过 23。输入新时长后，表单在离开输入框或提交时将时长调整到最近的 30 秒整数倍，最短为 30 秒。等距时向上取整，发生调整时显示提示。Server 按 Events Timer 配置规则校验计划字段，无效值会被拒绝。Interval 触发不等待上一次执行结束。`Once` 计划发布事件后会变为已完成，`dueAt` 显示为空；已停用的 Once Job 在时间已过后重新启用，会立即触发一次。
 
 ![AGW Desktop：Cron Job 的未保存示例。创建前需选择执行目标，并确认计划与提示词。](/images/screenshots/job-create.png)
 {caption="AGW Desktop：Cron Job 的未保存示例。创建前需选择执行目标，并确认计划与提示词。"}
@@ -85,7 +85,7 @@ Jobs 通过 Events Timer 计划运行 Agent 或 Agentflow。后台 Agent 能力�
 
 ## Jobs API
 
-Jobs 接口返回 Bens.Results envelope。计划字段沿用 Events Timer：`kind` 为 `Once`、`Interval` 或 `Cron`；`at` 是 RFC 3339 时间；`interval` 是大于零的 ISO 8601 时长；`cron` 是按 UTC 计算的五段表达式。
+Jobs 接口返回 Bens.Results envelope。计划字段沿用 Events Timer：`kind` 为 `Once`、`Interval` 或 `Cron`；`at` 是 RFC 3339 时间；`interval` 是大于零的 ISO 8601 时长；`cron` 是按 UTC 计算的五段表达式。新建或修改间隔时，时长必须是 30 秒的正整数倍，例如 `PT1M30S`。只修改其他字段时，原样提交已有的 `interval`。
 
 | 方法与路径 | 用途 |
 | --- | --- |
