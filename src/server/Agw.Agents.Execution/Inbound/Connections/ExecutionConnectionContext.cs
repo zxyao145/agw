@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Commands.Checkpoint;
@@ -39,6 +40,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private AgentExecutionTask? _resolvedTask;
     private string? _workspace;
     private ExecutionTarget? _target;
+    private AgentflowRevisionSnapshot? _targetAgentflowSnapshot;
     private PendingModeChange? _pendingModeChange;
     private Guid? _lastResumeTurnId;
     private volatile bool _waitingForHuman;
@@ -179,6 +181,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         _resolvedTask = null;
         _workspace = null;
         _target = null;
+        _targetAgentflowSnapshot = null;
         _lastResumeTurnId = null;
     }
 
@@ -250,6 +253,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             {
                 Task = _resolvedTask,
                 RequestedMode = requestedMode,
+                RequestedAgentflowRevision = command.AgentflowRevision,
                 ResumeCheckpoint = command.ResumeCheckpoint,
             },
             cancellationToken
@@ -304,7 +308,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         {
             await _attachment.AttachAsync(request.TurnId, cursor: "1", conversationId, cancellationToken);
         }
-        _target = target;
+        _target = request.Target;
+        _targetAgentflowSnapshot = request.AgentflowSnapshot;
         if (requestedMode != null && Host != null)
         {
             _pendingModeChange = null;
@@ -318,6 +323,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     /// </summary>
     private async Task ResumeAcceptedTurnAsync(AcceptedTurn accepted, CancellationToken cancellationToken)
     {
+        _target = accepted.Request.Target;
+        _targetAgentflowSnapshot = accepted.Request.AgentflowSnapshot;
         if (_attachment != null)
         {
             await _attachment.AttachAsync(
@@ -377,11 +384,17 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         await EnsureWritableAsync(Settings?.ExtensionId, cancellationToken);
-        if (_permissions != null && HasActiveTurn && _target is { } target)
-            ExecutionPermissionService.Validate(
-                await _permissions.GetAsync(target.AgentType, target.AgentId, cancellationToken),
-                permissionMode
-            );
+        if (_attachment == null && _permissions != null && HasActiveTurn && _target is { } target)
+        {
+            var snapshot =
+                target.AgentType == AgentRuntimeType.Agentflow
+                    ? _targetAgentflowSnapshot ?? throw new AgwException(ErrorCodes.DurableExecutionConflict)
+                    : null;
+            var capabilities = await _permissions
+                .GetForTargetAsync(target.AgentType, target.AgentId, snapshot, cancellationToken)
+                .ConfigureAwait(false);
+            ExecutionPermissionService.Validate(capabilities, permissionMode);
+        }
         if (_attachment != null)
             await _attachment.SetPermissionModeAsync(permissionMode, cancellationToken);
         Settings = (Settings ?? ExecutionSettings.CreateDefault()).WithPermissionMode(permissionMode);
@@ -549,6 +562,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             .ConfigureAwait(false);
     }
 
+    internal IReadOnlySet<Guid> GetInProcessCheckpointOccurrenceIds() =>
+        Host?.AgentflowRuntime?.CheckpointOccurrenceIds ?? new HashSet<Guid>();
+
     public async Task ResumeCheckpointAsync(ResumeCheckpointCommand command, CancellationToken cancellationToken)
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
@@ -598,20 +614,28 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 ErrorCodes.InvalidParam,
                 "Execution settings must be configured before resuming a checkpoint."
             );
-        if (_permissions != null)
-            ExecutionPermissionService.Validate(
-                await _permissions.GetAsync(AgentRuntimeType.Agentflow, command.AgentflowId, cancellationToken),
-                settings.PermissionMode
-            );
         var projectId = await ResolveProjectIdAsync(settings, cancellationToken).ConfigureAwait(false);
         var conversationId = RequireConversationId(settings);
         var contextId =
             await _projectTasks.FindContextIdAsync(projectId, conversationId, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.ResourceNotFound, "The conversation was not found.");
 
+        async Task ValidateSnapshotAsync(AgentflowRevisionSnapshot snapshot, CancellationToken token)
+        {
+            if (_permissions == null)
+            {
+                return;
+            }
+
+            var capabilities = await _permissions
+                .GetForTargetAsync(AgentRuntimeType.Agentflow, command.AgentflowId, snapshot, token)
+                .ConfigureAwait(false);
+            ExecutionPermissionService.Validate(capabilities, settings.PermissionMode);
+        }
+
         if (_attachment != null)
         {
-            await _attachment
+            var distributedSnapshot = await _attachment
                 .ResumeCheckpointAsync(
                     command.CheckpointOccurrenceId,
                     command.ResumeTurnId,
@@ -620,12 +644,18 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                     contextId,
                     command.AgentflowId,
                     cancellationToken,
-                    DurableExecutionMapper.FromSettings(settings)
+                    DurableExecutionMapper.FromSettings(settings),
+                    ValidateSnapshotAsync
                 )
                 .ConfigureAwait(false);
             _turnSettings = settings;
             await SendPermissionStatusAsync(starting: true);
-            _target = new ExecutionTarget(command.AgentflowId, AgentRuntimeType.Agentflow);
+            _target = new ExecutionTarget(
+                command.AgentflowId,
+                AgentRuntimeType.Agentflow,
+                distributedSnapshot.RevisionSnapshot.RootRevision
+            );
+            _targetAgentflowSnapshot = distributedSnapshot.RevisionSnapshot;
             _lastResumeTurnId = command.ResumeTurnId;
             return;
         }
@@ -656,7 +686,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 contextId,
                 command.AgentflowId,
                 _userId,
-                cancellationToken
+                cancellationToken,
+                ValidateSnapshotAsync
             )
             .ConfigureAwait(false);
         runtime.RemoveCheckpointsAfter(snapshot.BoundarySequence);
@@ -812,6 +843,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
 
         _target = null;
+        _targetAgentflowSnapshot = null;
         _waitingForHuman = false;
     }
 

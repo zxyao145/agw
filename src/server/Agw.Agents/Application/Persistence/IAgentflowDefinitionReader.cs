@@ -10,7 +10,21 @@ public interface IAgentflowDefinitionReader
         CancellationToken cancellationToken = default
     );
 
-    Task<IReadOnlyList<AgentflowNode>> ListNodesAsync(Guid agentflowId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AgentflowNode>> ListNodesAsync(
+        Guid agentflowId,
+        int agentflowRevision,
+        CancellationToken cancellationToken = default
+    );
 
-    Task<IReadOnlyList<AgentflowEdge>> ListEdgesAsync(Guid agentflowId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AgentflowEdge>> ListEdgesAsync(
+        Guid agentflowId,
+        int agentflowRevision,
+        CancellationToken cancellationToken = default
+    );
+
+    Task<IReadOnlyList<AgentflowBlockMember>> ListBlockMembersAsync(
+        Guid agentflowId,
+        int agentflowRevision,
+        CancellationToken cancellationToken = default
+    );
 }

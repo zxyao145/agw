@@ -1,3 +1,4 @@
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Exceptions;
@@ -8,7 +9,7 @@ namespace Agw.Agents.Tests;
 public partial class AgentflowTurnExecutorTests
 {
     [Fact]
-    public async Task GetMermaidAsync_IndirectCycle_RejectsAndDisposesCreatedAgents()
+    public async Task CreateAiWorkflow_IndirectCycle_RejectsAndDisposesCreatedAgents()
     {
         var first = new Agentflow
         {
@@ -94,8 +95,12 @@ public partial class AgentflowTurnExecutorTests
             new RecordingSummaryService()
         );
 
+        var snapshot = new AgentflowRevisionSnapshot(
+            1,
+            [new(first.Id, 1, "nested", null, second.Id, 1), new(second.Id, 1, "nested", null, first.Id, 1)]
+        );
         var error = await Assert.ThrowsAsync<AgwException>(() =>
-            service.GetMermaidAsync(first.Id, TestContext.Current.CancellationToken)
+            service.CreateAiWorkflow(first.Id, snapshot, TestContext.Current.CancellationToken)
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);

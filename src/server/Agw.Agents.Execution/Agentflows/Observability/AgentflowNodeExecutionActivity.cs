@@ -16,6 +16,7 @@ internal static class AgentflowNodeExecutionActivity
     public static AgentflowNodeExecutionActivityScope StartAgent(
         AgentflowExecutionTraceContext execution,
         Guid agentflowId,
+        int agentflowRevision,
         string nodeId,
         string? nodeName,
         Guid? agentId,
@@ -23,18 +24,39 @@ internal static class AgentflowNodeExecutionActivity
         IReadOnlyList<ChatMessage> input
     )
     {
-        return Start(execution, agentflowId, nodeId, nodeName, AgentflowNodeKind.Agent, agentId, agentName, input);
+        return Start(
+            execution,
+            agentflowId,
+            agentflowRevision,
+            nodeId,
+            nodeName,
+            AgentflowNodeKind.Agent,
+            agentId,
+            agentName,
+            input
+        );
     }
 
     public static AgentflowNodeExecutionActivityScope StartHumanGate(
         AgentflowExecutionTraceContext execution,
         Guid agentflowId,
+        int agentflowRevision,
         string nodeId,
         string? nodeName,
         IReadOnlyList<ChatMessage> input
     )
     {
-        return Start(execution, agentflowId, nodeId, nodeName, AgentflowNodeKind.HumanGate, null, null, input);
+        return Start(
+            execution,
+            agentflowId,
+            agentflowRevision,
+            nodeId,
+            nodeName,
+            AgentflowNodeKind.HumanGate,
+            null,
+            null,
+            input
+        );
     }
 
     internal static bool TryCreateTrace(Activity activity, out AgentflowTrace? trace)
@@ -53,6 +75,7 @@ internal static class AgentflowNodeExecutionActivity
             ContextId = capture.Execution.ContextId,
             TaskId = capture.Execution.TaskId,
             AgentflowId = capture.AgentflowId,
+            Extra = new AgentflowTraceExtra { AgentflowRevision = capture.AgentflowRevision },
             NodeId = capture.NodeId,
             NodeName = capture.NodeName,
             NodeKind = capture.NodeKind,
@@ -69,6 +92,7 @@ internal static class AgentflowNodeExecutionActivity
     private static AgentflowNodeExecutionActivityScope Start(
         AgentflowExecutionTraceContext execution,
         Guid agentflowId,
+        int agentflowRevision,
         string nodeId,
         string? nodeName,
         AgentflowNodeKind nodeKind,
@@ -86,6 +110,7 @@ internal static class AgentflowNodeExecutionActivity
         var capture = new AgentflowNodeExecutionCapture(
             execution,
             agentflowId,
+            agentflowRevision,
             nodeId,
             nodeName,
             nodeKind,
@@ -127,6 +152,7 @@ internal static class AgentflowNodeExecutionActivity
         public AgentflowNodeExecutionCapture(
             AgentflowExecutionTraceContext execution,
             Guid agentflowId,
+            int agentflowRevision,
             string nodeId,
             string? nodeName,
             AgentflowNodeKind nodeKind,
@@ -137,6 +163,7 @@ internal static class AgentflowNodeExecutionActivity
         {
             Execution = execution;
             AgentflowId = agentflowId;
+            AgentflowRevision = agentflowRevision;
             NodeId = nodeId;
             NodeName = nodeName;
             NodeKind = nodeKind;
@@ -147,6 +174,7 @@ internal static class AgentflowNodeExecutionActivity
 
         public AgentflowExecutionTraceContext Execution { get; }
         public Guid AgentflowId { get; }
+        public int AgentflowRevision { get; }
         public string NodeId { get; }
         public string? NodeName { get; }
         public AgentflowNodeKind NodeKind { get; }

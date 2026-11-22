@@ -10,6 +10,8 @@
 
 三类请求共享关联与生命周期。`FullAccess` 只自动批准普通工具；用户输入和显式 HumanGate 始终需要真实响应。执行中断是独立的取消操作。
 
+`WorkflowGateInteraction` 包含节点来源、输入预览、`Choices` 和 `AllowResponseText`。`Choices` 中每个 `WorkflowGateChoice` 以 `ChoiceId` 标识并带有显示用的 `Label`。`Mode` 已移除。已批准的 `WorkflowGateDecision` 必须带有请求中存在的 `ChoiceId`，可以附带 `ResponseText`；`Approved = false` 表示停止工作流并取消剩余等待。
+
 ## 从哪里接入
 
 | 要做的事 | 入口 | 模块承担的工作 |

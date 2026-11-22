@@ -247,6 +247,79 @@ public sealed class DurableTurnUpgradeTests
     }
 
     [Fact]
+    public async Task UpgradeAsync_ManifestWithSnapshot_CopiesRevisionAndDependencies()
+    {
+        var token = TestContext.Current.CancellationToken;
+        using var owner = TurnPersistenceTestKit.EnterUser();
+        await using var kit = await TurnPersistenceTestKit.CreateAsync();
+        var task = await kit.SeedConversationAsync();
+        var turnId = Guid.CreateVersion7();
+        var rootId = Guid.CreateVersion7();
+        var nestedId = Guid.CreateVersion7();
+        var dependency = new AgentflowDependencyRevision(rootId, 3, "review", "reviewer", nestedId, 2);
+        var manifest = CreateSnapshotManifest(turnId, task, dependency);
+        await using (var db = kit.CreateContext())
+        {
+            db.DurableExecutions.Add(
+                new DurableExecutionRecord
+                {
+                    Id = turnId,
+                    UserId = manifest.UserId,
+                    ProjectId = task.ProjectId,
+                    ProjectConversationId = task.ProjectConversationId,
+                    ScopeBackfilled = true,
+                    ManifestJson = JsonUtil.Serialize(manifest),
+                    Status = DurableExecutionStatus.Queued,
+                    CreateBy = manifest.UserId,
+                    CreateTime = kit.Clock.GetUtcNow(),
+                }
+            );
+            await db.SaveChangesAsync(token);
+        }
+
+        var upgrade = new DurableTurnUpgrade(
+            kit.Services.GetRequiredService<IServiceScopeFactory>(),
+            kit.Locks,
+            kit.Clock
+        );
+        await upgrade.UpgradeAsync(token);
+
+        var turn = await kit.ReadTurnAsync(turnId);
+        Assert.Equal(AgentRuntimeType.Agentflow, turn.RuntimeType);
+        Assert.Equal(rootId, turn.TargetId);
+        Assert.Equal(3, turn.Extra.AgentflowRevision);
+        Assert.Equal(
+            new ProjectConversationTurnAgentflowDependency(rootId, 3, "review", "reviewer", nestedId, 2),
+            Assert.Single(turn.Extra.AgentflowDependencies!)
+        );
+    }
+
+    private static DurableExecutionManifest CreateSnapshotManifest(
+        Guid turnId,
+        AgentExecutionTask task,
+        AgentflowDependencyRevision dependency
+    ) =>
+        new()
+        {
+            TurnId = turnId,
+            UserId = TurnPersistenceTestKit.UserId,
+            AgentId = dependency.ParentAgentflowId,
+            AgentType = AgentRuntimeType.Agentflow,
+            AgentflowRevision = dependency.ParentRevision,
+            AgentflowDependencies = [dependency],
+            Input = TurnPersistenceTestKit.CreateInput("Review this task"),
+            Task = new DurableProjectTaskSnapshot
+            {
+                TaskId = task.TaskId,
+                ProjectId = task.ProjectId,
+                ProjectConversationId = task.ProjectConversationId,
+                ContextId = task.ContextId,
+            },
+            Settings = new DurableExecutionSettings { EnvironmentVariables = [], Resume = true },
+            WorkspaceSnapshot = ProjectWorkspacePaths.CreateSnapshot(task.ProjectId, AppContext.BaseDirectory, []),
+        };
+
+    [Fact]
     public async Task UpgradeAsync_InvalidManifest_FailsWithoutCreatingTurn()
     {
         // Arrange

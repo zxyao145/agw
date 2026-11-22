@@ -343,15 +343,37 @@ public class ProviderAppServiceTests
             setupContext.ModelProviders.Add(relation);
             if (usage == "agentflow-summary")
             {
+                var agentflowId = Guid.CreateVersion7();
+                var now = TimeProvider.System.GetUtcNow();
                 setupContext.Agentflows.Add(
                     new Agentflow
                     {
-                        Id = Guid.CreateVersion7(),
+                        Id = agentflowId,
                         Name = "flow",
-                        SystemPrompt = string.Empty,
+                        LatestRevision = 1,
+                        CreateBy = "tester",
+                        CreateTime = now,
+                    }
+                );
+                setupContext.AgentflowRevisions.Add(
+                    new AgentflowRevision
+                    {
+                        AgentflowId = agentflowId,
+                        Revision = 1,
+                        CreateBy = "tester",
+                        CreateTime = now,
+                    }
+                );
+                setupContext.AgentflowNodes.Add(
+                    new AgentflowNode
+                    {
+                        AgentflowId = agentflowId,
+                        AgentflowRevision = 1,
+                        NodeId = "output",
+                        Kind = AgentflowNodeKind.Output,
                         SummaryModelProviderId = relation.Id,
                         CreateBy = "tester",
-                        CreateTime = TimeProvider.System.GetUtcNow(),
+                        CreateTime = now,
                     }
                 );
             }

@@ -139,7 +139,8 @@ public class AgentAppServiceCapabilityTests : IDisposable
             userInfo,
             new Agw.Infrastructure.Agents.AgentDeletionCoordinator(
                 _database.Context,
-                Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                TurnPersistenceTestKit.CreateRevisionUsageReader(_database.Context)
             )
         );
     }

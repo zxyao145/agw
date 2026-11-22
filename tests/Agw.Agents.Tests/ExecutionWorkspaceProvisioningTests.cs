@@ -1,4 +1,6 @@
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
@@ -377,73 +379,77 @@ public sealed partial class ExecutionWorkspaceProvisioningTests : IDisposable
                 {
                     Id = AgentflowId,
                     Name = "durable-workspace-flow",
+                    LatestRevision = 1,
+                    PublishedRevision = 1,
                     CreateBy = UserId,
                     CreateTime = now,
-                    Nodes =
-                    [
-                        new AgentflowNode
-                        {
-                            NodeId = "input",
-                            Kind = AgentflowNodeKind.Input,
-                            Name = "Input",
-                            CreateBy = UserId,
-                            CreateTime = now,
-                        },
-                        new AgentflowNode
-                        {
-                            NodeId = "gate",
-                            Kind = AgentflowNodeKind.HumanGate,
-                            Name = "Gate",
-                            CreateBy = UserId,
-                            CreateTime = now,
-                        },
-                        new AgentflowNode
-                        {
-                            NodeId = "agent",
-                            Kind = AgentflowNodeKind.Agent,
-                            RelateId = AgentId,
-                            Name = "Agent",
-                            CreateBy = UserId,
-                            CreateTime = now,
-                        },
-                        new AgentflowNode
-                        {
-                            NodeId = "output",
-                            Kind = AgentflowNodeKind.Output,
-                            Name = "Output",
-                            CreateBy = UserId,
-                            CreateTime = now,
-                        },
-                    ],
-                    Edges =
-                    [
-                        new AgentflowEdge
-                        {
-                            EdgeId = "input-gate",
-                            SourceNodeId = "input",
-                            TargetNodeId = "gate",
-                            CreateBy = UserId,
-                            CreateTime = now,
-                        },
-                        new AgentflowEdge
-                        {
-                            EdgeId = "gate-agent",
-                            SourceNodeId = "gate",
-                            TargetNodeId = "agent",
-                            CreateBy = UserId,
-                            CreateTime = now,
-                        },
-                        new AgentflowEdge
-                        {
-                            EdgeId = "agent-output",
-                            SourceNodeId = "agent",
-                            TargetNodeId = "output",
-                            CreateBy = UserId,
-                            CreateTime = now,
-                        },
-                    ],
                 }
             );
+            context.AgentflowRevisions.Add(
+                new AgentflowRevision
+                {
+                    AgentflowId = AgentflowId,
+                    Revision = 1,
+                    CreateBy = UserId,
+                    CreateTime = now,
+                }
+            );
+            AgentflowNode[] nodes =
+            [
+                new()
+                {
+                    NodeId = "input",
+                    Kind = AgentflowNodeKind.Input,
+                    Name = "Input",
+                },
+                new()
+                {
+                    NodeId = "gate",
+                    Kind = AgentflowNodeKind.HumanGate,
+                    Name = "Gate",
+                    RoutingStrategy = AgentflowRoutingStrategy.Choice,
+                    ConfigJson = AgentflowDefinitionJson.WriteOptions(
+                        new HumanGateOptions(null, [new("continue", "Continue")], false)
+                    ),
+                },
+                new()
+                {
+                    NodeId = "agent",
+                    Kind = AgentflowNodeKind.Agent,
+                    RelateId = AgentId,
+                    Name = "Agent",
+                },
+                new()
+                {
+                    NodeId = "output",
+                    Kind = AgentflowNodeKind.Output,
+                    Name = "Output",
+                },
+            ];
+            foreach (var node in nodes)
+            {
+                node.AgentflowId = AgentflowId;
+                node.AgentflowRevision = 1;
+                node.CreateBy = UserId;
+                node.CreateTime = now;
+            }
+            context.AgentflowNodes.AddRange(nodes);
+            foreach (var (source, target) in nodes.Zip(nodes.Skip(1)))
+            {
+                context.AgentflowEdges.Add(
+                    new AgentflowEdge
+                    {
+                        AgentflowId = AgentflowId,
+                        AgentflowRevision = 1,
+                        EdgeId = $"{source.NodeId}-{target.NodeId}",
+                        SourceNodeId = source.NodeId,
+                        TargetNodeId = target.NodeId,
+                        ChoiceId = source.Kind == AgentflowNodeKind.HumanGate ? "continue" : null,
+                        CreateBy = UserId,
+                        CreateTime = now,
+                    }
+                );
+            }
             context.Agents.Add(
                 new Agent
                 {
@@ -538,7 +544,12 @@ public sealed partial class ExecutionWorkspaceProvisioningTests : IDisposable
                 .SubmitHumanResponseAsync(
                     new SubmitDurableHumanResponseRequest(
                         turnId,
-                        new WorkflowGateDecision { InteractionId = interactionId, Approved = true }
+                        new WorkflowGateDecision
+                        {
+                            InteractionId = interactionId,
+                            Approved = true,
+                            ChoiceId = "continue",
+                        }
                     ),
                     UserId,
                     TestContext.Current.CancellationToken

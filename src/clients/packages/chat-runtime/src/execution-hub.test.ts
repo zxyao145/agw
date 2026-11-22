@@ -262,7 +262,7 @@ test("buildSetPermissionModeCommand uses the dynamic permission protocol", async
 });
 
 test("getAgentMode reads direct and tool mode status messages", async () => {
-  const { getAgentMode, isModeControlMessage } = await import("./execution-hub" + ".ts");
+  const { getAgentMode } = await import("./execution-hub" + ".ts");
   const directStatus = {
     messageId: "mode-1",
     role: "system" as const,
@@ -272,7 +272,6 @@ test("getAgentMode reads direct and tool mode status messages", async () => {
   };
 
   assert.equal(getAgentMode(directStatus), "plan");
-  assert.equal(isModeControlMessage(directStatus), true);
   assert.equal(
     getAgentMode({
       ...directStatus,
@@ -366,7 +365,7 @@ test("checkpoint commands preserve the exact occurrence identity", async () => {
       additionalProperties: {
         type: "agentflow-checkpoint",
         checkpointOccurrenceId: "occurrence-1",
-        checkpointNodeId: "checkpoint-node",
+        nodeId: "checkpoint-node",
         checkpointName: "Review saved",
       },
     }),
@@ -898,15 +897,25 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
     const progress = createConnection(async (_command, emitMessage) => {
       emitMessage({
         messageId: "progress-4",
-        role: "assistant",
-        author: "agent",
-        contents: [{ type: "TextContent", content: "partial" }],
-        additionalProperties: { turnId: "turn-progress", turnSequence: 4 },
+        role: "system",
+        contents: [],
+        additionalProperties: {
+          type: "agentflow-node-status",
+          nodeId: "input",
+          status: "running",
+          turnId: "turn-progress",
+          turnSequence: 4,
+        },
       });
       progressed = values.get(storageKey);
     });
     HubConnectionBuilder.prototype.build = () => progress.connection as never;
-    const progressClient = new ExecutionHubClient({ onMessage: () => undefined }, runtime);
+    const progressClient = new ExecutionHubClient(
+      {
+        onMessage: () => assert.fail("Node statuses do not enter the conversation message handler"),
+      },
+      runtime,
+    );
 
     assert.deepEqual(await progressClient.configure(setting), {
       restoredDurableExecution: true,

@@ -54,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<AgentflowAppService>();
         services.AddScoped<AgentflowTraceAppService>();
         services.AddScoped<IAgentflowDefinitionReader, AgentflowDefinitionReader>();
+        services.AddScoped<IAgentflowRevisionSnapshotReader, AgentflowRevisionSnapshotReader>();
         services.AddScoped<AgentAppService>();
         services.AddScoped<AgentCatalogFacade>();
         services.AddScoped<IAgentCatalogFacade>(provider => provider.GetRequiredService<AgentCatalogFacade>());

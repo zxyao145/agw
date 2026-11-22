@@ -50,7 +50,8 @@ public sealed class AgentflowResultAttributionTests
                     .Push();
                 var result = AgentTurnSummaryService.CreateResultMessage("{}", format, kit.Clock.GetUtcNow());
                 Assert.Equal(name, result.AdditionalProperties!["nodeName"]);
-                Assert.Equal(name, result.AdditionalProperties["interactionNodeId"]);
+                Assert.Equal(name, result.AdditionalProperties["nodeId"]);
+                Assert.Equal(name, result.AdditionalProperties["nodePath"]);
                 Assert.Equal(Constants.DefaultAgentAuthor, result.AuthorName);
                 await writer.AppendAsync(
                     task.ProjectId,
@@ -70,7 +71,11 @@ public sealed class AgentflowResultAttributionTests
         );
         Assert.Equal(
             ["commit", "push"],
-            rows.Select(row => row.ToChatMessage()!.AdditionalProperties!["interactionNodeId"]!.ToString())
+            rows.Select(row => row.ToChatMessage()!.AdditionalProperties!["nodeId"]!.ToString())
+        );
+        Assert.Equal(
+            ["commit", "push"],
+            rows.Select(row => row.ToChatMessage()!.AdditionalProperties!["nodePath"]!.ToString())
         );
         Assert.All(rows, row => Assert.Equal(Constants.DefaultAgentAuthor, row.ToChatMessage()!.AuthorName));
     }

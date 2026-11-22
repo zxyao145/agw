@@ -178,7 +178,7 @@ internal static class AgentflowMessageTransforms
         message.Role == ChatRole.User
         && (
             message.AdditionalProperties?.ContainsKey("nodeName") == true
-            || message.AdditionalProperties?.ContainsKey("interactionNodeId") == true
+            || message.AdditionalProperties?.ContainsKey(AgwMessageClassifier.NodePathKey) == true
         );
 
     private static void MarkNodeInput(ChatMessage message)
@@ -211,7 +211,11 @@ internal static class AgentflowMessageTransforms
 
     private static bool IsHumanReply(ChatMessage message)
     {
-        return string.Equals(message.AuthorName, "human", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(
+            message.AuthorName,
+            AgwMessageClassifier.HumanAuthorName,
+            StringComparison.OrdinalIgnoreCase
+        );
     }
 
     private static bool HasPortableText(ChatMessage message)

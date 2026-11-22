@@ -43,15 +43,21 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("enable");
 
+                    b.Property<int>("LatestRevision")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("latest_revision");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
-                    b.Property<Guid?>("SummaryModelProviderId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("summary_model_provider_id");
+                    b.Property<int>("PublishedRevision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("published_revision");
 
                     b.Property<string>("SystemPrompt")
                         .IsRequired()
@@ -73,25 +79,25 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.ToTable("agentflow", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowEdge", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowBlockMember", b =>
                 {
                     b.Property<Guid>("AgentflowId")
                         .HasColumnType("TEXT")
                         .HasColumnName("agentflow_id");
 
-                    b.Property<string>("EdgeId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("edge_id");
+                    b.Property<int>("AgentflowRevision")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("agentflow_revision");
 
-                    b.Property<string>("ConditionJson")
-                        .HasMaxLength(8000)
+                    b.Property<string>("NodeId")
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT")
-                        .HasColumnName("condition_json");
+                        .HasColumnName("node_id");
 
-                    b.Property<string>("ConfigJson")
-                        .HasMaxLength(16000)
+                    b.Property<string>("MemberId")
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT")
-                        .HasColumnName("config_json");
+                        .HasColumnName("member_id");
 
                     b.Property<string>("CreateBy")
                         .HasColumnType("TEXT")
@@ -101,9 +107,92 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
+                    b.Property<string>("Instructions")
+                        .HasMaxLength(8000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("instructions");
+
+                    b.Property<bool>("IsManager")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_manager");
+
                     b.Property<int>("Kind")
                         .HasColumnType("INTEGER")
                         .HasColumnName("kind");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("RelateId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("relate_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("AgentflowId", "AgentflowRevision", "NodeId", "MemberId")
+                        .HasName("pk_agentflow_block_member");
+
+                    b.HasIndex("AgentflowId", "AgentflowRevision", "Kind", "RelateId")
+                        .HasDatabaseName("ix_agentflow_block_member_agentflow_id_agentflow_revision_kind_relate_id");
+
+                    b.ToTable("agentflow_block_member", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowEdge", b =>
+                {
+                    b.Property<Guid>("AgentflowId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agentflow_id");
+
+                    b.Property<int>("AgentflowRevision")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("agentflow_revision");
+
+                    b.Property<string>("EdgeId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("edge_id");
+
+                    b.Property<string>("ChoiceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("choice_id");
+
+                    b.Property<string>("ConditionJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(8000)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("[]")
+                        .HasColumnName("condition_json");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<bool>("IsFanInBarrier")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_fan_in_barrier");
+
+                    b.Property<bool>("IsSwitchDefault")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_switch_default");
 
                     b.Property<string>("Label")
                         .HasMaxLength(200)
@@ -114,6 +203,10 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT")
                         .HasColumnName("source_node_id");
+
+                    b.Property<int>("SwitchCaseOrder")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("switch_case_order");
 
                     b.Property<string>("TargetNodeId")
                         .IsRequired()
@@ -128,14 +221,14 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
-                    b.HasKey("AgentflowId", "EdgeId")
+                    b.HasKey("AgentflowId", "AgentflowRevision", "EdgeId")
                         .HasName("pk_agentflow_edge");
 
-                    b.HasIndex("AgentflowId", "SourceNodeId")
-                        .HasDatabaseName("ix_agentflow_edge_agentflow_id_source_node_id");
+                    b.HasIndex("AgentflowId", "AgentflowRevision", "SourceNodeId")
+                        .HasDatabaseName("ix_agentflow_edge_agentflow_id_agentflow_revision_source_node_id");
 
-                    b.HasIndex("AgentflowId", "TargetNodeId")
-                        .HasDatabaseName("ix_agentflow_edge_agentflow_id_target_node_id");
+                    b.HasIndex("AgentflowId", "AgentflowRevision", "TargetNodeId")
+                        .HasDatabaseName("ix_agentflow_edge_agentflow_id_agentflow_revision_target_node_id");
 
                     b.ToTable("agentflow_edge", (string)null);
                 });
@@ -146,13 +239,20 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("agentflow_id");
 
+                    b.Property<int>("AgentflowRevision")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("agentflow_revision");
+
                     b.Property<string>("NodeId")
                         .HasColumnType("TEXT")
                         .HasColumnName("node_id");
 
                     b.Property<string>("ConfigJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(16000)
                         .HasColumnType("TEXT")
+                        .HasDefaultValue("{}")
                         .HasColumnName("config_json");
 
                     b.Property<string>("CreateBy")
@@ -177,14 +277,25 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
-                    b.Property<string>("PositionJson")
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("position_json");
+                    b.Property<double>("PositionX")
+                        .HasColumnType("REAL")
+                        .HasColumnName("position_x");
+
+                    b.Property<double>("PositionY")
+                        .HasColumnType("REAL")
+                        .HasColumnName("position_y");
 
                     b.Property<Guid?>("RelateId")
                         .HasColumnType("TEXT")
                         .HasColumnName("relate_id");
+
+                    b.Property<int>("RoutingStrategy")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("routing_strategy");
+
+                    b.Property<Guid?>("SummaryModelProviderId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("summary_model_provider_id");
 
                     b.Property<string>("UpdateBy")
                         .HasColumnType("TEXT")
@@ -194,13 +305,45 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
-                    b.HasKey("AgentflowId", "NodeId")
+                    b.HasKey("AgentflowId", "AgentflowRevision", "NodeId")
                         .HasName("pk_agentflow_node");
 
-                    b.HasIndex("AgentflowId", "Kind", "RelateId")
-                        .HasDatabaseName("ix_agentflow_node_agentflow_id_kind_relate_id");
+                    b.HasIndex("AgentflowId", "AgentflowRevision", "Kind", "RelateId")
+                        .HasDatabaseName("ix_agentflow_node_agentflow_id_agentflow_revision_kind_relate_id");
 
                     b.ToTable("agentflow_node", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowRevision", b =>
+                {
+                    b.Property<Guid>("AgentflowId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agentflow_id");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("revision");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("AgentflowId", "Revision")
+                        .HasName("pk_agentflow_revision");
+
+                    b.ToTable("agentflow_revision", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowTrace", b =>
@@ -236,6 +379,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.Property<string>("Error")
                         .HasColumnType("text")
                         .HasColumnName("error");
+
+                    b.Property<string>("Extra")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasColumnName("extra")
+                        .HasDefaultValueSql("'{}'");
 
                     b.Property<string>("Input")
                         .IsRequired()
@@ -1776,6 +1926,10 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("agentflow_id");
 
+                    b.Property<int>("AgentflowRevision")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("agentflow_revision");
+
                     b.Property<long>("BoundarySequence")
                         .HasColumnType("INTEGER")
                         .HasColumnName("boundary_sequence");
@@ -1799,12 +1953,6 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
-                    b.Property<string>("DefinitionFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("definition_fingerprint");
-
                     b.Property<bool>("IsDurable")
                         .HasColumnType("INTEGER")
                         .HasColumnName("is_durable");
@@ -1821,6 +1969,10 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("TEXT")
                         .HasColumnName("project_id");
+
+                    b.Property<int>("RuntimeVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("runtime_version");
 
                     b.Property<Guid?>("SourceTurnId")
                         .HasColumnType("TEXT")
@@ -3146,6 +3298,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("error_code");
 
+                    b.Property<string>("Extra")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasColumnName("extra")
+                        .HasDefaultValueSql("'{}'");
+
                     b.Property<DateTimeOffset?>("FinishedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("finished_at");
@@ -3730,40 +3889,23 @@ namespace Agw.Migrations.Sqlite.Migrations
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowEdge", b =>
                 {
-                    b.HasOne("Agw.Shared.Data.Entities.Agentflows.Agentflow", null)
-                        .WithMany("Edges")
-                        .HasForeignKey("AgentflowId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_agentflow_edge_agentflow_agentflow_id");
-
                     b.HasOne("Agw.Shared.Data.Entities.Agentflows.AgentflowNode", "SourceNode")
                         .WithMany("SourceEdges")
-                        .HasForeignKey("AgentflowId", "SourceNodeId")
+                        .HasForeignKey("AgentflowId", "AgentflowRevision", "SourceNodeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_edge_agentflow_node_agentflow_id_source_node_id");
+                        .HasConstraintName("fk_agentflow_edge_agentflow_node_agentflow_id_agentflow_revision_source_node_id");
 
                     b.HasOne("Agw.Shared.Data.Entities.Agentflows.AgentflowNode", "TargetNode")
                         .WithMany("TargetEdges")
-                        .HasForeignKey("AgentflowId", "TargetNodeId")
+                        .HasForeignKey("AgentflowId", "AgentflowRevision", "TargetNodeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_edge_agentflow_node_agentflow_id_target_node_id");
+                        .HasConstraintName("fk_agentflow_edge_agentflow_node_agentflow_id_agentflow_revision_target_node_id");
 
                     b.Navigation("SourceNode");
 
                     b.Navigation("TargetNode");
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowNode", b =>
-                {
-                    b.HasOne("Agw.Shared.Data.Entities.Agentflows.Agentflow", null)
-                        .WithMany("Nodes")
-                        .HasForeignKey("AgentflowId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_agentflow_node_agentflow_agentflow_id");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.Agent", b =>
@@ -4056,13 +4198,6 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_remote_skill_cache_skill_skill_id");
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.Agentflow", b =>
-                {
-                    b.Navigation("Edges");
-
-                    b.Navigation("Nodes");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowNode", b =>

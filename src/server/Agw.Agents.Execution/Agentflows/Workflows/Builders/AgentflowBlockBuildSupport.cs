@@ -1,7 +1,5 @@
-using System.Text.Json;
 using Agw.Agents.Execution.Agentflows.Context;
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 
@@ -9,62 +7,33 @@ namespace Agw.Agents.Execution.Agentflows.Workflows.Builders;
 
 internal static class AgentflowBlockBuildSupport
 {
-    private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
-
     /// <summary>
-    /// 读取 Block 配置；配置为空或 JSON 无效时返回默认配置。
+    /// 按成员顺序解析并包装 Block 参与者；任一参与者无效时返回空结果。
     /// </summary>
-    internal static AgentflowBlockConfig ReadConfig(AgentflowNode node)
-    {
-        if (string.IsNullOrWhiteSpace(node.ConfigJson))
-        {
-            return new AgentflowBlockConfig();
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<AgentflowBlockConfig>(node.ConfigJson, JsonOptions)
-                ?? new AgentflowBlockConfig();
-        }
-        catch (JsonException)
-        {
-            return new AgentflowBlockConfig();
-        }
-    }
-
-    /// <summary>
-    /// 按配置顺序解析并包装 Block 参与者；任一参与者无效时返回空结果。
-    /// </summary>
-    internal static IReadOnlyList<(string NodeId, AIAgent Agent)>? ResolveParticipants(
+    internal static IReadOnlyList<(AgentflowBlockMember Member, AIAgent Agent)>? ResolveParticipants(
         AgentflowBlockBuildContext context
     )
     {
-        var config = ReadConfig(context.BlockNode);
-        var participantNodeIds =
-            config
-                .ParticipantNodeIds?.Where(nodeId => !string.IsNullOrWhiteSpace(nodeId))
-                .Distinct(StringComparer.Ordinal)
-                .ToList()
-            ?? [];
-        if (participantNodeIds.Count == 0)
+        var members = context.Members.OrderBy(member => member.SortOrder).ToList();
+        if (members.Count == 0)
         {
             return null;
         }
 
-        var participants = new List<(string NodeId, AIAgent Agent)>();
-        foreach (var participantNodeId in participantNodeIds)
+        var participants = new List<(AgentflowBlockMember Member, AIAgent Agent)>();
+        foreach (var member in members)
         {
             var participant = CreateParticipant(
                 context,
-                participantNodeId,
-                $"{context.BlockNode.NodeId}.{participantNodeId}"
+                member,
+                AgentflowBlockMemberKey.Create(member.NodeId, member.MemberId)
             );
             if (participant == null)
             {
                 return null;
             }
 
-            participants.Add((participantNodeId, participant));
+            participants.Add((member, participant));
         }
 
         return participants;
@@ -75,33 +44,32 @@ internal static class AgentflowBlockBuildSupport
     /// </summary>
     internal static AIAgent? CreateParticipant(
         AgentflowBlockBuildContext context,
-        string participantNodeId,
+        AgentflowBlockMember member,
         string runtimeNodeId
     )
     {
-        if (
-            !context.NodeMap.TryGetValue(participantNodeId, out var participantNode)
-            || !context.NodeIdToAgent.TryGetValue(participantNodeId, out var participantAgent)
-        )
+        var memberKey = AgentflowBlockMemberKey.Create(member.NodeId, member.MemberId);
+        if (!context.NodeIdToAgent.TryGetValue(memberKey, out var participantAgent))
         {
             return null;
         }
 
-        var shouldTrace = participantNode.Kind == AgentflowNodeKind.Agent;
+        var shouldTrace = member.Kind == AgentflowNodeKind.Agent;
         return new AgentflowNodeScopedAgent(
             participantAgent,
             runtimeNodeId,
-            participantNode.Name,
-            participantNode.Instructions,
+            member.Name,
+            member.Instructions,
             context.SessionScope,
             shouldTrace ? context.ExecutionTraceContext : null,
             context.AgentflowId,
-            shouldTrace ? participantNode.NodeId : null,
-            shouldTrace ? participantNode.RelateId : null,
-            historyNodeId: participantNode.NodeId,
-            isWorkflow: participantNode.Kind == AgentflowNodeKind.WorkflowAsAgent,
-            engineKind: context.NodeEngineKinds.TryGetValue(participantNodeId, out var engineKind) ? engineKind : null,
-            resultOptions: context.NodeResultOptions.GetValueOrDefault(participantNodeId),
+            context.AgentflowRevision,
+            traceNodeId: shouldTrace ? member.NodeId : null,
+            agentId: shouldTrace ? member.RelateId : null,
+            historyNodeId: runtimeNodeId,
+            isWorkflow: member.Kind == AgentflowNodeKind.WorkflowAsAgent,
+            engineKind: context.NodeEngineKinds.TryGetValue(memberKey, out var engineKind) ? engineKind : null,
+            resultOptions: context.NodeResultOptions.GetValueOrDefault(memberKey),
             summaryContext: context.SummaryContext
         );
     }
@@ -129,6 +97,7 @@ internal static class AgentflowBlockBuildSupport
             blockNode.Instructions,
             context.SessionScope,
             agentflowId: context.AgentflowId,
+            agentflowRevision: context.AgentflowRevision,
             isWorkflow: true
         ).BindAsExecutor(context.AgentHostOptions);
     }

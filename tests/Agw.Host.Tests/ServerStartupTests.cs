@@ -247,7 +247,11 @@ public sealed class ServerStartupTests : IDisposable
 
     private ServerProcess Start(string workingDirectory, params string[] arguments)
     {
-        return StartApplication(workingDirectory, AppContext.BaseDirectory, arguments);
+        return StartApplication(
+            workingDirectory,
+            AppContext.BaseDirectory,
+            [.. arguments, $"--Extensions:Directory={Path.Combine(_directory, "extensions")}"]
+        );
     }
 
     private ServerProcess StartApplication(string workingDirectory, string applicationDirectory, string[] arguments)

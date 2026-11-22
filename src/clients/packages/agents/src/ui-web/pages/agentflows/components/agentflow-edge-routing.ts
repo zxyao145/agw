@@ -1,275 +1,189 @@
-import type { Edge } from "reactflow";
+import type { AgentflowEdge, AgentflowRoutingStrategy } from "../../../../types/agentflow";
+import type { AgentflowEditorDocument } from "./agentflow-document";
 
-import { AgentflowEdgeKind } from "../../../../types/agentflow";
+function sortSwitchCases(edges: AgentflowEdge[]): AgentflowEdge[] {
+  return edges.sort((left, right) => left.switchCaseOrder - right.switchCaseOrder);
+}
 
-export type AgentflowEdgeData = {
-  kind: AgentflowEdgeKind;
-  label: string;
-  conditionJson: string;
-  configJson: string;
-};
+export function getRegularOutgoingEdges(edges: readonly AgentflowEdge[], sourceNodeId: string) {
+  return edges.filter(
+    (edge) => edge.sourceNodeId === sourceNodeId && !edge.isFanInBarrier && !edge.isSwitchDefault,
+  );
+}
 
-type RoutingStrategy = "direct" | "fan-out" | "switch";
+export function getSwitchCases(edges: readonly AgentflowEdge[], sourceNodeId: string) {
+  return sortSwitchCases(getRegularOutgoingEdges(edges, sourceNodeId));
+}
 
-const SWITCH_CASE_ORDER_KEY = "switchCaseOrder";
+function nextSwitchCaseOrder(edges: readonly AgentflowEdge[], sourceNodeId: string) {
+  return (getSwitchCases(edges, sourceNodeId).at(-1)?.switchCaseOrder ?? -1) + 1;
+}
 
-export function createDefaultEdgeData(
-  kind: AgentflowEdgeKind = AgentflowEdgeKind.Direct,
-): AgentflowEdgeData {
+export function getNewEdgeRouting(document: AgentflowEditorDocument, sourceNodeId: string) {
+  const source = document.nodes.find((node) => node.nodeId === sourceNodeId);
+  const switchCaseOrder =
+    source?.routingStrategy === "switch" ? nextSwitchCaseOrder(document.edges, sourceNodeId) : 0;
+  if (source?.kind !== "humanGate") return { switchCaseOrder, choiceId: null };
+
+  const assignedChoices = new Set(
+    document.edges
+      .filter((edge) => edge.sourceNodeId === sourceNodeId && !edge.isFanInBarrier)
+      .map((edge) => edge.choiceId),
+  );
+  const choice = source.choices.find((item) => !assignedChoices.has(item.choiceId));
+  return { switchCaseOrder, choiceId: choice?.choiceId ?? source.choices[0]?.choiceId ?? null };
+}
+
+export function renumberSwitchCases(
+  document: AgentflowEditorDocument,
+  sourceNodeIds?: readonly string[],
+): AgentflowEditorDocument {
+  const sourceIds =
+    sourceNodeIds ??
+    document.nodes.filter((node) => node.routingStrategy === "switch").map((node) => node.nodeId);
+  const selectedSources = new Set(sourceIds);
+  const nextOrderByEdgeId = new Map<string, number>();
+
+  for (const sourceNodeId of sourceIds) {
+    const cases = getSwitchCases(document.edges, sourceNodeId);
+    cases.forEach((edge, index) => nextOrderByEdgeId.set(edge.edgeId, index));
+  }
+
   return {
-    kind,
-    label: "",
-    conditionJson: "",
-    configJson: "",
+    ...document,
+    edges: document.edges.map((edge) => {
+      if (!selectedSources.has(edge.sourceNodeId)) return edge;
+      if (edge.isFanInBarrier || edge.isSwitchDefault) return edge;
+      return { ...edge, switchCaseOrder: nextOrderByEdgeId.get(edge.edgeId) ?? 0 };
+    }),
   };
 }
 
-export function getDefaultEdgeKindForSource(
-  edges: Edge<AgentflowEdgeData>[],
-  sourceId: string,
-  fallback: AgentflowEdgeKind,
-) {
-  const strategyEdge = edges.find(
-    (edge) => edge.source === sourceId && edge.data?.kind !== AgentflowEdgeKind.FanInBarrier,
+export function setRoutingStrategy(
+  document: AgentflowEditorDocument,
+  nodeId: string,
+  strategy: AgentflowRoutingStrategy,
+): AgentflowEditorDocument {
+  const nodes = document.nodes.map((node) =>
+    node.nodeId === nodeId ? { ...node, routingStrategy: strategy } : node,
   );
-  const strategy = strategyEdge ? getRoutingStrategy(strategyEdge.data?.kind) : null;
-
-  if (strategy === "fan-out") return AgentflowEdgeKind.FanOut;
-  if (strategy === "switch") return AgentflowEdgeKind.SwitchCase;
-  if (strategy === "direct") return AgentflowEdgeKind.Direct;
-  return fallback;
-}
-
-export function isPredicateEdgeKind(kind: AgentflowEdgeKind) {
-  return (
-    kind === AgentflowEdgeKind.Direct ||
-    kind === AgentflowEdgeKind.FanOut ||
-    kind === AgentflowEdgeKind.SwitchCase
-  );
-}
-
-export function getSwitchCaseOrder(configJson: string) {
-  const config = readConfigJson(configJson);
-  const value = config?.[SWITCH_CASE_ORDER_KEY];
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
-}
-
-export function setSwitchCaseOrder(configJson: string, order: number | null) {
-  const config = readConfigJson(configJson);
-  if (config === null) {
-    return order === null
-      ? configJson
-      : JSON.stringify({ [SWITCH_CASE_ORDER_KEY]: order }, null, 2);
-  }
-
-  if (order === null) {
-    if (!Object.hasOwn(config, SWITCH_CASE_ORDER_KEY)) return configJson;
-    delete config[SWITCH_CASE_ORDER_KEY];
-  } else {
-    config[SWITCH_CASE_ORDER_KEY] = order;
-  }
-
-  return Object.keys(config).length > 0 ? JSON.stringify(config, null, 2) : "";
-}
-
-export function getNextSwitchCaseOrder(edges: Edge<AgentflowEdgeData>[], sourceId: string) {
-  const orders = edges
-    .filter((edge) => edge.source === sourceId && edge.data?.kind === AgentflowEdgeKind.SwitchCase)
-    .map((edge) => getSwitchCaseOrder(edge.data?.configJson ?? ""))
-    .filter((order): order is number => order !== null);
-  return orders.length > 0 ? Math.max(...orders) + 1 : 0;
-}
-
-export function normalizeSwitchCaseOrders(edges: Edge<AgentflowEdgeData>[], sourceId?: string) {
-  const sourceIds = sourceId
-    ? [sourceId]
-    : [
-        ...new Set(
-          edges
-            .filter((edge) => edge.data?.kind === AgentflowEdgeKind.SwitchCase)
-            .map((edge) => edge.source),
-        ),
-      ];
-  const orderByEdgeId = new Map<string, number>();
-
-  sourceIds.forEach((currentSourceId) => {
-    edges
-      .map((edge, index) => ({ edge, index }))
-      .filter(
-        ({ edge }) =>
-          edge.source === currentSourceId && edge.data?.kind === AgentflowEdgeKind.SwitchCase,
-      )
-      .sort((left, right) => {
-        const leftOrder = getSwitchCaseOrder(left.edge.data?.configJson ?? "");
-        const rightOrder = getSwitchCaseOrder(right.edge.data?.configJson ?? "");
-        return (
-          (leftOrder ?? Number.MAX_SAFE_INTEGER) - (rightOrder ?? Number.MAX_SAFE_INTEGER) ||
-          left.index - right.index
-        );
-      })
-      .forEach(({ edge }, index) => orderByEdgeId.set(edge.id, index));
+  const edges = document.edges.map((edge) => {
+    if (edge.sourceNodeId !== nodeId || edge.isFanInBarrier) return edge;
+    if (strategy === "switch") return edge;
+    return { ...edge, isSwitchDefault: false, switchCaseOrder: 0 };
   });
 
-  return edges.map((edge) => {
-    const order = orderByEdgeId.get(edge.id);
-    const data = { ...createDefaultEdgeData(), ...edge.data };
-    if (order === undefined) {
-      if (data.kind === AgentflowEdgeKind.SwitchCase) return edge;
-      const configJson = setSwitchCaseOrder(data.configJson, null);
-      return configJson === data.configJson ? edge : { ...edge, data: { ...data, configJson } };
-    }
+  return strategy === "switch"
+    ? renumberSwitchCases({ ...document, nodes, edges }, [nodeId])
+    : { ...document, nodes, edges };
+}
 
+export function setSwitchDefault(
+  document: AgentflowEditorDocument,
+  edgeId: string,
+): AgentflowEditorDocument {
+  const selected = document.edges.find((edge) => edge.edgeId === edgeId);
+  if (!selected) return document;
+
+  const siblings = sortSwitchCases(
+    document.edges.filter(
+      (edge) => edge.sourceNodeId === selected.sourceNodeId && !edge.isFanInBarrier,
+    ),
+  );
+  let order = 0;
+  const edges = siblings.map((edge) => {
+    if (edge.edgeId === edgeId) {
+      return { ...edge, isSwitchDefault: true, switchCaseOrder: 0, conditions: [] };
+    }
     return {
       ...edge,
-      data: {
-        ...data,
-        configJson: setSwitchCaseOrder(data.configJson, order),
-      },
+      isSwitchDefault: false,
+      switchCaseOrder: order++,
     };
   });
+  const byId = new Map(edges.map((edge) => [edge.edgeId, edge]));
+  return { ...document, edges: document.edges.map((edge) => byId.get(edge.edgeId) ?? edge) };
 }
 
-export function moveSwitchCaseEdge(
-  edges: Edge<AgentflowEdgeData>[],
+export function clearSwitchDefault(
+  document: AgentflowEditorDocument,
   edgeId: string,
-  direction: -1 | 1,
-) {
-  const edge = edges.find((candidate) => candidate.id === edgeId);
-  if (!edge || edge.data?.kind !== AgentflowEdgeKind.SwitchCase) return edges;
+): AgentflowEditorDocument {
+  const selected = document.edges.find((edge) => edge.edgeId === edgeId);
+  if (!selected) return document;
+  const nextOrder = nextSwitchCaseOrder(document.edges, selected.sourceNodeId);
 
-  const normalized = normalizeSwitchCaseOrders(edges, edge.source);
-  const cases = normalized
-    .filter(
-      (candidate) =>
-        candidate.source === edge.source && candidate.data?.kind === AgentflowEdgeKind.SwitchCase,
-    )
-    .sort(
-      (left, right) =>
-        (getSwitchCaseOrder(left.data?.configJson ?? "") ?? 0) -
-        (getSwitchCaseOrder(right.data?.configJson ?? "") ?? 0),
-    );
-  const currentIndex = cases.findIndex((candidate) => candidate.id === edgeId);
-  const nextIndex = currentIndex + direction;
-  if (currentIndex < 0 || nextIndex < 0 || nextIndex >= cases.length) return normalized;
-
-  [cases[currentIndex], cases[nextIndex]] = [cases[nextIndex], cases[currentIndex]];
-  const orderByEdgeId = new Map(cases.map((candidate, index) => [candidate.id, index]));
-  return normalized.map((candidate) => {
-    const order = orderByEdgeId.get(candidate.id);
-    if (order === undefined) return candidate;
-
-    const data = { ...createDefaultEdgeData(), ...candidate.data };
-    return {
-      ...candidate,
-      data: {
-        ...data,
-        configJson: setSwitchCaseOrder(data.configJson, order),
-      },
-    };
-  });
+  return {
+    ...document,
+    edges: document.edges.map((edge) =>
+      edge.edgeId === edgeId
+        ? { ...edge, isSwitchDefault: false, switchCaseOrder: nextOrder }
+        : edge,
+    ),
+  };
 }
 
-export function removeAgentflowEdge(edges: Edge<AgentflowEdgeData>[], edgeId: string) {
-  const sourceId = edges.find((edge) => edge.id === edgeId)?.source;
-  return normalizeSwitchCaseOrders(
-    edges.filter((edge) => edge.id !== edgeId),
-    sourceId,
-  );
+export function reorderSwitchCase(
+  document: AgentflowEditorDocument,
+  edgeId: string,
+  targetIndex: number,
+): AgentflowEditorDocument {
+  const selected = document.edges.find((edge) => edge.edgeId === edgeId);
+  if (!selected) return document;
+
+  const cases = getSwitchCases(document.edges, selected.sourceNodeId);
+  const currentIndex = cases.findIndex((edge) => edge.edgeId === edgeId);
+  if (currentIndex < 0) return document;
+  const [moved] = cases.splice(currentIndex, 1);
+  cases.splice(Math.max(0, Math.min(targetIndex, cases.length)), 0, moved);
+  const orderById = new Map(cases.map((edge, index) => [edge.edgeId, index]));
+
+  return {
+    ...document,
+    edges: document.edges.map((edge) => {
+      const switchCaseOrder = orderById.get(edge.edgeId);
+      return switchCaseOrder === undefined ? edge : { ...edge, switchCaseOrder };
+    }),
+  };
 }
 
-export function getSwitchCasePosition(edges: Edge<AgentflowEdgeData>[], edgeId: string) {
-  const edge = edges.find((candidate) => candidate.id === edgeId);
-  if (!edge || edge.data?.kind !== AgentflowEdgeKind.SwitchCase) {
-    return null;
-  }
-
-  const cases = edges
-    .filter(
-      (candidate) =>
-        candidate.source === edge.source && candidate.data?.kind === AgentflowEdgeKind.SwitchCase,
-    )
-    .sort((left, right) => {
-      const leftOrder = getSwitchCaseOrder(left.data?.configJson ?? "");
-      const rightOrder = getSwitchCaseOrder(right.data?.configJson ?? "");
-      return (leftOrder ?? Number.MAX_SAFE_INTEGER) - (rightOrder ?? Number.MAX_SAFE_INTEGER);
-    });
-  const index = cases.findIndex((candidate) => candidate.id === edgeId);
-  return index < 0 ? null : { index, count: cases.length };
+export function setFanInBarrier(
+  document: AgentflowEditorDocument,
+  edgeId: string,
+  waiting: boolean,
+): AgentflowEditorDocument {
+  return {
+    ...document,
+    edges: document.edges.map((edge) => {
+      if (edge.edgeId !== edgeId || edge.isFanInBarrier === waiting) return edge;
+      return waiting
+        ? {
+            ...edge,
+            isFanInBarrier: true,
+            isSwitchDefault: false,
+            switchCaseOrder: 0,
+            choiceId: null,
+            conditions: [],
+          }
+        : { ...edge, isFanInBarrier: false, ...getNewEdgeRouting(document, edge.sourceNodeId) };
+    }),
+  };
 }
 
-export function getEdgeRoutingLabel(
-  edge: Edge<AgentflowEdgeData>,
-  edges: Edge<AgentflowEdgeData>[],
-) {
-  const data = { ...createDefaultEdgeData(), ...edge.data };
-  if (data.kind === AgentflowEdgeKind.SwitchDefault) return "ELSE";
-  if (data.kind === AgentflowEdgeKind.SwitchCase) {
-    return getSwitchCasePosition(edges, edge.id)?.index === 0 ? "IF" : "ELSE IF";
-  }
-  if (data.kind === AgentflowEdgeKind.FanInBarrier) return "BARRIER";
-  if (data.kind === AgentflowEdgeKind.FanOut) {
-    return data.conditionJson.trim() ? "WHEN" : "FAN OUT";
-  }
-  return "";
-}
-
-export function validateAgentflowEdgeRouting(edges: Edge<AgentflowEdgeData>[]) {
-  const sourceIds = new Set(edges.map((edge) => edge.source));
-  for (const sourceId of sourceIds) {
-    const sourceEdges = edges.filter(
-      (edge) => edge.source === sourceId && edge.data?.kind !== AgentflowEdgeKind.FanInBarrier,
-    );
-    const strategies = new Set(
-      sourceEdges
-        .map((edge) => getRoutingStrategy(edge.data?.kind))
-        .filter((strategy): strategy is RoutingStrategy => strategy !== null),
-    );
-    if (strategies.size > 1) {
-      return `${sourceId} cannot mix Direct, Fan Out, and Switch routing`;
-    }
-
-    if (!strategies.has("switch")) continue;
-
-    const cases = sourceEdges.filter((edge) => edge.data?.kind === AgentflowEdgeKind.SwitchCase);
-    const defaults = sourceEdges.filter(
-      (edge) => edge.data?.kind === AgentflowEdgeKind.SwitchDefault,
-    );
-    if (cases.length === 0) return `${sourceId} needs at least one If branch`;
-    if (defaults.length > 1) return `${sourceId} can only have one Else branch`;
-    if (defaults.some((edge) => edge.data?.conditionJson.trim())) {
-      return `${sourceId} Else branch cannot have a predicate`;
-    }
-
-    const orders = new Set<number>();
-    for (const edge of cases) {
-      if (!edge.data?.conditionJson.trim()) return `${edge.id} needs a predicate`;
-      const order = getSwitchCaseOrder(edge.data.configJson);
-      if (order === null || orders.has(order)) return `${sourceId} has invalid branch order`;
-      orders.add(order);
-    }
-  }
-
-  return null;
-}
-
-function getRoutingStrategy(kind: AgentflowEdgeKind | undefined): RoutingStrategy | null {
-  if (kind === AgentflowEdgeKind.Direct) return "direct";
-  if (kind === AgentflowEdgeKind.FanOut) return "fan-out";
-  if (kind === AgentflowEdgeKind.SwitchCase || kind === AgentflowEdgeKind.SwitchDefault) {
-    return "switch";
-  }
-  return null;
-}
-
-function readConfigJson(value: string): Record<string, unknown> | null {
-  if (!value.trim()) return {};
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
+export function removeGateChoice(
+  document: AgentflowEditorDocument,
+  nodeId: string,
+  choiceId: string,
+): AgentflowEditorDocument {
+  return {
+    ...document,
+    nodes: document.nodes.map((node) =>
+      node.nodeId === nodeId && node.kind === "humanGate"
+        ? { ...node, choices: node.choices.filter((choice) => choice.choiceId !== choiceId) }
+        : node,
+    ),
+    edges: document.edges.filter(
+      (edge) => !(edge.sourceNodeId === nodeId && edge.choiceId === choiceId),
+    ),
+  };
 }

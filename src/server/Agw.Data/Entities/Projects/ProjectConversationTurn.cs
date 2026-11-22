@@ -62,6 +62,8 @@ public class ProjectConversationTurn
 
     public string? ErrorCode { get; set; }
 
+    public ProjectConversationTurnExtra Extra { get; set; } = new();
+
     [JsonIgnore]
     public virtual ProjectConversation? ProjectConversation { get; set; }
 }

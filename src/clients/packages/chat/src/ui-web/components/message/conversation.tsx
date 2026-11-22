@@ -32,6 +32,7 @@ import {
 import { MessageTrigger } from "../message-trigger";
 import { AgentflowCheckpointCard } from "./agentflow-checkpoint-card";
 import { HumanGateApproval } from "./human-gate-approval";
+import { WorkflowGateCard } from "./workflow-gate-card";
 import { HumanInteractionPanel } from "./human-interaction-panel";
 import { HumanInteractionQuestionResultView } from "./human-interaction-question-result";
 import { MessageActions } from "./message-actions";
@@ -437,44 +438,37 @@ function ConversationItem({
       );
     }
 
+    if (request.kind === "workflow-gate") {
+      return (
+        <div className="mx-4 max-w-full">
+          <WorkflowGateCard
+            key={request.interactionId}
+            request={request}
+            onRespond={(response) => onHumanResponse?.(response)}
+          />
+        </div>
+      );
+    }
     return (
       <div className="mx-4 max-w-full">
         <HumanGateApproval
           request={request}
           permissionMode={permissionMode}
-          onApprove={(scope, responseText) =>
-            onHumanResponse?.(
-              request.kind === "tool-approval"
-                ? {
-                    kind: request.kind,
-                    interactionId: request.interactionId,
-                    approved: true,
-                    scope,
-                  }
-                : {
-                    kind: request.kind,
-                    interactionId: request.interactionId,
-                    approved: true,
-                    responseText,
-                  },
-            )
+          onApprove={(scope) =>
+            onHumanResponse?.({
+              kind: request.kind,
+              interactionId: request.interactionId,
+              approved: true,
+              scope,
+            })
           }
-          onReject={(responseText) =>
-            onHumanResponse?.(
-              request.kind === "tool-approval"
-                ? {
-                    kind: request.kind,
-                    interactionId: request.interactionId,
-                    approved: false,
-                    scope: "Once",
-                  }
-                : {
-                    kind: request.kind,
-                    interactionId: request.interactionId,
-                    approved: false,
-                    responseText,
-                  },
-            )
+          onReject={() =>
+            onHumanResponse?.({
+              kind: request.kind,
+              interactionId: request.interactionId,
+              approved: false,
+              scope: "Once",
+            })
           }
         />
       </div>

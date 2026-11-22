@@ -12,10 +12,12 @@ namespace Agw.Agents.Definitions.Agents;
 public sealed class ExecutionPermissionService
 {
     private readonly IAgentsDbContext _db;
+    private readonly IAgentflowRevisionSnapshotReader _snapshots;
 
-    public ExecutionPermissionService(IAgentsDbContext db)
+    public ExecutionPermissionService(IAgentsDbContext db, IAgentflowRevisionSnapshotReader snapshots)
     {
         _db = db;
+        _snapshots = snapshots;
     }
 
     public static ExecutionPermissionCapabilities ForAgent(Agent agent) =>
@@ -52,18 +54,28 @@ public sealed class ExecutionPermissionService
         AgentRuntimeType type,
         Guid id,
         CancellationToken ct = default
-    ) => GetCoreAsync(type, id, new HashSet<Guid>(), ct);
+    ) => GetAsync(type, id, agentflowRevision: null, ct: ct);
 
-    private async Task<ExecutionPermissionCapabilities> GetCoreAsync(
+    public async Task<ExecutionPermissionCapabilities> GetAsync(
         AgentRuntimeType type,
         Guid id,
-        HashSet<Guid> visited,
-        CancellationToken ct
+        int? agentflowRevision,
+        CancellationToken ct = default
     )
     {
         var owner = UserInfoUtil.RequiredUserId;
+        if (agentflowRevision is <= 0)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam);
+        }
+
         if (type == AgentRuntimeType.Agent)
         {
+            if (agentflowRevision.HasValue)
+            {
+                throw new AgwException(ErrorCodes.InvalidParam);
+            }
+
             var agent =
                 await _db.Agents.AsNoTracking().SingleOrDefaultAsync(a => a.Id == id && a.CreateBy == owner, ct)
                 ?? throw new AgwException(ErrorCodes.ResourceNotFound);
@@ -71,34 +83,105 @@ public sealed class ExecutionPermissionService
         }
         if (type != AgentRuntimeType.Agentflow)
             throw new AgwException(ErrorCodes.InvalidParam);
-        var flow =
-            await _db
-                .Agentflows.AsNoTracking()
-                .Include(a => a.Nodes)
-                .SingleOrDefaultAsync(a => a.Id == id && a.CreateBy == owner, ct)
-            ?? throw new AgwException(ErrorCodes.ResourceNotFound);
-        if (!visited.Add(id))
-            throw new AgwException(ErrorCodes.InvalidParam, "Recursive Agentflow references are not supported.");
+        var snapshot = await _snapshots.CreateRevisionSnapshotAsync(id, agentflowRevision ?? 0, ct);
+        return await GetAgentflowAsync(id, snapshot, ct);
+    }
+
+    public Task<ExecutionPermissionCapabilities> GetForTargetAsync(
+        AgentRuntimeType type,
+        Guid id,
+        AgentflowRevisionSnapshot? snapshot,
+        CancellationToken ct = default
+    )
+    {
+        if (snapshot is null)
+        {
+            return GetAsync(type, id, ct);
+        }
+
+        if (type != AgentRuntimeType.Agentflow)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam);
+        }
+
+        return GetAgentflowAsync(id, snapshot, ct);
+    }
+
+    public async Task<ExecutionPermissionCapabilities> GetAgentflowAsync(
+        Guid agentflowId,
+        AgentflowRevisionSnapshot snapshot,
+        CancellationToken ct = default
+    )
+    {
+        if (snapshot.RootRevision <= 0)
+            throw new AgwException(ErrorCodes.AgentflowRevisionNotFound);
+
+        var agentIds = await GetAgentIdsAsync(agentflowId, snapshot, ct).ConfigureAwait(false);
+        var agents = await _db.Agents.AsNoTracking().Where(agent => agentIds.Contains(agent.Id)).ToListAsync(ct);
+        if (agents.Count != agentIds.Count)
+        {
+            throw new AgwException(ErrorCodes.ResourceNotFound);
+        }
+
+        return IntersectCapabilities(agents);
+    }
+
+    private async Task<HashSet<Guid>> GetAgentIdsAsync(
+        Guid agentflowId,
+        AgentflowRevisionSnapshot snapshot,
+        CancellationToken ct
+    )
+    {
+        var definitions = snapshot
+            .Dependencies.Select(dependency => (Id: dependency.TargetAgentflowId, Revision: dependency.TargetRevision))
+            .Prepend((agentflowId, snapshot.RootRevision))
+            .Distinct();
+        var agentIds = new HashSet<Guid>();
+        foreach (var (id, revision) in definitions)
+        {
+            await AddDefinitionAgentIdsAsync(agentIds, id, revision, ct).ConfigureAwait(false);
+        }
+
+        return agentIds;
+    }
+
+    private async Task AddDefinitionAgentIdsAsync(
+        HashSet<Guid> agentIds,
+        Guid agentflowId,
+        int revision,
+        CancellationToken ct
+    )
+    {
+        var nodes = _db
+            .AgentflowNodes.Where(node =>
+                node.AgentflowId == agentflowId
+                && node.AgentflowRevision == revision
+                && node.Kind == AgentflowNodeKind.Agent
+                && node.RelateId.HasValue
+            )
+            .Select(node => node.RelateId!.Value);
+        var members = _db
+            .AgentflowBlockMembers.Where(member =>
+                member.AgentflowId == agentflowId
+                && member.AgentflowRevision == revision
+                && member.Kind == AgentflowNodeKind.Agent
+            )
+            .Select(member => member.RelateId);
+        agentIds.UnionWith(await nodes.Union(members).ToListAsync(ct).ConfigureAwait(false));
+    }
+
+    private static ExecutionPermissionCapabilities IntersectCapabilities(IReadOnlyList<Agent> agents)
+    {
         var supported = new HashSet<AgwPermissionMode>(Enum.GetValues<AgwPermissionMode>());
         var supportsNoTools = true;
         string? reason = null;
-        foreach (
-            var node in flow.Nodes.Where(n =>
-                n.RelateId.HasValue && n.Kind is AgentflowNodeKind.Agent or AgentflowNodeKind.WorkflowAsAgent
-            )
-        )
+        foreach (var agent in agents)
         {
-            var child = await GetCoreAsync(
-                node.Kind == AgentflowNodeKind.Agent ? AgentRuntimeType.Agent : AgentRuntimeType.Agentflow,
-                node.RelateId!.Value,
-                visited,
-                ct
-            );
+            var child = ForAgent(agent);
             supported.IntersectWith(child.SupportedPermissionModes);
             supportsNoTools &= child.SupportsNoTools;
             reason ??= child.Reason;
         }
-        visited.Remove(id);
         return new(supported.Order().ToArray(), supportsNoTools, reason);
     }
 }

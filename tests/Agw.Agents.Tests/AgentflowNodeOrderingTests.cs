@@ -1,10 +1,13 @@
 using System.Runtime.CompilerServices;
+using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Shared.Data.Entities.Agentflows;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
@@ -34,7 +37,10 @@ public sealed class AgentflowNodeOrderingTests : IDisposable
             }
         )
         foreach (var route in Enum.GetValues<TestRoute>())
-            yield return [kind, route];
+        {
+            if ((kind == AgentflowNodeKind.HumanGate) == (route == TestRoute.Choice))
+                yield return [kind, route];
+        }
     }
 
     [Theory]
@@ -61,7 +67,16 @@ public sealed class AgentflowNodeOrderingTests : IDisposable
             events.Add(evt);
             if (evt is RequestInfoEvent request)
                 await run.SendResponseAsync(
-                    request.Request.CreateResponse(new List<ChatMessage> { new(ChatRole.User, "approved") })
+                    request.Request.CreateResponse(
+                        new List<ChatMessage>
+                        {
+                            new(ChatRole.User, "approved")
+                            {
+                                AuthorName = "human",
+                                AdditionalProperties = new AdditionalPropertiesDictionary { ["choiceId"] = "approve" },
+                            },
+                        }
+                    )
                 );
         }
 
@@ -84,7 +99,7 @@ public sealed class AgentflowNodeOrderingTests : IDisposable
                 AgentflowNodeKind.HandoffBlock,
             }
         )
-        foreach (var route in Enum.GetValues<TestRoute>())
+        foreach (var route in Enum.GetValues<TestRoute>().Where(route => route != TestRoute.Choice))
             yield return [kind, route];
     }
 
@@ -180,31 +195,48 @@ public sealed class AgentflowNodeOrderingTests : IDisposable
         var definition = new Agentflow { Id = Guid.NewGuid(), Name = "join" };
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode
+            {
+                NodeId = "input",
+                Kind = AgentflowNodeKind.Input,
+                RoutingStrategy = AgentflowRoutingStrategy.FanOut,
+            },
             new AgentflowNode
             {
                 NodeId = "fast",
                 Kind = emptySibling ? AgentflowNodeKind.ClearMessages : AgentflowNodeKind.PromptAdapter,
             },
-            new AgentflowNode { NodeId = "waiting", Kind = AgentflowNodeKind.HumanGate },
+            new AgentflowNode
+            {
+                NodeId = "waiting",
+                Kind = AgentflowNodeKind.HumanGate,
+                RoutingStrategy = AgentflowRoutingStrategy.Choice,
+                ConfigJson = AgentflowDefinitionJson.WriteOptions(
+                    new HumanGateOptions(null, [new("approve", "Approve")], false)
+                ),
+            },
             new AgentflowNode { NodeId = "target", Kind = AgentflowNodeKind.Agent },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
         var edges = new[]
         {
-            Edge("input", "fast", AgentflowEdgeKind.FanOut),
-            Edge("input", "waiting", AgentflowEdgeKind.FanOut),
-            Edge("fast", "target", AgentflowEdgeKind.FanInBarrier),
-            Edge("waiting", "target", AgentflowEdgeKind.FanInBarrier),
+            Edge("input", "fast"),
+            Edge("input", "waiting"),
+            Edge("fast", "target", isFanInBarrier: true),
+            Edge("waiting", "target", isFanInBarrier: true),
             Edge("target", "output"),
         };
         Workflow Build() =>
-            new AgentflowWorkflowCompiler().Compile(
-                definition,
-                nodes,
-                edges,
-                new Dictionary<string, AIAgent> { ["target"] = Agent(target, "target") }
-            )!;
+            new AgentflowWorkflowCompiler(NullLogger<AgentflowWorkflowCompiler>.Instance)
+                .Compile(
+                    definition,
+                    1,
+                    nodes,
+                    edges,
+                    [],
+                    new Dictionary<string, AIAgent> { ["target"] = Agent(target, "target") }
+                )!
+                .Workflow;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
         var store = new DurableAgentflowCheckpointStore();
@@ -327,6 +359,7 @@ public sealed class AgentflowNodeOrderingTests : IDisposable
             ["source"] = Agent(source, "source"),
             ["target"] = Agent(target, "target"),
         };
+        var members = new List<AgentflowBlockMember>();
         if (
             kind
             is AgentflowNodeKind.ConcurrentBlock
@@ -335,75 +368,97 @@ public sealed class AgentflowNodeOrderingTests : IDisposable
                 or AgentflowNodeKind.MagenticBlock
         )
         {
-            nodes[1].ConfigJson = """{"participantNodeIds":["a","b"],"maxRounds":1,"requirePlanSignoff":false}""";
-            nodes.AddRange([
-                new() { NodeId = "a", Kind = AgentflowNodeKind.Agent },
-                new() { NodeId = "b", Kind = AgentflowNodeKind.Agent },
+            nodes[1].ConfigJson = kind switch
+            {
+                AgentflowNodeKind.GroupChatBlock => AgentflowDefinitionJson.WriteOptions(new GroupChatBlockOptions(1)),
+                AgentflowNodeKind.MagenticBlock => AgentflowDefinitionJson.WriteOptions(
+                    new MagenticBlockOptions(1, null, null, false)
+                ),
+                _ => AgentflowDefinitionJson.EmptyOptions,
+            };
+            members.AddRange([
+                new()
+                {
+                    NodeId = "source",
+                    MemberId = "a",
+                    Name = "a",
+                    Kind = AgentflowNodeKind.Agent,
+                    IsManager = kind == AgentflowNodeKind.MagenticBlock,
+                },
+                new()
+                {
+                    NodeId = "source",
+                    MemberId = "b",
+                    Name = "b",
+                    Kind = AgentflowNodeKind.Agent,
+                    SortOrder = 1,
+                },
             ]);
             if (kind == AgentflowNodeKind.MagenticBlock)
                 source.ReplyText =
                     """{"is_request_satisfied":{"answer":true,"reason":"done"},"is_in_loop":{"answer":false,"reason":"done"},"is_progress_being_made":{"answer":true,"reason":"done"},"next_speaker":{"answer":"source.b","reason":"done"},"instruction_or_question":{"answer":"done","reason":"done"}}""";
-            agents["a"] = Agent(source, "a");
-            agents["b"] = Agent(new CountingClient(), "b");
+            agents["source.a"] = Agent(source, "a");
+            agents["source.b"] = Agent(new CountingClient(), "b");
         }
         if (kind == AgentflowNodeKind.WorkflowAsAgent)
         {
-            var nested = new AgentflowWorkflowCompiler().Compile(
-                new Agentflow { Id = Guid.NewGuid(), Name = "nested" },
-                [
-                    new AgentflowNode { NodeId = "child", Kind = AgentflowNodeKind.Agent },
-                    new AgentflowNode { NodeId = "child-output", Kind = AgentflowNodeKind.Output },
-                ],
-                [Edge("child", "child-output")],
-                new Dictionary<string, AIAgent> { ["child"] = Agent(source, "child") }
-            )!;
+            var nested = new AgentflowWorkflowCompiler(NullLogger<AgentflowWorkflowCompiler>.Instance)
+                .Compile(
+                    new Agentflow { Id = Guid.NewGuid(), Name = "nested" },
+                    1,
+                    [
+                        new AgentflowNode { NodeId = "child-input", Kind = AgentflowNodeKind.Input },
+                        new AgentflowNode { NodeId = "child", Kind = AgentflowNodeKind.Agent },
+                        new AgentflowNode { NodeId = "child-output", Kind = AgentflowNodeKind.Output },
+                    ],
+                    [Edge("child-input", "child"), Edge("child", "child-output")],
+                    [],
+                    new Dictionary<string, AIAgent> { ["child"] = Agent(source, "child") }
+                )!
+                .Workflow;
             agents["source"] = nested.AsAIAgent(executionEnvironment: InProcessExecution.Lockstep);
         }
         var edges = new List<AgentflowEdge> { Edge("input", "source"), Edge("target", "output") };
-        var outgoing = Edge(
-            "source",
-            "target",
-            route switch
-            {
-                TestRoute.FanOut => AgentflowEdgeKind.FanOut,
-                TestRoute.FanIn => AgentflowEdgeKind.FanInBarrier,
-                TestRoute.SwitchCase => AgentflowEdgeKind.SwitchCase,
-                TestRoute.SwitchDefault => AgentflowEdgeKind.SwitchDefault,
-                _ => AgentflowEdgeKind.Direct,
-            }
-        );
+        nodes[1].RoutingStrategy = route switch
+        {
+            TestRoute.FanOut => AgentflowRoutingStrategy.FanOut,
+            TestRoute.SwitchCase or TestRoute.SwitchDefault => AgentflowRoutingStrategy.Switch,
+            TestRoute.Choice => AgentflowRoutingStrategy.Choice,
+            _ => AgentflowRoutingStrategy.Direct,
+        };
+        var outgoing = Edge("source", "target", isFanInBarrier: route == TestRoute.FanIn);
         if (route is TestRoute.DirectPredicate or TestRoute.SwitchCase)
-            outgoing.ConditionJson = """{"always":true}""";
-        if (route == TestRoute.SwitchCase)
-            outgoing.ConfigJson = """{"switchCaseOrder":0}""";
+            outgoing.ConditionJson = AgentflowDefinitionJson.WriteConditions([
+                new("notContains", "reject this request", ""),
+            ]);
+        if (route == TestRoute.Choice)
+        {
+            nodes[1].ConfigJson = AgentflowDefinitionJson.WriteOptions(
+                new HumanGateOptions(null, [new("approve", "Approve")], false)
+            );
+            outgoing.ChoiceId = "approve";
+        }
         if (route == TestRoute.SwitchDefault)
         {
             nodes.Add(new() { NodeId = "unmatched", Kind = AgentflowNodeKind.Output });
-            var unmatched = Edge("source", "unmatched", AgentflowEdgeKind.SwitchCase);
-            unmatched.ConditionJson = """{"always":false}""";
-            unmatched.ConfigJson = """{"switchCaseOrder":0}""";
+            var unmatched = Edge("source", "unmatched");
+            unmatched.ConditionJson = AgentflowDefinitionJson.WriteConditions([new("minMessages", "999", "")]);
             edges.Add(unmatched);
+            outgoing.IsSwitchDefault = true;
         }
         edges.Add(outgoing);
-        return new AgentflowWorkflowCompiler().Compile(
-            new Agentflow { Id = Guid.NewGuid(), Name = "ordering" },
-            nodes,
-            edges,
-            agents
-        )!;
+        return new AgentflowWorkflowCompiler(NullLogger<AgentflowWorkflowCompiler>.Instance)
+            .Compile(new Agentflow { Id = Guid.NewGuid(), Name = "ordering" }, 1, nodes, edges, members, agents)!
+            .Workflow;
     }
 
-    private static AgentflowEdge Edge(
-        string source,
-        string target,
-        AgentflowEdgeKind kind = AgentflowEdgeKind.Direct
-    ) =>
+    private static AgentflowEdge Edge(string source, string target, bool isFanInBarrier = false) =>
         new()
         {
             EdgeId = source + "-" + target,
             SourceNodeId = source,
             TargetNodeId = target,
-            Kind = kind,
+            IsFanInBarrier = isFanInBarrier,
         };
 
     private static AIAgent Agent(IChatClient client, string id) =>
@@ -425,6 +480,7 @@ public sealed class AgentflowNodeOrderingTests : IDisposable
         FanIn,
         SwitchCase,
         SwitchDefault,
+        Choice,
     }
 
     private sealed class CountingClient : IChatClient

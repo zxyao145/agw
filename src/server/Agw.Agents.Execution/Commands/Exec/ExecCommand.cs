@@ -19,6 +19,8 @@ public class ExecCommand : AgentRunCommand
 
     public Guid? AgentId { get; set; }
 
+    public int AgentflowRevision { get; set; }
+
     /// <summary>
     /// 获取或设置客户端生成的稳定 Turn 标识，用于 durable 启动幂等和断线恢复。
     /// </summary>

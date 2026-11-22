@@ -5,6 +5,60 @@ namespace Agw.Agents.Tests;
 
 public class InteractionRulesTests
 {
+    [Fact]
+    public void ValidateAndNormalize_GateChoiceNotInRequest_ThrowsInvalidParam()
+    {
+        var request = InteractionTestData.Gate(
+            "gate",
+            choices:
+            [
+                new WorkflowGateChoice("choice-1", "Approve"),
+                new WorkflowGateChoice("choice-2", "Request changes"),
+            ]
+        );
+
+        var error = Assert.Throws<AgwException>(() =>
+            InteractionRules.ValidateAndNormalize(
+                request,
+                new WorkflowGateDecision
+                {
+                    InteractionId = "gate",
+                    Approved = true,
+                    ChoiceId = "choice-3",
+                },
+                null
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
+    }
+
+    [Fact]
+    public void ValidateAndNormalize_ResponseTextNotAllowed_DropsResponseText()
+    {
+        var request = InteractionTestData.Gate(
+            "gate",
+            choices: [new WorkflowGateChoice("choice-1", "Approve")],
+            allowResponseText: false
+        );
+
+        var result = Assert.IsType<WorkflowGateDecision>(
+            InteractionRules.ValidateAndNormalize(
+                request,
+                new WorkflowGateDecision
+                {
+                    InteractionId = "gate",
+                    Approved = true,
+                    ChoiceId = "choice-1",
+                    ResponseText = "free text",
+                },
+                null
+            )
+        );
+
+        Assert.Null(result.ResponseText);
+    }
+
     [Theory]
     [InlineData(AgwPermissionMode.AlwaysAsk, ApprovalScope.Once)]
     [InlineData(AgwPermissionMode.AllowSameArguments, ApprovalScope.AlwaysArguments)]

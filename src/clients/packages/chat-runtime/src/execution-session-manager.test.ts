@@ -3,7 +3,11 @@ import test from "node:test";
 
 import type { AiMessage } from "@agw/api";
 import { createUserMessage } from "@agw/chat-core";
-import { getTurnFinishedStatus, type ChatEvent } from "@agw/execution-core";
+import {
+  getTurnFinishedStatus,
+  type ChatEvent,
+  type ExecutionStatusEvent,
+} from "@agw/execution-core";
 import { replaceExecutionHub } from "@agw/test-harness";
 import { chatHttpClient } from "./chat-http-client";
 import type { ExecutionHubHandlers, ExecutionReconnectState } from "./execution-hub";
@@ -103,8 +107,9 @@ function createGateInteraction(interactionId: string): AiMessage {
         kind: "workflow-gate",
         interactionId,
         prompt: "Continue?",
-        mode: "approval",
-        source: { nodeId: `node-${interactionId}` },
+        choices: [{ choiceId: "continue", label: "Continue" }],
+        allowResponseText: false,
+        source: { nodeId: `node-${interactionId}`, nodePath: `node-${interactionId}` },
       },
     },
   };
@@ -149,7 +154,12 @@ test("completing the visible parallel gate surfaces and retains the other gate",
   visible.length = 0;
 
   await handle.submitHumanResponse({
-    response: { kind: "workflow-gate", interactionId: "second", approved: true },
+    response: {
+      kind: "workflow-gate",
+      interactionId: "second",
+      approved: true,
+      choiceId: "continue",
+    },
   });
 
   assert.deepEqual(visible, [first]);
@@ -160,7 +170,12 @@ test("completing the visible parallel gate surfaces and retains the other gate",
   await Promise.resolve();
   assert.deepEqual(replayed, [first]);
   await reattached.submitHumanResponse({
-    response: { kind: "workflow-gate", interactionId: "first", approved: true },
+    response: {
+      kind: "workflow-gate",
+      interactionId: "first",
+      approved: true,
+      choiceId: "continue",
+    },
   });
   reattached.detach();
   const afterCompletion: AiMessage[] = [];
@@ -298,6 +313,13 @@ test("manager restores the complete active turn instead of replaying capped delt
   }
   const interaction = createQuestionInteraction("active-interaction");
   clientHandlers?.onMessage(interaction);
+  const waiting: ExecutionStatusEvent = {
+    type: "agentflow-node-status",
+    nodeId: "gate",
+    status: "waiting",
+    interactionId: "active-interaction",
+  };
+  clientHandlers?.onStatus?.(waiting);
 
   first.detach();
   const replayed: AiMessage[] = [];
@@ -308,6 +330,11 @@ test("manager restores the complete active turn instead of replaying capped delt
   const snapshot = second.getActiveTurnSnapshot();
   assert.ok(snapshot);
   assert.equal(snapshot.streamingScopeId, turnId);
+  assert.deepEqual(snapshot.statuses, [waiting]);
+  assert.equal(
+    snapshot.messages.some((message) => message.additionalProperties?.type === waiting.type),
+    false,
+  );
   assert.equal(snapshot.messages[0]?.role, "user");
   assert.equal(snapshot.messages[0]?.messageId, userMessageId);
   assert.equal(snapshot.messages[0]?.additionalProperties?.turnId, turnId);

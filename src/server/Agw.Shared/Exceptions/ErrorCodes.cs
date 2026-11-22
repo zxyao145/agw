@@ -457,6 +457,11 @@ public static class ErrorCodes
         "The execution target does not support steering a running turn.",
         HttpStatusCode.BadRequest
     );
+    public static readonly ErrorCode AgentflowDefinitionInvalid = new(
+        400_0080,
+        "The Agentflow definition has problems.",
+        HttpStatusCode.BadRequest
+    );
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(
         401_0001,
@@ -562,6 +567,11 @@ public static class ErrorCodes
     public static readonly ErrorCode HumanInteractionNotFound = new(
         404_0012,
         "Human interaction request was not found.",
+        HttpStatusCode.NotFound
+    );
+    public static readonly ErrorCode AgentflowRevisionNotFound = new(
+        404_0018,
+        "Agentflow revision was not found.",
         HttpStatusCode.NotFound
     );
 
@@ -700,6 +710,21 @@ public static class ErrorCodes
     public static readonly ErrorCode SteerLimitExceeded = new(
         409_0037,
         "Too many steering messages are waiting for delivery. Wait for them to be delivered and try again.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode AgentflowRevisionConflict = new(
+        409_0038,
+        "The Agentflow was saved from another revision.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode AgentflowNotPublished = new(
+        409_0039,
+        "The Agentflow has no published revision.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode AgentflowInUse = new(
+        409_0040,
+        "The Agentflow revision is referenced by an active execution or a resumable checkpoint.",
         HttpStatusCode.Conflict
     );
 

@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  AgentflowEdgeKind,
-  AgentflowNodeKind,
-  type AgentDto,
-  type AgentflowDetailDto,
-  type AgentflowDto,
-} from "../../types/agentflow";
+import type { AgentDto, AgentflowDetailResponse } from "../../types/agentflow";
 import {
   createA2ACopyEndpointDraft,
   createAgentCopyRequest,
@@ -206,93 +200,60 @@ test("createAgentCopyRequest represents empty relations as null", () => {
   assert.equal(request.connectionIds, null);
 });
 
-test("createAgentflowCopyRequest copies the complete graph without source identity", () => {
-  const source = {
+const sourceAgentflow = {
+  agentflow: {
     id: "agentflow-1",
     name: "Research Flow",
     description: "Coordinates research",
-    systemPrompt: "",
-    summaryModelProviderId: "summary-provider-1",
     enable: true,
-  } satisfies AgentflowDto;
-  const details = {
-    ...source,
+    latestRevision: 2,
+    publishedRevision: 1,
+    createTime: "2026-11-21T10:00:00Z",
+    updateTime: "2026-11-21T11:00:00Z",
+  },
+  revision: 2,
+  definition: {
     nodes: [
       {
-        agentflowId: source.id,
         nodeId: "input",
-        kind: AgentflowNodeKind.Input,
-        relateId: null,
+        kind: "input",
         name: "Input",
-        positionJson: '{"x":10,"y":20}',
-        instructions: "Start",
-        configJson: '{"mode":"fast"}',
+        position: { x: 10, y: 20 },
+        routingStrategy: "direct",
       },
     ],
     edges: [
       {
-        agentflowId: source.id,
         edgeId: "edge-1",
         sourceNodeId: "input",
         targetNodeId: "output",
-        kind: AgentflowEdgeKind.Direct,
         label: "Next",
-        conditionJson: '{"when":true}',
-        configJson: '{"priority":1}',
+        isFanInBarrier: false,
+        isSwitchDefault: false,
+        switchCaseOrder: 0,
+        choiceId: null,
+        conditions: [],
       },
     ],
-  } satisfies AgentflowDetailDto;
+  },
+} satisfies AgentflowDetailResponse;
 
-  const request = createAgentflowCopyRequest(source, details);
+test("createAgentflowCopyRequest copies the complete graph without source identity", () => {
+  const request = createAgentflowCopyRequest(sourceAgentflow);
 
   assert.deepEqual(request, {
     name: "Research Flow Copy",
     description: "Coordinates research",
-    summaryModelProviderId: "summary-provider-1",
-    nodes: [
-      {
-        nodeId: "input",
-        kind: AgentflowNodeKind.Input,
-        relateId: null,
-        name: "Input",
-        positionJson: '{"x":10,"y":20}',
-        instructions: "Start",
-        configJson: '{"mode":"fast"}',
-      },
-    ],
-    edges: [
-      {
-        edgeId: "edge-1",
-        sourceNodeId: "input",
-        targetNodeId: "output",
-        kind: AgentflowEdgeKind.Direct,
-        label: "Next",
-        conditionJson: '{"when":true}',
-        configJson: '{"priority":1}',
-      },
-    ],
+    definition: sourceAgentflow.definition,
   });
   assert.equal("id" in request, false);
-  assert.equal("agentflowId" in request.nodes[0], false);
-  assert.equal("agentflowId" in request.edges[0], false);
 });
 
 test("createAgentflowCopyRequest keeps the copied name within the database length limit", () => {
-  const source = {
-    id: "agentflow-1",
-    name: "F".repeat(200),
-    description: null,
-    systemPrompt: "",
-    summaryModelProviderId: null,
-    enable: true,
-  } satisfies AgentflowDto;
-  const details = {
-    ...source,
-    nodes: [],
-    edges: [],
-  } satisfies AgentflowDetailDto;
-
-  const request = createAgentflowCopyRequest(source, details);
+  const request = createAgentflowCopyRequest({
+    ...sourceAgentflow,
+    agentflow: { ...sourceAgentflow.agentflow, name: "F".repeat(200) },
+  });
 
   assert.equal(request.name.length, 200);
   assert.equal(request.name.endsWith(" Copy"), true);

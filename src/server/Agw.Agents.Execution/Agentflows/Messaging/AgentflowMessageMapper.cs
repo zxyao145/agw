@@ -1,8 +1,6 @@
-using System.Text.Json;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
-using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -14,9 +12,7 @@ namespace Agw.Agents.Execution.Agentflows.Messaging;
 /// </summary>
 internal static class AgentflowMessageMapper
 {
-    private const string DefaultHumanGateMode = "approval";
     private const string DefaultHumanGatePrompt = "Human approval is required to continue.";
-    private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
 
     internal static IReadOnlyList<AgwMessage> CreateWorkflowOutputMessages(object? data)
     {
@@ -46,16 +42,36 @@ internal static class AgentflowMessageMapper
     internal static InteractionRequest? CreateInteractionRequest(
         ExternalRequest externalRequest,
         IReadOnlyDictionary<string, AgentflowHumanGateNode> humanGateNodes,
+        IReadOnlyDictionary<string, string> nodeIdsByRequestPortId,
         IInteractionRequestRegistry? registry = null
     )
     {
         if (externalRequest.TryGetDataAs(out Microsoft.Extensions.AI.ToolApprovalRequestContent? toolApprovalRequest))
         {
-            return MafApprovalAdapter.CreateRequest(
+            var interaction = MafApprovalAdapter.CreateRequest(
                 toolApprovalRequest,
                 externalRequest.PortInfo.PortId,
                 registry: registry
             );
+            if (
+                interaction.Source.ProviderScopeId == null
+                && string.Equals(interaction.Source.NodeId, externalRequest.PortInfo.PortId, StringComparison.Ordinal)
+                && nodeIdsByRequestPortId.TryGetValue(externalRequest.PortInfo.PortId, out var nodeId)
+            )
+            {
+                return interaction with
+                {
+                    InteractionId = InteractionIdentity.ForProviderRequest(nodeId, toolApprovalRequest.RequestId),
+                    Source = interaction.Source with
+                    {
+                        NodeId = nodeId,
+                        NodePath = interaction.Source.NodePath ?? nodeId,
+                        ProviderScopeId = externalRequest.PortInfo.PortId,
+                    },
+                };
+            }
+
+            return interaction;
         }
 
         return humanGateNodes.TryGetValue(externalRequest.PortInfo.PortId, out var humanGateNode)
@@ -71,14 +87,14 @@ internal static class AgentflowMessageMapper
         // 显式 HumanGate 使用 WorkflowGateInteraction 表达工作流是否继续，FullAccess 不会跳过它。
         // 这里只提取节点配置和输入预览；等待、发布及拒绝后的终止交给交互会话与 Runner。
         // 节点和 SDK 请求 ID 共同确定交互身份，使 checkpoint 恢复仍能关联同一次关卡请求。
-        var config = ReadHumanGateConfig(node);
         var messages =
             externalRequest.TryGetDataAs<List<ChatMessage>>(out var requestedMessages) && requestedMessages != null
                 ? requestedMessages
                 : [];
 
-        var mode = string.IsNullOrWhiteSpace(config.HumanMode) ? DefaultHumanGateMode : config.HumanMode.Trim();
-        var prompt = string.IsNullOrWhiteSpace(config.HumanPrompt) ? DefaultHumanGatePrompt : config.HumanPrompt.Trim();
+        var prompt = string.IsNullOrWhiteSpace(node.Options.HumanPrompt)
+            ? DefaultHumanGatePrompt
+            : node.Options.HumanPrompt.Trim();
 
         return new WorkflowGateInteraction
         {
@@ -86,32 +102,62 @@ internal static class AgentflowMessageMapper
             Source = new InteractionSource
             {
                 NodeId = node.NodeId,
+                NodePath = node.NodePath ?? node.NodeId,
                 NodeName = node.Name,
                 ProviderRequestId = externalRequest.RequestId,
             },
-            Mode = mode,
             Prompt = prompt,
+            Choices = node
+                .Options.Choices.Select(choice => new WorkflowGateChoice(choice.ChoiceId, choice.Label))
+                .ToArray(),
+            AllowResponseText = node.Options.AllowResponseText,
             InputPreview = messages.LastOrDefault()?.Text,
         };
     }
 
     internal static List<ChatMessage> CreateHumanGateResponseMessages(
         IReadOnlyList<ChatMessage> messages,
+        WorkflowGateInteraction request,
         WorkflowGateDecision decision
     )
     {
         var responseMessages = messages.ToList();
+        var choice = request.Choices.Single(choice =>
+            string.Equals(choice.ChoiceId, decision.ChoiceId, StringComparison.Ordinal)
+        );
+        var text = decision.ResponseText?.Trim();
+        if (string.IsNullOrEmpty(text))
+            text = choice.Label;
         responseMessages.Add(
-            new ChatMessage(
-                ChatRole.User,
-                string.IsNullOrWhiteSpace(decision.ResponseText) ? string.Empty : decision.ResponseText.Trim()
-            )
+            new ChatMessage(ChatRole.User, text)
             {
-                AuthorName = "human",
+                AuthorName = AgwMessageClassifier.HumanAuthorName,
+                AdditionalProperties = new AdditionalPropertiesDictionary
+                {
+                    [AgwMessageClassifier.ChoiceIdKey] = choice.ChoiceId,
+                },
             }
         );
 
         return responseMessages;
+    }
+
+    internal static AgwMessage CreateNodeStatusMessage(
+        string nodeId,
+        string status,
+        string? interactionId,
+        string messageId
+    )
+    {
+        var properties = new AdditionalPropertiesDictionary
+        {
+            [AgwMessageClassifier.TypeKey] = AgwMessageTypes.AgentflowNodeStatus,
+            [AgwMessageClassifier.NodeIdKey] = nodeId,
+            [AgwMessageClassifier.StatusKey] = status,
+        };
+        if (interactionId is not null)
+            properties[AgwMessageClassifier.InteractionIdKey] = interactionId;
+        return new AgwMessage(messageId, Constants.DefaultAgentAuthor, AiRole.System, [], properties);
     }
 
     internal static IReadOnlyList<ChatMessage> GetHumanGateMessages(ExternalRequest request) =>
@@ -121,9 +167,9 @@ internal static class AgentflowMessageMapper
     {
         var additionalProperties = new AdditionalPropertiesDictionary
         {
-            { "type", AgwMessageTypes.HumanGateRejected },
+            { AgwMessageClassifier.TypeKey, AgwMessageTypes.HumanGateRejected },
             { "requestId", request.InteractionId },
-            { "nodeId", request.Source.NodeId },
+            { AgwMessageClassifier.NodeIdKey, request.Source.NodeId },
         };
 
         return new AgwMessage(
@@ -139,8 +185,8 @@ internal static class AgentflowMessageMapper
     {
         var additionalProperties = new AdditionalPropertiesDictionary
         {
-            { "type", AgwMessageTypes.HumanGateUnavailable },
-            { "nodeId", node.NodeId },
+            { AgwMessageClassifier.TypeKey, AgwMessageTypes.HumanGateUnavailable },
+            { AgwMessageClassifier.NodeIdKey, node.NodeId },
         };
 
         return new AgwMessage(
@@ -189,30 +235,6 @@ internal static class AgentflowMessageMapper
         while (exception is System.Reflection.TargetInvocationException { InnerException: { } inner })
             exception = inner;
         return exception?.Message ?? "Workflow execution failed.";
-    }
-
-    private static HumanGateConfig ReadHumanGateConfig(AgentflowHumanGateNode node)
-    {
-        if (string.IsNullOrWhiteSpace(node.ConfigJson))
-        {
-            return new HumanGateConfig();
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<HumanGateConfig>(node.ConfigJson, JsonOptions) ?? new HumanGateConfig();
-        }
-        catch (JsonException)
-        {
-            return new HumanGateConfig();
-        }
-    }
-
-    private sealed record HumanGateConfig
-    {
-        public string? HumanMode { get; init; }
-
-        public string? HumanPrompt { get; init; }
     }
 
     // 内容事件保留 Framework 提供的 ID；错误和交互消息由专用方法映射。

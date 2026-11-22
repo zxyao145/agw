@@ -938,12 +938,11 @@ async function checkConversationSession(kind: string, strictMode = false) {
             },
           ];
           for (const message of updates) transport().handlers.onMessage(message);
-          // A mode control update flushes the queued output without finishing the turn.
-          transport().handlers.onMessage({
-            messageId: "mode",
-            role: "system",
-            additionalProperties: { type: "mode-status", mode: "execute" },
-            contents: [],
+          // 状态事件刷新批次，Turn 继续运行。The status flushes the batch while the turn continues.
+          transport().handlers.onStatus?.({
+            type: "mode-status",
+            agentId: "agent-1",
+            mode: "execute",
           });
         });
         const summaryCount = () =>

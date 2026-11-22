@@ -22,7 +22,6 @@ import {
   getTurnFinishedStatus,
   getTurnIdentity,
   getTurnPosition,
-  isModeControlMessage,
   isSteerUserMessage,
   isSupersededTurnMessage,
   isTurnStartMessage,
@@ -38,7 +37,13 @@ const interactionResponses: InteractionResponse[] = [
     scope,
   })),
   { kind: "tool-approval", interactionId: "tool-1", approved: false, scope: "Once" },
-  { kind: "workflow-gate", interactionId: "gate-1", approved: true, responseText: "Continue" },
+  {
+    kind: "workflow-gate",
+    interactionId: "gate-1",
+    approved: true,
+    choiceId: "continue",
+    responseText: "Continue",
+  },
   { kind: "workflow-gate", interactionId: "gate-1", approved: false },
   {
     kind: "user-input",
@@ -63,6 +68,16 @@ for (const [index, response] of interactionResponses.entries()) {
     });
   });
 }
+
+test("buildExecCommand carries a positive Agentflow revision", () => {
+  const request = { conversationId: "conversation", agentId: "flow", agentType: 1, input: {} };
+  assert.equal(buildExecCommand({ ...request, agentflowRevision: 3 }).agentflowRevision, 3);
+  assert.equal(
+    "agentflowRevision" in buildExecCommand({ ...request, agentflowRevision: 0 }),
+    false,
+  );
+  assert.equal("agentflowRevision" in buildExecCommand(request), false);
+});
 
 test("shared execution commands match the server contract", () => {
   const input = { messageId: "message-1", author: "$agw", contents: [] };
@@ -214,15 +229,6 @@ test("shared agent mode helpers read live and persisted status messages", () => 
   assert.equal(getAgentMode(persistedStatus), "execute");
   assert.equal(getLatestAgentMode([directStatus, persistedStatus]), "execute");
   assert.equal(getLatestAgentMode([]), DEFAULT_AGENT_MODE);
-  assert.equal(isModeControlMessage(directStatus), true);
-  assert.equal(isModeControlMessage(persistedStatus), false);
-  assert.equal(
-    isModeControlMessage({
-      ...directStatus,
-      additionalProperties: { type: "mode-change-failed", mode: "plan" },
-    }),
-    true,
-  );
 });
 
 test("turn-finished is message-level and accepts only server statuses", () => {

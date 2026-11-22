@@ -1,175 +1,195 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { Edge } from "reactflow";
-
-import { AgentflowEdgeKind } from "../../../../types/agentflow";
 import {
-  getDefaultEdgeKindForSource,
-  getEdgeRoutingLabel,
-  getSwitchCaseOrder,
-  moveSwitchCaseEdge,
-  normalizeSwitchCaseOrders,
-  removeAgentflowEdge,
-  setSwitchCaseOrder,
-  type AgentflowEdgeData,
-  validateAgentflowEdgeRouting,
+  createEdge,
+  createEmptyDocument,
+  createNode,
+  type AgentflowEditorDocument,
+} from "./agentflow-document";
+import {
+  clearSwitchDefault,
+  removeGateChoice,
+  reorderSwitchCase,
+  renumberSwitchCases,
+  setFanInBarrier,
+  setRoutingStrategy,
+  setSwitchDefault,
 } from "./agentflow-edge-routing";
 
-function edge(
-  id: string,
-  source: string,
-  target: string,
-  kind: AgentflowEdgeKind,
-  conditionJson = "",
-  configJson = "",
-): Edge<AgentflowEdgeData> {
+function createSwitchDocument(): AgentflowEditorDocument {
+  const input = createEmptyDocument().nodes[0];
+  const source = createNode("agent", { x: 200, y: 0 });
+  source.routingStrategy = "switch";
+  const first = createNode("output", { x: 500, y: 0 });
+  const second = createNode("output", { x: 500, y: 100 });
+  const fallback = createNode("output", { x: 500, y: 200 });
+  const document = {
+    ...createEmptyDocument(),
+    nodes: [input, source, first, second, fallback],
+    edges: [],
+  };
+  const firstEdge = createEdge(document, source.nodeId, first.nodeId);
+  const secondEdge = createEdge({ ...document, edges: [firstEdge] }, source.nodeId, second.nodeId);
+  const elseEdge = {
+    ...createEdge({ ...document, edges: [firstEdge, secondEdge] }, source.nodeId, fallback.nodeId),
+    isSwitchDefault: true,
+  };
+
   return {
-    id,
-    source,
-    target,
-    data: { kind, label: "", conditionJson, configJson },
+    ...document,
+    edges: [
+      { ...firstEdge, conditions: [{ field: "contains", value: "one", path: "" }] },
+      { ...secondEdge, conditions: [{ field: "contains", value: "two", path: "" }] },
+      elseEdge,
+    ],
   };
 }
 
-test("switch order serialization preserves unrelated edge config", () => {
-  const configJson = setSwitchCaseOrder('{"mapping":"summary"}', 2);
-
-  assert.deepEqual(JSON.parse(configJson), {
-    mapping: "summary",
-    switchCaseOrder: 2,
-  });
-  assert.equal(getSwitchCaseOrder(configJson), 2);
-  assert.deepEqual(JSON.parse(setSwitchCaseOrder(configJson, null)), {
-    mapping: "summary",
-  });
-  assert.equal(setSwitchCaseOrder("{", null), "{");
-});
-
-test("normalizing and moving switch cases maintains contiguous order", () => {
-  const edges = [
-    edge(
-      "case-b",
-      "input",
-      "b",
-      AgentflowEdgeKind.SwitchCase,
-      '{"contains":"b"}',
-      '{"switchCaseOrder":7,"mapping":"b"}',
-    ),
-    edge("case-a", "input", "a", AgentflowEdgeKind.SwitchCase, '{"contains":"a"}'),
-    edge("else", "input", "fallback", AgentflowEdgeKind.SwitchDefault),
-    edge(
-      "other-case",
-      "other-source",
-      "other-target",
-      AgentflowEdgeKind.SwitchCase,
-      '{"contains":"other"}',
-      '{"switchCaseOrder":4}',
-    ),
-  ];
-
-  const normalized = normalizeSwitchCaseOrders(edges, "input");
-  assert.equal(getSwitchCaseOrder(normalized[0].data?.configJson ?? ""), 0);
-  assert.equal(getSwitchCaseOrder(normalized[1].data?.configJson ?? ""), 1);
-
-  const moved = moveSwitchCaseEdge(normalized, "case-a", -1);
-  assert.equal(getSwitchCaseOrder(moved[0].data?.configJson ?? ""), 1);
-  assert.equal(getSwitchCaseOrder(moved[1].data?.configJson ?? ""), 0);
-  assert.equal(JSON.parse(moved[0].data?.configJson ?? "{}").mapping, "b");
-  assert.equal(moved[1].data?.conditionJson, '{"contains":"a"}');
-  assert.equal(getSwitchCaseOrder(moved[3].data?.configJson ?? ""), 4);
-});
-
-test("deleting a switch case reorders remaining cases", () => {
-  const edges = [
-    edge(
-      "case-a",
-      "input",
-      "a",
-      AgentflowEdgeKind.SwitchCase,
-      '{"contains":"a"}',
-      '{"switchCaseOrder":0}',
-    ),
-    edge(
-      "case-b",
-      "input",
-      "b",
-      AgentflowEdgeKind.SwitchCase,
-      '{"contains":"b"}',
-      '{"switchCaseOrder":1}',
-    ),
-  ];
-
-  const remaining = removeAgentflowEdge(edges, "case-a");
+test("switching to Branch numbers the branches in list order and keeps conditions", () => {
+  const document = createSwitchDocument();
+  const source = document.nodes[1];
+  source.routingStrategy = "direct";
+  const next = setRoutingStrategy(document, source.nodeId, "switch");
 
   assert.deepEqual(
-    remaining.map((item) => item.id),
-    ["case-b"],
+    next.edges.slice(0, 2).map((edge) => edge.switchCaseOrder),
+    [0, 1],
   );
-  assert.equal(getSwitchCaseOrder(remaining[0].data?.configJson ?? ""), 0);
+  assert.deepEqual(next.edges[0].conditions, document.edges[0].conditions);
 });
 
-test("switch labels reflect ordered If, Else If, and Else branches", () => {
-  const edges = normalizeSwitchCaseOrders([
-    edge("case-a", "input", "a", AgentflowEdgeKind.SwitchCase, '{"contains":"a"}'),
-    edge("case-b", "input", "b", AgentflowEdgeKind.SwitchCase, '{"contains":"b"}'),
-    edge("else", "input", "fallback", AgentflowEdgeKind.SwitchDefault),
-  ]);
+test("leaving Branch clears Else and order", () => {
+  const document = createSwitchDocument();
+  const next = setRoutingStrategy(document, document.nodes[1].nodeId, "direct");
 
-  assert.equal(getEdgeRoutingLabel(edges[0], edges), "IF");
-  assert.equal(getEdgeRoutingLabel(edges[1], edges), "ELSE IF");
-  assert.equal(getEdgeRoutingLabel(edges[2], edges), "ELSE");
-});
-
-test("routing validation rejects mixed strategies and duplicate Else", () => {
-  assert.match(
-    validateAgentflowEdgeRouting([
-      edge("direct", "input", "a", AgentflowEdgeKind.Direct),
-      edge("fan-out", "input", "b", AgentflowEdgeKind.FanOut),
-    ]) ?? "",
-    /cannot mix/,
-  );
-
-  const duplicateElse = normalizeSwitchCaseOrders([
-    edge("case", "input", "a", AgentflowEdgeKind.SwitchCase, '{"contains":"a"}'),
-    edge("else-a", "input", "b", AgentflowEdgeKind.SwitchDefault),
-    edge("else-b", "input", "c", AgentflowEdgeKind.SwitchDefault),
-  ]);
-  assert.match(validateAgentflowEdgeRouting(duplicateElse) ?? "", /only have one Else/);
-});
-
-test("barrier edges coexist with ordinary routing and Input supports every strategy", () => {
-  const directAndBarrier = [
-    edge("direct", "input", "a", AgentflowEdgeKind.Direct),
-    edge("barrier", "input", "b", AgentflowEdgeKind.FanInBarrier),
-  ];
-
-  assert.equal(validateAgentflowEdgeRouting(directAndBarrier), null);
   assert.equal(
-    getDefaultEdgeKindForSource([], "input", AgentflowEdgeKind.FanOut),
-    AgentflowEdgeKind.FanOut,
+    next.edges.some((edge) => edge.isSwitchDefault),
+    false,
   );
-  assert.equal(
-    getDefaultEdgeKindForSource(directAndBarrier, "input", AgentflowEdgeKind.FanOut),
-    AgentflowEdgeKind.Direct,
-  );
-  assert.equal(
-    getDefaultEdgeKindForSource(
-      [edge("barrier", "input", "b", AgentflowEdgeKind.FanInBarrier)],
-      "input",
-      AgentflowEdgeKind.FanOut,
-    ),
-    AgentflowEdgeKind.FanOut,
+  assert.deepEqual(
+    next.edges.map((edge) => edge.switchCaseOrder),
+    [0, 0, 0],
   );
 });
 
-test("conditional and unconditional Fan Out edges are both valid multi-selection routes", () => {
-  const edges = [
-    edge("always", "input", "a", AgentflowEdgeKind.FanOut),
-    edge("when", "input", "b", AgentflowEdgeKind.FanOut, '{"contains":"b"}'),
-  ];
+test("making a branch the Else clears its conditions", () => {
+  const document = createSwitchDocument();
+  const next = setSwitchDefault(document, document.edges[0].edgeId);
+  const nextDefault = next.edges.find((edge) => edge.edgeId === document.edges[0].edgeId)!;
+  const previousDefault = next.edges.find((edge) => edge.edgeId === document.edges[2].edgeId)!;
 
-  assert.equal(validateAgentflowEdgeRouting(edges), null);
-  assert.equal(getEdgeRoutingLabel(edges[0], edges), "FAN OUT");
-  assert.equal(getEdgeRoutingLabel(edges[1], edges), "WHEN");
+  assert.equal(nextDefault.isSwitchDefault, true);
+  assert.deepEqual(nextDefault.conditions, []);
+  assert.equal(previousDefault.isSwitchDefault, false);
+  assert.equal(previousDefault.switchCaseOrder, 1);
+});
+
+test("turning Wait on clears conditions, choice and branch fields", () => {
+  const document = createSwitchDocument();
+  const next = setFanInBarrier(document, document.edges[0].edgeId, true);
+  const waiting = next.edges[0];
+
+  assert.equal(waiting.isFanInBarrier, true);
+  assert.deepEqual(waiting.conditions, []);
+  assert.equal(waiting.choiceId, null);
+  assert.equal(waiting.isSwitchDefault, false);
+  assert.equal(waiting.switchCaseOrder, 0);
+});
+
+test("turning Wait off appends a branch before Else", () => {
+  const document = createSwitchDocument();
+  const [first, second, elseEdge] = document.edges;
+  const waiting = setFanInBarrier(document, first.edgeId, true);
+  const restored = setFanInBarrier(waiting, first.edgeId, false);
+
+  assert.equal(restored.edges[0].isFanInBarrier, false);
+  assert.equal(restored.edges[0].switchCaseOrder, second.switchCaseOrder + 1);
+  assert.deepEqual(restored.edges[1], second);
+  assert.deepEqual(restored.edges[2], elseEdge);
+});
+
+test("turning Wait off assigns a Human Gate edge to an available choice", () => {
+  const document = createEmptyDocument();
+  const gate = createNode("humanGate", { x: 200, y: 0 });
+  const first = createNode("output", { x: 500, y: 0 });
+  const second = createNode("output", { x: 500, y: 100 });
+  if (gate.kind !== "humanGate") assert.fail("Expected a Human Gate");
+  gate.choices.push({ choiceId: "second-choice", label: "Continue" });
+  const graph = { ...document, nodes: [...document.nodes, gate, first, second] };
+  const firstEdge = createEdge(graph, gate.nodeId, first.nodeId);
+  const secondEdge = {
+    ...createEdge(graph, gate.nodeId, second.nodeId),
+    isFanInBarrier: true,
+    choiceId: null,
+    label: "Review",
+  };
+  const restored = setFanInBarrier(
+    { ...graph, edges: [firstEdge, secondEdge] },
+    secondEdge.edgeId,
+    false,
+  );
+
+  assert.equal(restored.edges[1].choiceId, "second-choice");
+  assert.equal(restored.edges[1].label, "Review");
+});
+
+test("removing a choice removes its edges", () => {
+  const document = createEmptyDocument();
+  const gate = createNode("humanGate", { x: 200, y: 0 });
+  const target = createNode("output", { x: 500, y: 0 });
+  if (gate.kind !== "humanGate") assert.fail("Expected a Human Gate");
+  gate.choices.push({ choiceId: "choice-2", label: "Continue" });
+  const graph = { ...document, nodes: [...document.nodes, gate, target] };
+  const edge = createEdge(graph, gate.nodeId, target.nodeId);
+  const next = removeGateChoice({ ...graph, edges: [edge] }, gate.nodeId, edge.choiceId!);
+
+  assert.deepEqual(next.edges, []);
+  assert.equal(next.nodes.find((node) => node.nodeId === gate.nodeId)?.kind, "humanGate");
+  const remaining = next.nodes.find((node) => node.nodeId === gate.nodeId);
+  assert.equal(
+    remaining?.kind === "humanGate" &&
+      remaining.choices.some((choice) => choice.choiceId === edge.choiceId),
+    false,
+  );
+});
+
+test("moving a branch renumbers the branches", () => {
+  const document = createSwitchDocument();
+  const next = reorderSwitchCase(document, document.edges[1].edgeId, 0);
+
+  const ordered = next.edges
+    .filter((edge) => !edge.isSwitchDefault)
+    .sort((left, right) => left.switchCaseOrder - right.switchCaseOrder);
+  assert.deepEqual(
+    ordered.map((edge) => edge.edgeId),
+    [document.edges[1].edgeId, document.edges[0].edgeId],
+  );
+  assert.deepEqual(
+    ordered.map((edge) => edge.switchCaseOrder),
+    [0, 1],
+  );
+});
+
+test("the previous Else becomes the last conditional branch", () => {
+  const document = createSwitchDocument();
+  const next = clearSwitchDefault(document, document.edges[2].edgeId);
+  const previousElse = next.edges.find((edge) => edge.edgeId === document.edges[2].edgeId)!;
+
+  assert.equal(previousElse.isSwitchDefault, false);
+  assert.equal(previousElse.switchCaseOrder, 2);
+});
+
+test("deleting a branch renumbers the rest", () => {
+  const document = createSwitchDocument();
+  const remaining = {
+    ...document,
+    edges: document.edges.filter((edge) => edge.edgeId !== document.edges[0].edgeId),
+  };
+  const next = renumberSwitchCases(remaining, [document.nodes[1].nodeId]);
+
+  assert.deepEqual(
+    next.edges.filter((edge) => !edge.isSwitchDefault).map((edge) => edge.switchCaseOrder),
+    [0],
+  );
 });

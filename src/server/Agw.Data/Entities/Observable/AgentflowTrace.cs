@@ -19,6 +19,8 @@ public class AgentflowTrace
 
     public Guid AgentflowId { get; set; }
 
+    public AgentflowTraceExtra Extra { get; set; } = new();
+
     public string NodeId { get; set; } = string.Empty;
 
     public string? NodeName { get; set; }

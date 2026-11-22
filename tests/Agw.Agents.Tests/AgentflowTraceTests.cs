@@ -31,6 +31,7 @@ public class AgentflowTraceTests
             var scope = AgentflowNodeExecutionActivity.StartAgent(
                 execution,
                 agentflowId,
+                3,
                 "node-1",
                 "Node Alias",
                 agentId,
@@ -53,6 +54,7 @@ public class AgentflowTraceTests
         Assert.Equal(execution.ContextId, trace.ContextId);
         Assert.Equal(execution.TaskId, trace.TaskId);
         Assert.Equal(agentflowId, trace.AgentflowId);
+        Assert.Equal(3, trace.Extra.AgentflowRevision);
         Assert.Equal("node-1", trace.NodeId);
         Assert.Equal("Node Alias", trace.NodeName);
         Assert.Equal(AgentflowNodeKind.Agent, trace.NodeKind);
@@ -81,6 +83,7 @@ public class AgentflowTraceTests
             var scope = AgentflowNodeExecutionActivity.StartHumanGate(
                 new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-2", Guid.CreateVersion7()),
                 Guid.CreateVersion7(),
+                2,
                 "human",
                 "Approval",
                 [new ChatMessage(ChatRole.User, "review")]
@@ -108,6 +111,7 @@ public class AgentflowTraceTests
             var scope = AgentflowNodeExecutionActivity.StartHumanGate(
                 new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-3", Guid.CreateVersion7()),
                 Guid.CreateVersion7(),
+                4,
                 "human",
                 "Approval",
                 [new ChatMessage(ChatRole.User, "review")]
@@ -119,6 +123,7 @@ public class AgentflowTraceTests
 
         var trace = await store.WaitForTraceAsync();
         Assert.Equal(AgentflowNodeExecutionStatus.Rejected, trace.Status);
+        Assert.Equal(4, trace.Extra.AgentflowRevision);
         Assert.Null(trace.AgentId);
         Assert.Null(trace.AgentName);
         Assert.Null(trace.Error);

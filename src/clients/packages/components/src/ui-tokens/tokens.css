@@ -151,14 +151,10 @@
   --agw-code-block-button-hover: #17191d;
   --agw-prose-code-background: oklch(0.95 0 0);
 
-  /* 其他宿主颜色；Server 光环与 Agentflow 边线在两个 Mode 下相同。Other host colors; the Server halo and Agentflow edges are the same in both modes. */
+  /* 其他宿主颜色。Other host colors. */
   --agw-status-running: #006fee;
   --agw-server-online-halo: #10b981;
   --agw-agentflow-edge: #475569;
-  --agw-agentflow-edge-fan-out: #2563eb;
-  --agw-agentflow-edge-fan-in: #d97706;
-  --agw-agentflow-edge-switch-case: #7c3aed;
-  --agw-agentflow-edge-switch-default: #db2777;
 }
 
 .dark {
@@ -205,6 +201,7 @@
   --agw-prose-code-background: oklch(0.2 0 0);
 
   --agw-status-running: #338ef7;
+  --agw-agentflow-edge: #94a3b8;
 }
 
 @layer base {
@@ -288,8 +285,10 @@ div[role="option"]:hover {
 
   :root[data-agw-desktop="true"]
     [data-slot="dialog-content"][data-size="fullscreen"]
-    [data-slot="dialog-header"]
-    [data-slot="dialog-title"] {
+    :is(
+      [data-slot="dialog-header"][data-window-drag="true"],
+      [data-slot="dialog-header"] [data-slot="dialog-title"]
+    ) {
     -webkit-app-region: drag;
   }
 
@@ -318,7 +317,7 @@ div[role="option"]:hover {
   :root[data-agw-desktop="true"]
     [data-slot="dialog-content"][data-size="fullscreen"]
     [data-slot="dialog-header"]
-    :is(button, a, [role="button"]) {
+    :is(button, a, input, [role="button"]) {
     -webkit-app-region: no-drag;
   }
 

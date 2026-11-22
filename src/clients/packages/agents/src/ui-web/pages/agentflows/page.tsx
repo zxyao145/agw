@@ -5,16 +5,16 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@agw/co
 import mermaid from "mermaid";
 import { toast } from "sonner";
 
-import { apiDelete, apiGet, apiPost, apiPut, getApiErrorMessage } from "@agw/api";
+import { apiDelete, apiGet, apiPost, apiPut, getApiErrorMessage, type components } from "@agw/api";
 import { PaginatedTable } from "@agw/components";
 import { Button } from "@agw/components";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "@agw/components";
 import { cn } from "@agw/components";
-import { DEFAULT_PAGE_SIZE, getClampedPageIndex, type PagedResult } from "@agw/components";
+import { DEFAULT_PAGE_SIZE, getClampedPageIndex } from "@agw/components";
 import { VisualAgentflowDialog } from "./components/visual-agentflow-dialog";
 import type {
   AgentDto,
-  AgentflowDetailDto,
+  AgentflowDetailResponse,
   AgentflowDto,
   ModelProviderDto,
 } from "../../../types/agentflow";
@@ -28,11 +28,6 @@ import {
 } from "./components/mermaid-viewport";
 import { createAgentflowCopyRequest } from "../copy-requests";
 
-type AgentflowEnabledUpdateRequest = {
-  agentflowId: string;
-  enable: boolean;
-};
-
 export default function AgentflowsPage() {
   const queryClient = useQueryClient();
   const [pageIndex, setPageIndex] = React.useState(1);
@@ -44,17 +39,13 @@ export default function AgentflowsPage() {
 
   const agentflowsQuery = useQuery({
     queryKey: ["agentflows", "paged", pageIndex, pageSize],
-    queryFn: async () => {
-      return (await apiGet("/api/agentflows/paged", {
-        params: { query: { pageIndex, pageSize } },
-      })) as unknown as PagedResult<AgentflowDto>;
-    },
+    queryFn: () => apiGet("/api/agentflows/paged", { params: { query: { pageIndex, pageSize } } }),
     placeholderData: keepPreviousData,
   });
 
   const agentflowOptionsQuery = useQuery({
     queryKey: ["agentflows", "options"],
-    queryFn: async () => (await apiGet("/api/agentflows")) as unknown as AgentflowDto[],
+    queryFn: () => apiGet("/api/agentflows"),
     enabled: visualOpen,
   });
 
@@ -83,7 +74,9 @@ export default function AgentflowsPage() {
     },
   });
 
-  const [editingAgentflow, setEditingAgentflow] = React.useState<AgentflowDetailDto | null>(null);
+  const [editingAgentflow, setEditingAgentflow] = React.useState<AgentflowDetailResponse | null>(
+    null,
+  );
 
   // Execute drawer state
   const [executeOpen, setExecuteOpen] = React.useState(false);
@@ -190,9 +183,8 @@ export default function AgentflowsPage() {
 
   const copyAgentflowMutation = useMutation({
     mutationFn: async (agentflow: AgentflowDto) => {
-      const details = await fetchAgentflowDetails(agentflow.id);
-      const body = createAgentflowCopyRequest(agentflow, details);
-      return await apiPost("/api/agentflows", { body });
+      const details = await fetchAgentflowDetails(agentflow.id, agentflow.latestRevision);
+      return apiPost("/api/agentflows", { body: createAgentflowCopyRequest(details) });
     },
     onSuccess: async (_data, agentflow) => {
       toast.success(`Agentflow "${agentflow.name}" copied`);
@@ -206,9 +198,7 @@ export default function AgentflowsPage() {
 
   const deleteAgentflowMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiDelete("/api/agentflows/{id}", {
-        params: { path: { id } },
-      });
+      return apiDelete("/api/agentflows", { params: { query: { id } } });
     },
     onSuccess: async () => {
       toast.success("Agentflow deleted");
@@ -221,9 +211,8 @@ export default function AgentflowsPage() {
   });
 
   const updateAgentflowEnabledMutation = useMutation({
-    mutationFn: async (body: AgentflowEnabledUpdateRequest) => {
-      return (await apiPut("/api/agentflows/enabled", { body })) as unknown as AgentflowDto;
-    },
+    mutationFn: (body: components["schemas"]["AgentflowEnabledUpdateRequest"]) =>
+      apiPut("/api/agentflows/enabled", { body }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["agentflows"] });
     },
@@ -259,13 +248,7 @@ export default function AgentflowsPage() {
 
   const handleEdit = React.useCallback(async (agentflow: AgentflowDto) => {
     try {
-      const details = await fetchAgentflowDetails(agentflow.id);
-
-      setEditingAgentflow({
-        ...agentflow,
-        ...details,
-      });
-
+      setEditingAgentflow(await fetchAgentflowDetails(agentflow.id, agentflow.latestRevision));
       setVisualOpen(true);
     } catch (error) {
       toast.error("Failed to load agentflow details");
@@ -273,11 +256,8 @@ export default function AgentflowsPage() {
     }
   }, []);
 
-  const handleAgentflowCreated = React.useCallback(async () => {
-    setPageIndex(1);
+  const handleAgentflowSaved = React.useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ["agentflows"] });
-    setVisualOpen(false);
-    setEditingAgentflow(null);
   }, [queryClient]);
 
   const handleVisualDialogClose = React.useCallback(() => {
@@ -311,15 +291,21 @@ export default function AgentflowsPage() {
     setIsMermaidLoading(true);
 
     try {
-      const result = await apiGet("/api/agentflows/mermaid/{id}", {
-        params: { path: { id: agentflow.id } },
+      const result = await apiGet("/api/agentflows/mermaid", {
+        params: {
+          query: {
+            id: agentflow.id,
+            revision: agentflow.publishedRevision || agentflow.latestRevision,
+          },
+        },
       });
 
       if (mermaidRequestIdRef.current !== requestId) {
         return;
       }
 
-      setMermaidText(typeof result === "string" ? result : JSON.stringify(result, null, 2));
+      if (result == null) throw new Error("Mermaid content was not returned.");
+      setMermaidText(result);
     } catch {
       if (mermaidRequestIdRef.current !== requestId) {
         return;
@@ -471,7 +457,7 @@ export default function AgentflowsPage() {
             agentflows={agentflowOptionsQuery.data || []}
             modelProviders={modelProvidersQuery.data || []}
             editingAgentflow={editingAgentflow}
-            onAgentflowCreated={handleAgentflowCreated}
+            onAgentflowSaved={handleAgentflowSaved}
           />
         </div>
       </div>

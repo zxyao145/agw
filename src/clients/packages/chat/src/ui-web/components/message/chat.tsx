@@ -1,9 +1,9 @@
 "use client";
 
 import {
-  getPermissionStatus,
   isSteerUserMessage,
   isTurnStartMessage,
+  type ExecutionStatusEvent,
   type InteractionResponse,
 } from "@agw/execution-core";
 
@@ -29,7 +29,6 @@ import {
   getTurnFinishedStatus,
   getLatestAgentMode,
   isUserTurnMessage,
-  isModeControlMessage,
   type AgentMode,
   type AgentflowCheckpointAvailability,
   type ExecutionReconnectState,
@@ -98,7 +97,7 @@ export type ConversationChangeOptions = {
 };
 
 export interface ChatProps {
-  target: Pick<ChatTargetOption, "id" | "type"> | null;
+  target: (Pick<ChatTargetOption, "id" | "type"> & { agentflowRevision?: number }) | null;
   agentResultFormats?: readonly import("@agw/chat-core").AgentResultFormat[];
   projectId: string | null;
   directoryId?: string | null;
@@ -126,6 +125,10 @@ export interface ChatProps {
   onConversationAccepted?: (conversationId: string) => void;
   onConversationChange?: (options?: ConversationChangeOptions) => void | Promise<void>;
   onExecutionError?: (error: unknown) => void;
+  /** 收到的每一个状态事件。Every status event received. */
+  onExecutionStatus?: (status: ExecutionStatusEvent) => void;
+  /** 收到的每一条对话消息，包括 Turn 的开始与结束。Every conversation message received, including turn start and finish. */
+  onExecutionMessage?: (message: AiMessage) => void;
   pendingFileComments?: readonly LineComment[];
   onPendingFileCommentsRemove?: (commentIds: readonly string[]) => void;
   context?: Readonly<Record<string, string>>;
@@ -217,6 +220,8 @@ export function Chat({
   onConversationAccepted,
   onConversationChange,
   onExecutionError,
+  onExecutionStatus,
+  onExecutionMessage,
   pendingFileComments = EMPTY_FILE_COMMENTS,
   onPendingFileCommentsRemove,
   context = EMPTY_CHAT_CONTEXT,
@@ -251,7 +256,13 @@ export function Chat({
   );
   const [permissionChangePending, setPermissionChangePending] = React.useState(false);
   const permissionCapabilities = useQuery({
-    queryKey: ["execution-permissions", executionServerId, target?.type, target?.id],
+    queryKey: [
+      "execution-permissions",
+      executionServerId,
+      target?.type,
+      target?.id,
+      target?.agentflowRevision,
+    ],
     enabled: Boolean(target),
     queryFn: ({ signal }) =>
       chatHttpClient.getPermissionCapabilities(
@@ -740,36 +751,37 @@ export function Chat({
     [target],
   );
 
-  const applyExecutionMessage = React.useCallback(
-    (message: AiMessage, generation: number) => {
-      if (generation !== executionGenerationRef.current) {
-        return;
-      }
-
-      const permissionStatus = getPermissionStatus(message);
-      if (permissionStatus) {
-        setActivePermissionMode(permissionStatus.activePermissionMode);
-        if (permissionStatus.nextPermissionMode)
-          setPermissionMode(permissionStatus.nextPermissionMode);
-        setPermissionChangePending(permissionStatus.permissionChangePending);
-        return;
-      }
-      if (message.additionalProperties?.type === "mode-change-failed") {
+  const applyExecutionStatus = React.useCallback(
+    (status: ExecutionStatusEvent, generation: number) => {
+      if (generation !== executionGenerationRef.current) return;
+      onExecutionStatus?.(status);
+      if (status.type === "permission-status") {
+        setActivePermissionMode(status.activePermissionMode);
+        if (status.nextPermissionMode) setPermissionMode(status.nextPermissionMode);
+        setPermissionChangePending(status.permissionChangePending);
+      } else if (status.type === "mode-change-failed") {
         streamingMessageBatcherRef.current?.flush(generation);
         setAgentMode(confirmedAgentModeRef.current);
-        const detail = message.contents.find(
-          (content) => typeof content.content === "string",
-        )?.content;
-        toast.error(typeof detail === "string" ? detail : "Failed to change agent mode");
-        return;
+        toast.error(status.message ?? "Failed to change agent mode");
+      } else if (status.type === "mode-status") {
+        streamingMessageBatcherRef.current?.flush(generation);
+        confirmedAgentModeRef.current = status.mode;
+        setAgentMode(status.mode);
       }
+    },
+    [onExecutionStatus],
+  );
+
+  const applyExecutionMessage = React.useCallback(
+    (message: AiMessage, generation: number) => {
+      if (generation !== executionGenerationRef.current) return;
+      onExecutionMessage?.(message);
 
       const nextAgentMode = getAgentMode(message);
       if (nextAgentMode) {
         streamingMessageBatcherRef.current?.flush(generation);
         confirmedAgentModeRef.current = nextAgentMode;
         setAgentMode(nextAgentMode);
-        if (isModeControlMessage(message)) return;
       }
 
       const initCommands = getClaudeInitCommands(message);
@@ -862,6 +874,7 @@ export function Chat({
       notifyExecutionError,
       onConversationAccepted,
       onConversationChange,
+      onExecutionMessage,
       refreshAgentflowCheckpoints,
     ],
   );
@@ -935,6 +948,7 @@ export function Chat({
         generation === executionGenerationRef.current && executionClientRef.current === getClient();
       return {
         onMessage: (message) => applyExecutionMessage(message, generation),
+        onStatus: (status) => applyExecutionStatus(status, generation),
         onSubmissionStarted: ({ item, message }) =>
           applySubmissionStarted(item, message, generation),
         onSubmissionReturned: ({ item, error }) => applySubmissionReturned(item, error, generation),
@@ -970,6 +984,7 @@ export function Chat({
     },
     [
       applyExecutionMessage,
+      applyExecutionStatus,
       applySteerRejected,
       applySubmissionReturned,
       applySubmissionStarted,
@@ -989,9 +1004,7 @@ export function Chat({
         return;
       }
 
-      const prepared = prepareChatHistory(
-        snapshot.messages.filter((message) => !getPermissionStatus(message)),
-      );
+      const prepared = prepareChatHistory(snapshot.messages);
       const nextMessages = replaceStreamingScope(
         messagesRef.current,
         prepared.messages,
@@ -1004,13 +1017,6 @@ export function Chat({
       let nextCommands: string[] | null = null;
       let nextMode: AgentMode | null = null;
       for (const message of snapshot.messages) {
-        const permissionStatus = getPermissionStatus(message);
-        if (permissionStatus) {
-          setActivePermissionMode(permissionStatus.activePermissionMode);
-          if (permissionStatus.nextPermissionMode)
-            setPermissionMode(permissionStatus.nextPermissionMode);
-          setPermissionChangePending(permissionStatus.permissionChangePending);
-        }
         const initCommands = getClaudeInitCommands(message);
         if (initCommands !== null) {
           nextCommands = initCommands;
@@ -1028,8 +1034,9 @@ export function Chat({
         confirmedAgentModeRef.current = nextMode;
         setAgentMode(nextMode);
       }
+      for (const status of snapshot.statuses) applyExecutionStatus(status, generation);
     },
-    [],
+    [applyExecutionStatus],
   );
 
   React.useEffect(() => {
@@ -1274,6 +1281,9 @@ export function Chat({
             target: {
               agentId: submittedTarget.id,
               agentType: submittedTarget.type === "agent" ? 0 : 1,
+              ...(submittedTarget.agentflowRevision === undefined
+                ? {}
+                : { agentflowRevision: submittedTarget.agentflowRevision }),
             },
             text: value,
             attachments: imageAttachments,

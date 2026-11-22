@@ -82,7 +82,83 @@ public sealed class OpenApiSchemaTransformerTests
         );
     }
 
+    [Fact]
+    public async Task AgentflowNodeDto_PolymorphicVariants_RequireTheirKind()
+    {
+        var schemas = await GenerateSchemasAsync();
+        var discriminator = schemas.GetProperty("AgentflowNodeDto").GetProperty("discriminator");
+        Assert.Equal("kind", discriminator.GetProperty("propertyName").GetString());
+        var variants = discriminator.GetProperty("mapping").EnumerateObject().ToArray();
+        Assert.Equal(12, variants.Length);
+        foreach (var variant in variants)
+        {
+            var schema = schemas.GetProperty(variant.Value.GetString()!.Split('/')[^1]);
+            Assert.Contains(schema.GetProperty("required").EnumerateArray(), name => name.GetString() == "kind");
+            var kinds = schema.GetProperty("properties").GetProperty("kind").GetProperty("enum").EnumerateArray();
+            Assert.Equal(variant.Name, Assert.Single(kinds).GetString());
+        }
+    }
+
+    [Fact]
+    public async Task AgentflowTraceDto_NodeKind_KeepsItsNumericSchema()
+    {
+        var schemas = await GenerateSchemasAsync();
+        var trace = schemas.GetProperty("AgentflowTraceDto");
+        var nodeKind = trace.GetProperty("properties").GetProperty("nodeKind");
+
+        Assert.Equal("#/components/schemas/AgentflowNodeKind", nodeKind.GetProperty("$ref").GetString());
+        Assert.Equal("integer", schemas.GetProperty("AgentflowNodeKind").GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task AgentflowBlockMemberDto_Kind_AllowsOnlyAgentAndWorkflow()
+    {
+        var schemas = await GenerateSchemasAsync();
+        var member = schemas.GetProperty("AgentflowBlockMemberDto");
+        var kind = member.GetProperty("properties").GetProperty("kind");
+
+        Assert.Equal("#/components/schemas/AgentflowBlockMemberKind", kind.GetProperty("$ref").GetString());
+        var values = schemas.GetProperty("AgentflowBlockMemberKind").GetProperty("enum").EnumerateArray();
+        Assert.Equal(["agent", "workflowAsAgent"], values.Select(value => value.GetString()));
+    }
+
+    [Fact]
+    public async Task AgentflowConditionRuleDto_Field_EnumeratesTheSupportedRuleFields()
+    {
+        var schemas = await GenerateSchemasAsync();
+        var field = schemas.GetProperty("AgentflowConditionRuleDto").GetProperty("properties").GetProperty("field");
+        var values = schemas.GetProperty("AgentflowConditionField").GetProperty("enum").EnumerateArray();
+
+        Assert.Equal("#/components/schemas/AgentflowConditionField", field.GetProperty("$ref").GetString());
+        Assert.Equal(
+            ["contains", "notContains", "equals", "author", "role", "minMessages", "result"],
+            values.Select(value => value.GetString())
+        );
+    }
+
+    [Fact]
+    public async Task ExecutionPermissionCapabilities_AgentflowRevision_IsAnOptionalQueryParameter()
+    {
+        var document = await GenerateDocumentAsync();
+        var parameters = document
+            .GetProperty("paths")
+            .GetProperty("/api/agents/permission-capabilities")
+            .GetProperty("get")
+            .GetProperty("parameters")
+            .EnumerateArray();
+        var revision = Assert.Single(parameters, item => item.GetProperty("name").GetString() == "agentflowRevision");
+
+        Assert.Equal("query", revision.GetProperty("in").GetString());
+        Assert.False(revision.TryGetProperty("required", out var required) && required.GetBoolean());
+    }
+
     private static async Task<JsonElement> GenerateSchemasAsync()
+    {
+        var document = await GenerateDocumentAsync();
+        return document.GetProperty("components").GetProperty("schemas");
+    }
+
+    private static async Task<JsonElement> GenerateDocumentAsync()
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
@@ -107,6 +183,6 @@ public sealed class OpenApiSchemaTransformerTests
             stream,
             cancellationToken: TestContext.Current.CancellationToken
         );
-        return document.RootElement.GetProperty("components").GetProperty("schemas").Clone();
+        return document.RootElement.Clone();
     }
 }

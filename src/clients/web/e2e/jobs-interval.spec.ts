@@ -1,8 +1,8 @@
 import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { expect, type APIResponse, type Locator, type Page, type Response } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
-import { standaloneHostTest } from "./standalone-host";
+import { readApiResult as readResult, standaloneHostTest } from "./standalone-host";
 
 const defaultProjectId = "11111111-1111-1111-1111-000000000001";
 const agentName = "Interval Test Agent";
@@ -202,11 +202,4 @@ function waitForJobWrite(page: Page, path: string) {
     (response) =>
       new URL(response.url()).pathname === path && response.request().method() === "POST",
   );
-}
-
-async function readResult<T>(response: APIResponse | Response): Promise<T> {
-  const result = (await response.json()) as { code: number; data: T };
-  expect(response.ok(), JSON.stringify(result)).toBe(true);
-  expect(result.code).toBe(0);
-  return result.data;
 }

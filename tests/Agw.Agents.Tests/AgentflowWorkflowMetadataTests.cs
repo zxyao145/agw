@@ -1,15 +1,47 @@
+using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Shared.Data.Entities.Agentflows;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
 public partial class AgentflowTurnExecutorTests
 {
+    [Fact]
+    public void WorkflowCompilation_NodeIdsByExecutorId_MapsEachLogicalNode()
+    {
+        var flow = new Agentflow { Id = Guid.CreateVersion7(), Name = "metadata-flow" };
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                EdgeId = "input-output",
+                SourceNodeId = "input",
+                TargetNodeId = "output",
+            },
+        };
+        var compiler = new AgentflowWorkflowCompiler(NullLogger<AgentflowWorkflowCompiler>.Instance);
+
+        var compilation = compiler.Compile(flow, 1, nodes, edges, [], new Dictionary<string, AIAgent>());
+
+        Assert.NotNull(compilation);
+        Assert.Equal(2, compilation.NodeIdsByExecutorId.Count);
+        Assert.Equal(2, compilation.NodeIdsByExecutorId.Values.Distinct(StringComparer.Ordinal).Count());
+        Assert.Contains("input", compilation.NodeIdsByExecutorId.Values);
+        Assert.Contains("output", compilation.NodeIdsByExecutorId.Values);
+    }
+
     [Theory]
     [InlineData("streaming")]
     [InlineData("unattended")]
     [InlineData("durable")]
-    [InlineData("mermaid")]
+    [InlineData("compile")]
     public async Task WorkflowConstruction_EachEntryPoint_LoadsNodesOnce(string entryPoint)
     {
         var fixture = CreateCharacterizationFixture([
@@ -50,9 +82,16 @@ public partial class AgentflowTurnExecutorTests
                 Assert.Equal(DurableExecutionSegmentStatus.Completed, result.Status);
                 break;
             default:
-                Assert.NotNull(
-                    await fixture.Service.GetMermaidAsync(fixture.Flow.Id, TestContext.Current.CancellationToken)
-                );
+                await using (
+                    var workflow = await fixture.Service.CreateAiWorkflow(
+                        fixture.Flow.Id,
+                        AgentflowTurnTestHost.FirstRevision,
+                        TestContext.Current.CancellationToken
+                    )
+                )
+                {
+                    Assert.NotNull(workflow);
+                }
                 break;
         }
 
@@ -67,7 +106,7 @@ public partial class AgentflowTurnExecutorTests
             AgentflowNodeKind.HumanGate,
             AgentflowNodeKind.Output,
         ]);
-        fixture.Nodes[1].ConfigJson = """{"humanPrompt":"original prompt"}""";
+        fixture.Nodes[1].ConfigJson = GateOptions("original prompt");
         var first = new List<AgwMessage>();
         var firstHandler = new FixedApprovalHandler(false);
         var secondHandler = new FixedApprovalHandler(false);
@@ -82,7 +121,7 @@ public partial class AgentflowTurnExecutorTests
         )
         {
             first.Add(message);
-            fixture.Nodes[1].ConfigJson = """{"humanPrompt":"updated prompt"}""";
+            fixture.Nodes[1].ConfigJson = GateOptions("updated prompt");
             fixture.Nodes[1].Name = "updated name";
         }
         var second = await CollectAsync(

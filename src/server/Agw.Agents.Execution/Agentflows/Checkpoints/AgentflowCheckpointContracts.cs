@@ -1,3 +1,4 @@
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 
 namespace Agw.Agents.Execution.Agentflows.Checkpoints;
@@ -9,8 +10,10 @@ internal sealed record AgentflowCheckpointSnapshot(
     Guid? SourceTurnId,
     Guid AgentflowId,
     long BoundarySequence,
-    string DefinitionFingerprint,
+    int AgentflowRevision,
+    int RuntimeVersion,
     IReadOnlyList<AgentflowCheckpointMarker> Markers,
+    AgentflowRevisionSnapshot RevisionSnapshot,
     DurableAgentflowCheckpoint Checkpoint
 );
 

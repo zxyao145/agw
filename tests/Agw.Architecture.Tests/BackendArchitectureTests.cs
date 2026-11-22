@@ -864,6 +864,8 @@ public sealed partial class BackendArchitectureTests
         ["AgentMcpServerRelation"] = "Agw.Agents",
         ["AgentSessionStateEntry"] = "Agw.Agents",
         ["Agentflow"] = "Agw.Agents",
+        ["AgentflowRevision"] = "Agw.Agents",
+        ["AgentflowBlockMember"] = "Agw.Agents",
         ["AgentflowEdge"] = "Agw.Agents",
         ["AgentflowNode"] = "Agw.Agents",
         ["AgentflowTrace"] = "Agw.Agents",

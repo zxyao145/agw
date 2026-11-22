@@ -90,6 +90,15 @@ public sealed class ConversationTurnStore : IConversationTurnStore
                     ? AgentRuntimeType.Agentflow
                     : AgentRuntimeType.Agent,
             InputMessageId = request.Input?.MessageId ?? Guid.Empty,
+            Extra = new ProjectConversationTurnExtra
+            {
+                AgentflowRevision =
+                    request.TargetType == ConversationTurnTargetType.Agentflow ? request.AgentflowRevision : 0,
+                AgentflowDependencies =
+                    request.TargetType == ConversationTurnTargetType.Agentflow
+                        ? (request.AgentflowDependencies ?? []).Select(Map).ToArray()
+                        : null,
+            },
         };
         new ProjectConversationTurnBehavior(turn).Accept(sequence, now);
         _dbContext.ProjectConversationTurns.Add(turn);
@@ -270,6 +279,28 @@ public sealed class ConversationTurnStore : IConversationTurnStore
             turn.StepCount,
             turn.StartedAt,
             turn.FinishedAt,
-            turn.ErrorCode
+            turn.ErrorCode,
+            turn.Extra.AgentflowRevision,
+            turn.Extra.AgentflowDependencies?.Select(Map).ToArray()
+        );
+
+    private static ProjectConversationTurnAgentflowDependency Map(AgentflowDependencyRevisionDto dependency) =>
+        new(
+            dependency.ParentAgentflowId,
+            dependency.ParentRevision,
+            dependency.ParentNodeId,
+            dependency.BlockMemberId,
+            dependency.TargetAgentflowId,
+            dependency.TargetRevision
+        );
+
+    private static AgentflowDependencyRevisionDto Map(ProjectConversationTurnAgentflowDependency dependency) =>
+        new(
+            dependency.ParentAgentflowId,
+            dependency.ParentRevision,
+            dependency.ParentNodeId,
+            dependency.BlockMemberId,
+            dependency.TargetAgentflowId,
+            dependency.TargetRevision
         );
 }

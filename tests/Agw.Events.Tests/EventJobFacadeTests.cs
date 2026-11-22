@@ -461,7 +461,12 @@ public sealed class EventJobFacadeTests
         var job = await fixture.Jobs.CreateAsync(Definition() with { AgentId = agent.Id }, Ct);
         var deletion = new AgentDeletionCoordinator(
             fixture.Db,
-            fixture.Services.GetRequiredService<IApplicationLock>()
+            fixture.Services.GetRequiredService<IApplicationLock>(),
+            new Agw.Agents.Execution.Agentflows.Checkpoints.AgentflowRevisionUsageReader(
+                fixture.Db,
+                new Agw.Projects.Infrastructure.ConversationTurnStore(fixture.Db, TimeProvider.System),
+                new Agw.Agents.Definitions.Persistence.AgentflowRevisionSnapshotReader(fixture.Db)
+            )
         );
 
         var inUse = await Assert.ThrowsAsync<AgwException>(() => deletion.DeleteAsync(agent.Id, Owner, Ct));

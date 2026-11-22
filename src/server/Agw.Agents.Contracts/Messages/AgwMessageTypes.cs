@@ -13,6 +13,7 @@ public static class AgwMessageTypes
     public const string SteerDelivered = "steer-delivered";
     public const string SteerReturned = "steer-returned";
     public const string AgentflowCheckpoint = "agentflow-checkpoint";
+    public const string AgentflowNodeStatus = "agentflow-node-status";
     public const string HumanGateRejected = "human-gate-rejected";
     public const string HumanGateUnavailable = "human-gate-unavailable";
     public const string ToolApprovalUnavailable = "tool-approval-unavailable";

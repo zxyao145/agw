@@ -35,7 +35,10 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     private readonly AgentflowAgentSessionScope? _sessionScope;
     private readonly AgentflowExecutionTraceContext? _executionTraceContext;
     private readonly Guid? _agentflowId;
+    private readonly int _agentflowRevision;
     private readonly string? _traceNodeId;
+    private readonly string? _topLevelNodeId;
+    private readonly string? _nodePath;
     private readonly Guid? _agentId;
     private readonly EngineKind? _engineKind;
     private readonly bool _isWorkflow;
@@ -94,6 +97,10 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     /// <para>节点引用的 Agent 的 Engine 种类；嵌套 Workflow 为空。</para>
     /// <para>Engine kind of the Agent referenced by the node; null for nested workflows.</para>
     /// </param>
+    /// <param name="agentflowRevision">
+    /// <para>节点所属 Agentflow 的 revision。</para>
+    /// <para>Revision of the Agentflow that owns the node.</para>
+    /// </param>
     /// <param name="resultOptions">
     /// <para>当前 Agent 的 Result 配置。</para>
     /// <para>Result settings of the current Agent.</para>
@@ -101,6 +108,14 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     /// <param name="summaryContext">
     /// <para>生成 Result 所需的服务和执行信息。</para>
     /// <para>Service and execution context used to create a Result.</para>
+    /// </param>
+    /// <param name="topLevelNodeId">
+    /// <para>当前 Turn 中的顶层节点 ID。</para>
+    /// <para>Top-level node ID in the current turn.</para>
+    /// </param>
+    /// <param name="nodePath">
+    /// <para>从顶层节点到当前节点的路径。</para>
+    /// <para>Path from the top-level node to this node.</para>
     /// </param>
     public AgentflowNodeScopedAgent(
         AIAgent innerAgent,
@@ -110,13 +125,16 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         AgentflowAgentSessionScope? sessionScope,
         AgentflowExecutionTraceContext? executionTraceContext = null,
         Guid? agentflowId = null,
+        int agentflowRevision = 0,
         string? traceNodeId = null,
         Guid? agentId = null,
         string? historyNodeId = null,
         bool isWorkflow = false,
         EngineKind? engineKind = null,
         AgentflowNodeResultOptions? resultOptions = null,
-        AgentflowSummaryContext? summaryContext = null
+        AgentflowSummaryContext? summaryContext = null,
+        string? topLevelNodeId = null,
+        string? nodePath = null
     )
         : base(innerAgent)
     {
@@ -129,7 +147,10 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         _sessionScope = sessionScope;
         _executionTraceContext = executionTraceContext;
         _agentflowId = agentflowId;
+        _agentflowRevision = agentflowRevision;
         _traceNodeId = traceNodeId;
+        _topLevelNodeId = topLevelNodeId;
+        _nodePath = nodePath;
         _agentId = agentId;
         _isWorkflow = isWorkflow;
         _resultOptions = resultOptions;
@@ -267,7 +288,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                     .RunAsync(turn.Input, turn.Session, turn.Options, cancellationToken)
                     .ConfigureAwait(false);
             }
-            AddNodeAttribution(response.Messages, turn.InteractionNodeId);
+            AddNodeAttribution(response.Messages, turn.NodeId, turn.NodePath);
             turnPersistence.RecordRange(response.Messages);
             UpdatePendingFunctionCallIds(
                 response.Messages.SelectMany(message => message.Contents),
@@ -277,7 +298,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             var snapshots = await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);
             foreach (var snapshot in snapshots)
             {
-                AddNodeAttribution(snapshot, turn.InteractionNodeId);
+                AddNodeAttribution(snapshot, turn.NodeId, turn.NodePath);
                 response.Messages.Add(snapshot);
             }
             var result = await CreateResultAsync(
@@ -291,7 +312,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                 .ConfigureAwait(false);
             if (result != null)
             {
-                AddNodeAttribution(result, turn.InteractionNodeId);
+                AddNodeAttribution(result, turn.NodeId, turn.NodePath);
                 response.Messages.Add(result);
             }
             activity?.Complete();
@@ -374,7 +395,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                     }
 
                     update = ProjectWorkflowObservation(enumerator.Current, observedCalls);
-                    AddNodeAttribution(update, turn.InteractionNodeId);
+                    AddNodeAttribution(update, turn.NodeId, turn.NodePath);
                     var responseMessage = ToolStateSnapshots.ToMessage(update);
                     turnPersistence.Record(responseMessage);
                     resultUpdates?.Add(update);
@@ -405,7 +426,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             foreach (var stateSnapshot in stateSnapshots)
             {
                 var stateSnapshotUpdate = ToolStateSnapshots.ToUpdate(stateSnapshot);
-                AddNodeAttribution(stateSnapshotUpdate, turn.InteractionNodeId);
+                AddNodeAttribution(stateSnapshotUpdate, turn.NodeId, turn.NodePath);
                 yield return stateSnapshotUpdate;
             }
 
@@ -420,7 +441,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                     .ConfigureAwait(false);
                 if (result != null)
                 {
-                    AddNodeAttribution(result, turn.InteractionNodeId);
+                    AddNodeAttribution(result, turn.NodeId, turn.NodePath);
                     yield return ToolStateSnapshots.ToUpdate(result);
                 }
             }
@@ -466,7 +487,9 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     {
         var nodeScope = CreateNodeScope();
         var scopedOptions = ExecutionRunOptions.With(options, nodeScope.Context);
-        var interactionNodeId = nodeScope.Context.Node!.NodeId;
+        var node = nodeScope.Context.Node!;
+        var nodePath = node.NodePath ?? node.NodeId;
+        var nodeId = node.NodeId;
         // 在节点作用域中准备会话，并恢复待完成调用，确保审批继续执行沿用同一状态。
         // Prepare the node-scoped session and restore pending calls so approval continuations keep the same state.
         var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
@@ -482,7 +505,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         return new NodeTurn(
             nodeScope,
             scopedOptions,
-            interactionNodeId,
+            nodeId,
+            nodePath,
             scopedSession,
             pendingFunctionCallIds,
             input,
@@ -592,15 +616,22 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     private ExecutionScope CreateNodeScope()
     {
         var parent = ExecutionScope.Required;
-        var parentNodeId = parent.Context.Node?.NodeId;
+        var parentNode = parent.Context.Node;
+        var parentNodePath = parentNode?.NodePath;
+        var nodePath =
+            _nodePath ?? (string.IsNullOrWhiteSpace(parentNodePath) ? _nodeId : $"{parentNodePath}/{_nodeId}");
+        var nodeId = _topLevelNodeId ?? parentNode?.NodeId ?? _nodeId;
         return parent.CreateNodeScope(
             new AgentflowNodeExecution(
                 _agentflowId ?? parent.Context.TurnTargetId,
-                string.IsNullOrWhiteSpace(parentNodeId) ? _nodeId : $"{parentNodeId}/{_nodeId}",
+                nodeId,
                 _name,
                 ActivationIndex: 0,
                 MafApprovalAdapter.GetWorkflowRequestScope(this)
-            ),
+            )
+            {
+                NodePath = nodePath,
+            },
             _agentId,
             _engineKind
         );
@@ -697,6 +728,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         return AgentflowNodeExecutionActivity.StartAgent(
             _executionTraceContext,
             _agentflowId.Value,
+            _agentflowRevision,
             _traceNodeId,
             _name,
             _agentId,
@@ -792,87 +824,115 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         return _sessionScope?.PersistToolBlockMessagesAsync(messages, cancellationToken) ?? Task.CompletedTask;
     }
 
+    private (string NodeId, string NodePath) ResolveNodeAttribution(string? nodeId, string? nodePath)
+    {
+        var currentNode = ExecutionScope.Current?.Context.Node;
+        var currentNodePath = currentNode?.NodePath ?? _nodePath ?? _nodeId;
+        var currentNodeId = currentNode?.NodeId ?? _topLevelNodeId ?? _nodeId;
+        return (nodeId ?? currentNodeId, nodePath ?? currentNodePath);
+    }
+
     /// <summary>
-    /// <para>按需补齐节点名称和交互节点标识，保留消息上已有的归属属性。</para>
-    /// <para>Adds missing node names and interaction-node identifiers while preserving attribution already present on messages.</para>
+    /// <para>按需补齐节点名称、节点 ID 与节点路径，保留消息上已有的归属属性。</para>
+    /// <para>Adds missing node names, node IDs and node paths while preserving existing attribution.</para>
     /// </summary>
     /// <param name="messages">
     /// <para>按调用顺序提供的聊天消息。</para>
     /// <para>Chat messages in invocation order.</para>
     /// </param>
-    /// <param name="interactionNodeId">
-    /// <para>需要补充的交互节点路径；为空时不添加该属性。</para>
-    /// <para>Interaction-node path to add; null leaves that property unchanged.</para>
+    /// <param name="nodeId">
+    /// <para>需要补充的顶层节点 ID。</para>
+    /// <para>Top-level node ID to add.</para>
     /// </param>
-    private void AddNodeAttribution(IEnumerable<ChatMessage> messages, string? interactionNodeId = null)
+    /// <param name="nodePath">
+    /// <para>需要补充的节点路径。</para>
+    /// <para>Node path to add.</para>
+    /// </param>
+    private void AddNodeAttribution(IEnumerable<ChatMessage> messages, string? nodeId = null, string? nodePath = null)
     {
         foreach (var message in messages)
         {
-            AddNodeAttribution(message, interactionNodeId);
+            AddNodeAttribution(message, nodeId, nodePath);
         }
     }
 
     /// <summary>
-    /// <para>按需补齐节点名称和交互节点标识，保留消息上已有的归属属性。</para>
-    /// <para>Adds missing node names and interaction-node identifiers while preserving attribution already present on messages.</para>
+    /// <para>按需补齐节点名称、节点 ID 与节点路径，保留消息上已有的归属属性。</para>
+    /// <para>Adds missing node names, node IDs and node paths while preserving existing attribution.</para>
     /// </summary>
     /// <param name="message">
     /// <para>待检查、复制或补充元数据的消息。</para>
     /// <para>Message to inspect, copy, or annotate.</para>
     /// </param>
-    /// <param name="interactionNodeId">
-    /// <para>需要补充的交互节点路径；为空时不添加该属性。</para>
-    /// <para>Interaction-node path to add; null leaves that property unchanged.</para>
+    /// <param name="nodeId">
+    /// <para>需要补充的顶层节点 ID。</para>
+    /// <para>Top-level node ID to add.</para>
     /// </param>
-    private void AddNodeAttribution(ChatMessage message, string? interactionNodeId = null)
+    /// <param name="nodePath">
+    /// <para>需要补充的节点路径。</para>
+    /// <para>Node path to add.</para>
+    /// </param>
+    private void AddNodeAttribution(ChatMessage message, string? nodeId = null, string? nodePath = null)
     {
+        (nodeId, nodePath) = ResolveNodeAttribution(nodeId, nodePath);
         if (
             (_messageNodeName == null || message.AdditionalProperties?.ContainsKey(NodeNamePropertyName) == true)
-            && (interactionNodeId == null || message.AdditionalProperties?.ContainsKey("interactionNodeId") == true)
+            && (nodeId == null || message.AdditionalProperties?.ContainsKey(AgwMessageClassifier.NodeIdKey) == true)
+            && (nodePath == null || message.AdditionalProperties?.ContainsKey(AgwMessageClassifier.NodePathKey) == true)
         )
         {
             return;
         }
 
-        message.AdditionalProperties = CreateNodeProperties(message.AdditionalProperties, interactionNodeId);
+        message.AdditionalProperties = CreateNodeProperties(message.AdditionalProperties, nodeId, nodePath);
     }
 
     /// <summary>
-    /// <para>按需补齐节点名称和交互节点标识，保留消息上已有的归属属性。</para>
-    /// <para>Adds missing node names and interaction-node identifiers while preserving attribution already present on messages.</para>
+    /// <para>按需补齐节点名称、节点 ID 与节点路径，保留消息上已有的归属属性。</para>
+    /// <para>Adds missing node names, node IDs and node paths while preserving existing attribution.</para>
     /// </summary>
     /// <param name="update">
     /// <para>当前执行产生的响应更新。</para>
     /// <para>Response update produced by the current execution.</para>
     /// </param>
-    /// <param name="interactionNodeId">
-    /// <para>需要补充的交互节点路径；为空时不添加该属性。</para>
-    /// <para>Interaction-node path to add; null leaves that property unchanged.</para>
+    /// <param name="nodeId">
+    /// <para>需要补充的顶层节点 ID。</para>
+    /// <para>Top-level node ID to add.</para>
     /// </param>
-    private void AddNodeAttribution(AgentResponseUpdate update, string? interactionNodeId = null)
+    /// <param name="nodePath">
+    /// <para>需要补充的节点路径。</para>
+    /// <para>Node path to add.</para>
+    /// </param>
+    private void AddNodeAttribution(AgentResponseUpdate update, string? nodeId = null, string? nodePath = null)
     {
+        (nodeId, nodePath) = ResolveNodeAttribution(nodeId, nodePath);
         if (
             (_messageNodeName == null || update.AdditionalProperties?.ContainsKey(NodeNamePropertyName) == true)
-            && (interactionNodeId == null || update.AdditionalProperties?.ContainsKey("interactionNodeId") == true)
+            && (nodeId == null || update.AdditionalProperties?.ContainsKey(AgwMessageClassifier.NodeIdKey) == true)
+            && (nodePath == null || update.AdditionalProperties?.ContainsKey(AgwMessageClassifier.NodePathKey) == true)
         )
         {
             return;
         }
 
-        update.AdditionalProperties = CreateNodeProperties(update.AdditionalProperties, interactionNodeId);
+        update.AdditionalProperties = CreateNodeProperties(update.AdditionalProperties, nodeId, nodePath);
     }
 
     /// <summary>
-    /// <para>复制属性字典并仅补充缺少的节点名称和交互路径，避免修改共享元数据。</para>
-    /// <para>Copies the property dictionary and adds only missing node names and interaction paths, avoiding mutation of shared metadata.</para>
+    /// <para>复制属性字典并仅补充缺少的节点名称、节点 ID 与节点路径，避免修改共享元数据。</para>
+    /// <para>Copies the property dictionary and adds only missing node names, node IDs and node paths.</para>
     /// </summary>
     /// <param name="properties">
     /// <para>已有消息属性；复制后保留其全部原值。</para>
     /// <para>Existing message properties, copied with all original values retained.</para>
     /// </param>
-    /// <param name="interactionNodeId">
-    /// <para>需要补充的交互节点路径；为空时不添加该属性。</para>
-    /// <para>Interaction-node path to add; null leaves that property unchanged.</para>
+    /// <param name="nodeId">
+    /// <para>需要补充的顶层节点 ID。</para>
+    /// <para>Top-level node ID to add.</para>
+    /// </param>
+    /// <param name="nodePath">
+    /// <para>需要补充的节点路径。</para>
+    /// <para>Node path to add.</para>
     /// </param>
     /// <returns>
     /// <para>保留已有值并补齐节点归属的独立属性字典。</para>
@@ -880,15 +940,18 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     /// </returns>
     private AdditionalPropertiesDictionary CreateNodeProperties(
         AdditionalPropertiesDictionary? properties,
-        string? interactionNodeId
+        string? nodeId,
+        string? nodePath
     )
     {
         var result =
             properties == null ? new AdditionalPropertiesDictionary() : new AdditionalPropertiesDictionary(properties);
         if (_messageNodeName is not null)
             result.TryAdd(NodeNamePropertyName, _messageNodeName);
-        if (interactionNodeId is not null)
-            result.TryAdd("interactionNodeId", interactionNodeId);
+        if (nodeId is not null)
+            result.TryAdd(AgwMessageClassifier.NodeIdKey, nodeId);
+        if (nodePath is not null)
+            result.TryAdd(AgwMessageClassifier.NodePathKey, nodePath);
         return result;
     }
 
@@ -975,7 +1038,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         public NodeTurn(
             ExecutionScope scope,
             AgentRunOptions options,
-            string? interactionNodeId,
+            string? nodeId,
+            string? nodePath,
             AgentSession session,
             HashSet<string> pendingFunctionCallIds,
             IReadOnlyList<ChatMessage> input,
@@ -985,7 +1049,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         {
             Scope = scope;
             Options = options;
-            InteractionNodeId = interactionNodeId;
+            NodeId = nodeId;
+            NodePath = nodePath;
             Session = session;
             PendingFunctionCallIds = pendingFunctionCallIds;
             Input = input;
@@ -997,7 +1062,9 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
 
         public AgentRunOptions Options { get; }
 
-        public string? InteractionNodeId { get; }
+        public string? NodeId { get; }
+
+        public string? NodePath { get; }
 
         public AgentSession Session { get; }
 

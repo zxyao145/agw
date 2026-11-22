@@ -174,6 +174,7 @@ public sealed class AgentflowCheckpointPersistence : IAgentflowCheckpointPersist
         public async Task AcceptResumeTurnAsync(
             Guid turnId,
             AgentflowCheckpointRecord checkpoint,
+            AgentflowRevisionSnapshot snapshot,
             CancellationToken cancellationToken = default
         )
         {
@@ -195,6 +196,10 @@ public sealed class AgentflowCheckpointPersistence : IAgentflowCheckpointPersist
                         TaskId = checkpoint.TaskId,
                         TargetId = checkpoint.AgentflowId,
                         TargetType = ConversationTurnTargetType.Agentflow,
+                        AgentflowRevision = snapshot.RootRevision,
+                        AgentflowDependencies = snapshot
+                            .Dependencies.Select(AgentflowDependencyRevisionMapping.ToDto)
+                            .ToArray(),
                     },
                     cancellationToken
                 )

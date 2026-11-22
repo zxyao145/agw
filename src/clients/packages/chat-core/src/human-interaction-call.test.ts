@@ -56,10 +56,15 @@ test("hasMatchingHumanInteractionCall does not bind a repeated call id to an old
 test("matchesHumanInteractionCall rejects the wrong explicit business node", () => {
   const rightNodeCall: AiMessage = {
     ...functionCallMessage("call-1", "turn-1"),
-    additionalProperties: { interactionNodeId: "root/right", nodeName: "Left" },
+    additionalProperties: { nodeId: "root", nodePath: "root/right", nodeName: "Left" },
   };
   const target = {
-    source: { callId: "call-1", nodeId: "root/left", providerScopeId: "sdk-request-port" },
+    source: {
+      callId: "call-1",
+      nodeId: "root",
+      nodePath: "root/left",
+      providerScopeId: "sdk-request-port",
+    },
     streamingScopeId: "turn-1",
   };
 
@@ -69,7 +74,7 @@ test("matchesHumanInteractionCall rejects the wrong explicit business node", () 
     matchesHumanInteractionCall(
       {
         ...rightNodeCall,
-        additionalProperties: { interactionNodeId: "root/left", nodeName: "Right" },
+        additionalProperties: { nodeId: "root", nodePath: "root/left", nodeName: "Right" },
       },
       target,
     ),
@@ -81,7 +86,7 @@ test("matchesHumanInteractionCall preserves matching when node attribution is un
   const call = functionCallMessage("call-1", "turn-1");
   assert.equal(
     matchesHumanInteractionCall(call, {
-      source: { callId: "call-1", nodeId: "root/left" },
+      source: { callId: "call-1", nodeId: "root", nodePath: "root/left" },
       streamingScopeId: "turn-1",
     }),
     true,
@@ -90,7 +95,7 @@ test("matchesHumanInteractionCall preserves matching when node attribution is un
     matchesHumanInteractionCall(
       {
         ...call,
-        additionalProperties: { interactionNodeId: "root/right" },
+        additionalProperties: { nodeId: "root", nodePath: "root/right" },
       },
       { source: { callId: "call-1" }, streamingScopeId: "turn-1" },
     ),

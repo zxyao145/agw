@@ -1,9 +1,5 @@
-import type {
-  AgentDto,
-  AgentflowDetailDto,
-  AgentflowDto,
-  AgentflowSaveRequest,
-} from "../../types/agentflow";
+import type { components } from "@agw/api";
+import type { AgentDto, AgentflowDetailResponse } from "../../types/agentflow";
 import { AgentType, ExternalAgentKind, type AgentCreateRequest } from "./agents/components/types";
 import {
   createA2AEndpointDraft,
@@ -67,31 +63,13 @@ export function createA2ACopyEndpointDraft(agent: AgentDto) {
     : null;
 }
 
-export function createAgentflowCopyRequest(
-  agentflow: AgentflowDto,
-  details: AgentflowDetailDto,
-): AgentflowSaveRequest {
+export function createAgentflowCopyRequest({
+  agentflow,
+  definition,
+}: AgentflowDetailResponse): components["schemas"]["AgentflowCreateRequest"] {
   return {
     name: appendCopySuffix(agentflow.name),
     description: agentflow.description,
-    summaryModelProviderId: agentflow.summaryModelProviderId,
-    nodes: details.nodes.map((node) => ({
-      nodeId: node.nodeId,
-      kind: node.kind,
-      relateId: node.relateId,
-      name: node.name,
-      positionJson: node.positionJson,
-      instructions: node.instructions,
-      configJson: node.configJson,
-    })),
-    edges: details.edges.map((edge) => ({
-      edgeId: edge.edgeId,
-      sourceNodeId: edge.sourceNodeId,
-      targetNodeId: edge.targetNodeId,
-      kind: edge.kind,
-      label: edge.label,
-      conditionJson: edge.conditionJson,
-      configJson: edge.configJson,
-    })),
+    definition,
   };
 }

@@ -42,18 +42,6 @@ public sealed class AgentDefinitionRepository : IAgentDefinitionRepository
             .ToHashSetAsync();
     }
 
-    public async Task<IReadOnlyDictionary<Guid, string>> ListOwnedAgentNamesAsync(
-        IReadOnlyCollection<Guid> agentIds,
-        CancellationToken cancellationToken
-    )
-    {
-        var ownerUserId = _userInfoService.RequiredUserId;
-        var agents = await _dbContext
-            .Agents.Where(agent => agentIds.Contains(agent.Id) && agent.CreateBy == ownerUserId)
-            .ToListAsync(cancellationToken);
-        return agents.ToDictionary(agent => agent.Id, agent => agent.Name);
-    }
-
     public async Task<IReadOnlySet<Guid>> FilterOwnedAgentflowIdsAsync(
         IReadOnlyCollection<Guid> agentflowIds,
         CancellationToken cancellationToken
@@ -66,7 +54,22 @@ public sealed class AgentDefinitionRepository : IAgentDefinitionRepository
             .ToHashSetAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyDictionary<Guid, IReadOnlyCollection<Guid>>> LoadNestedAgentflowReferencesAsync(
+    public async Task<IReadOnlyDictionary<Guid, int>> ListOwnedAgentflowPublishedRevisionsAsync(
+        IReadOnlyCollection<Guid> agentflowIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var ownerUserId = _userInfoService.RequiredUserId;
+        var rows = await _dbContext
+            .Agentflows.AsNoTracking()
+            .Where(agentflow => agentflowIds.Contains(agentflow.Id) && agentflow.CreateBy == ownerUserId)
+            .Select(agentflow => new { agentflow.Id, agentflow.PublishedRevision })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return rows.ToDictionary(row => row.Id, row => row.PublishedRevision);
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyCollection<Guid>>> LoadPublishedAgentflowReferencesAsync(
         IReadOnlyCollection<Guid> agentflowIds,
         CancellationToken cancellationToken
     )
@@ -74,30 +77,89 @@ public sealed class AgentDefinitionRepository : IAgentDefinitionRepository
         var ownerUserId = _userInfoService.RequiredUserId;
         var references = new Dictionary<Guid, IReadOnlyCollection<Guid>>();
         var pending = agentflowIds.Distinct().ToArray();
-        var owned = _dbContext.Agentflows.Where(flow => flow.CreateBy == ownerUserId).Select(flow => flow.Id);
         while (pending.Length > 0)
         {
-            var batch = pending;
-            var links = await _dbContext
-                .AgentflowNodes.AsNoTracking()
-                .Where(node =>
-                    batch.Contains(node.AgentflowId)
-                    && owned.Contains(node.AgentflowId)
-                    && node.Kind == AgentflowNodeKind.WorkflowAsAgent
-                    && node.RelateId.HasValue
-                )
-                .Select(node => new { node.AgentflowId, Target = node.RelateId!.Value })
-                .ToListAsync(cancellationToken);
-            foreach (var id in batch)
+            var flows = await _dbContext
+                .Agentflows.AsNoTracking()
+                .Where(agentflow => pending.Contains(agentflow.Id) && agentflow.CreateBy == ownerUserId)
+                .Select(agentflow => new { agentflow.Id, agentflow.PublishedRevision })
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var flowIdsWithoutPublishedRevision = pending.Except(flows.Select(flow => flow.Id)).ToArray();
+            foreach (var id in flowIdsWithoutPublishedRevision)
             {
-                references[id] = links
-                    .Where(link => link.AgentflowId == id)
-                    .Select(link => link.Target)
-                    .Distinct()
-                    .ToArray();
+                references[id] = [];
             }
-            pending = links.Select(link => link.Target).Where(id => !references.ContainsKey(id)).Distinct().ToArray();
+
+            var next = new HashSet<Guid>();
+            foreach (
+                var revisionGroup in flows
+                    .Where(flow => flow.PublishedRevision > 0)
+                    .GroupBy(flow => flow.PublishedRevision)
+            )
+            {
+                var ids = revisionGroup.Select(flow => flow.Id).ToArray();
+                var nodes = await _dbContext
+                    .AgentflowNodes.AsNoTracking()
+                    .Where(node =>
+                        ids.Contains(node.AgentflowId)
+                        && node.AgentflowRevision == revisionGroup.Key
+                        && node.Kind == AgentflowNodeKind.WorkflowAsAgent
+                        && node.RelateId.HasValue
+                    )
+                    .Select(node => new { node.AgentflowId, TargetId = node.RelateId!.Value })
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                var members = await _dbContext
+                    .AgentflowBlockMembers.AsNoTracking()
+                    .Where(member =>
+                        ids.Contains(member.AgentflowId)
+                        && member.AgentflowRevision == revisionGroup.Key
+                        && member.Kind == AgentflowNodeKind.WorkflowAsAgent
+                    )
+                    .Select(member => new { member.AgentflowId, TargetId = member.RelateId })
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                foreach (var id in ids)
+                {
+                    var directReferences = nodes
+                        .Where(node => node.AgentflowId == id)
+                        .Select(node => node.TargetId)
+                        .Concat(members.Where(member => member.AgentflowId == id).Select(member => member.TargetId))
+                        .Distinct()
+                        .ToArray();
+                    references[id] = directReferences;
+                    foreach (var targetId in directReferences.Where(targetId => !references.ContainsKey(targetId)))
+                    {
+                        next.Add(targetId);
+                    }
+                }
+            }
+
+            pending = next.ToArray();
         }
+
         return references;
+    }
+
+    public async Task<IReadOnlySet<Guid>> FilterStructuredResultAgentIdsAsync(
+        IReadOnlyCollection<Guid> agentIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var ownerUserId = _userInfoService.RequiredUserId;
+        return await _dbContext
+            .Agents.AsNoTracking()
+            .Where(agent =>
+                agentIds.Contains(agent.Id)
+                && agent.CreateBy == ownerUserId
+                && agent.EnableSummary
+                && agent.ResponseSchema != null
+                && agent.ResponseSchema != ""
+            )
+            .Select(agent => agent.Id)
+            .ToHashSetAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 }

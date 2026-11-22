@@ -934,7 +934,8 @@ public class AgentRuntimeFactorySystemCompositionTests
             userInfo,
             new Agw.Infrastructure.Agents.AgentDeletionCoordinator(
                 dbContext,
-                Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                TurnPersistenceTestKit.CreateRevisionUsageReader(dbContext)
             )
         );
     }

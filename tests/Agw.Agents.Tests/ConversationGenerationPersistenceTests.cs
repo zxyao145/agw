@@ -10,6 +10,7 @@ using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
@@ -45,7 +46,8 @@ public sealed class ConversationGenerationPersistenceTests
         var checkpoints = new AgentflowCheckpointStore(
             kit.Services.GetRequiredService<IServiceScopeFactory>(),
             kit.Locks,
-            TimeProvider.System
+            TimeProvider.System,
+            NullLogger<AgentflowCheckpointStore>.Instance
         );
         await kit.SetGenerationAsync(task.ProjectConversationId, 1);
 
@@ -68,9 +70,10 @@ public sealed class ConversationGenerationPersistenceTests
                     task.ContextId,
                     task.TaskId,
                     flowId,
+                    1,
+                    new AgentflowRevisionSnapshot(1, []),
                     TurnPersistenceTestKit.UserId,
                     false,
-                    new string('a', 64),
                     new DurableAgentflowCheckpoint
                     {
                         SessionId = "old",

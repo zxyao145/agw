@@ -1,6 +1,8 @@
 import type { ToolValueObject } from "@agw/tools";
 import type { components } from "@agw/api";
 
+type Schemas = components["schemas"];
+
 export interface BaseDto {
   createBy?: string | null;
   createTime?: string | null;
@@ -27,7 +29,7 @@ export interface AgentDto extends BaseDto {
   a2aEndpoint?: A2AEndpointDto | null;
   extra?: string | null;
   responseSchema?: string | null;
-  resultFormat?: components["schemas"]["AgentResponse"]["resultFormat"];
+  resultFormat?: Schemas["ResultFormat"];
   environmentVariables: Record<string, string>;
   agentMcpToolServers?: Array<{
     agentId: string;
@@ -52,93 +54,16 @@ export interface ModelProviderDto {
   modelName: string;
 }
 
-export const AgentflowNodeKind = {
-  Agent: 0,
-  WorkflowAsAgent: 1,
-  PromptAdapter: 2,
-  HumanGate: 3,
-  CheckpointMarker: 4,
-  ConcurrentBlock: 5,
-  HandoffBlock: 6,
-  GroupChatBlock: 7,
-  MagenticBlock: 8,
-  Output: 9,
-  Input: 10,
-  ClearMessages: 11,
-} as const;
-
-export type AgentflowNodeKind = (typeof AgentflowNodeKind)[keyof typeof AgentflowNodeKind];
-
-export const AgentflowEdgeKind = {
-  Direct: 0,
-  FanOut: 1,
-  FanInBarrier: 2,
-  SwitchCase: 3,
-  SwitchDefault: 4,
-} as const;
-
-export type AgentflowEdgeKind = (typeof AgentflowEdgeKind)[keyof typeof AgentflowEdgeKind];
-
-export interface AgentflowNodeDto extends BaseDto {
-  agentflowId: string;
-  nodeId: string;
-  kind: AgentflowNodeKind;
-  relateId: string | null;
-  name: string | null;
-  positionJson: string | null;
-  instructions: string | null;
-  configJson: string | null;
-}
-
-export interface AgentflowEdgeDto extends BaseDto {
-  agentflowId: string;
-  edgeId: string;
-  sourceNodeId: string;
-  targetNodeId: string;
-  kind: AgentflowEdgeKind;
-  label: string | null;
-  conditionJson: string | null;
-  configJson: string | null;
-}
-
-export interface AgentflowNodeRequest {
-  nodeId: string;
-  kind: AgentflowNodeKind;
-  relateId: string | null;
-  name: string | null;
-  positionJson: string | null;
-  instructions: string | null;
-  configJson: string | null;
-}
-
-export interface AgentflowEdgeRequest {
-  edgeId: string;
-  sourceNodeId: string;
-  targetNodeId: string;
-  kind: AgentflowEdgeKind;
-  label: string | null;
-  conditionJson: string | null;
-  configJson: string | null;
-}
-
-export interface AgentflowSaveRequest {
-  name: string;
-  description: string | null;
-  nodes: AgentflowNodeRequest[];
-  edges: AgentflowEdgeRequest[];
-  summaryModelProviderId: string | null;
-}
-
-export interface AgentflowDto extends BaseDto {
-  id: string;
-  name: string;
-  description: string | null;
-  enable: boolean;
-  systemPrompt: string;
-  summaryModelProviderId: string | null;
-}
-
-export interface AgentflowDetailDto extends AgentflowDto {
-  nodes: AgentflowNodeDto[];
-  edges: AgentflowEdgeDto[];
-}
+export type AgentflowNodeKind = AgentflowNode["kind"];
+export type AgentflowRoutingStrategy = Schemas["AgentflowRoutingStrategy"];
+export type AgentflowConditionRule = Schemas["AgentflowConditionRuleDto"];
+export type AgentflowPosition = { x: number; y: number };
+export type AgentflowBlockMember = Schemas["AgentflowBlockMemberDto"];
+export type AgentflowNode = Schemas["AgentflowNodeDto"];
+export type AgentflowEdge = Schemas["AgentflowEdgeDto"];
+export type AgentflowDefinition = Schemas["AgentflowDefinitionDto"];
+export type AgentflowDto = Schemas["AgentflowDto"];
+export type AgentflowDetailResponse = Schemas["AgentflowDetailResponse"];
+export type AgentflowProblem = Schemas["AgentflowProblem"];
+export type AgentflowValidateRequest = Schemas["AgentflowValidateRequest"];
+export type AgentflowRevisionDto = Schemas["AgentflowRevisionDto"];

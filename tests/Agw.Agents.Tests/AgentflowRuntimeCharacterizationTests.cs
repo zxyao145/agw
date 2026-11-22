@@ -1,6 +1,8 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.Agentflows.Workflows;
@@ -35,7 +37,7 @@ public partial class AgentflowTurnExecutorTests
             fixture.Service.ExecuteStreamingAsync(fixture.Flow.Id, "input", TestContext.Current.CancellationToken)
         );
 
-        Assert.Equal(["input", "first", "second", "firstsecond"], messages.Select(MessageShape));
+        Assert.Equal(["input", "first", "second", "firstsecond"], ConversationShapes(messages));
         Assert.Equal(1, agent.DisposeCount);
     }
 
@@ -53,14 +55,18 @@ public partial class AgentflowTurnExecutorTests
 
         // 用同一拓扑直接运行 MAF Workflow，数出完成的 Superstep 作为对照。
         // Run the same topology directly on MAF and count the completed Supersteps as the reference.
-        var workflow = new AgentflowWorkflowCompiler().Compile(
-            fixture.Flow,
-            fixture.Nodes,
-            fixture.Edges.Queryable.ToList(),
-            fixture
-                .Nodes.Where(node => node.Kind == AgentflowNodeKind.Agent)
-                .ToDictionary(node => node.NodeId, AIAgent (_) => new ScriptedAgent(["answer"]))
-        )!;
+        var workflow = new AgentflowWorkflowCompiler(NullLogger<AgentflowWorkflowCompiler>.Instance)
+            .Compile(
+                fixture.Flow,
+                AgentflowTurnTestHost.FirstRevision.RootRevision,
+                fixture.Nodes,
+                fixture.Edges.Queryable.ToList(),
+                [],
+                fixture
+                    .Nodes.Where(node => node.Kind == AgentflowNodeKind.Agent)
+                    .ToDictionary(node => node.NodeId, AIAgent (_) => new ScriptedAgent(["answer"]))
+            )!
+            .Workflow;
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow,
             new List<ChatMessage> { new(ChatRole.User, "input") },
@@ -94,7 +100,7 @@ public partial class AgentflowTurnExecutorTests
             contextId: " context "
         );
 
-        Assert.Equal(["input", "first", "second", "firstsecond"], messages.Select(MessageShape));
+        Assert.Equal(["input", "first", "second", "firstsecond"], ConversationShapes(messages));
     }
 
     [Fact]
@@ -107,8 +113,11 @@ public partial class AgentflowTurnExecutorTests
             fixture.Service.ExecuteStreamingAsync(fixture.Flow.Id, "input", TestContext.Current.CancellationToken)
         );
 
-        Assert.Equal(["input", "workflow-error"], messages.Select(MessageShape));
-        Assert.Equal("scripted failure", Assert.IsType<AgwErrorContent>(Assert.Single(messages[1].Contents)).Content);
+        Assert.Equal(["input", "workflow-error"], ConversationShapes(messages));
+        Assert.Equal(
+            "scripted failure",
+            ErrorText(Assert.Single(messages, message => MessageShape(message) == "workflow-error"))
+        );
         Assert.Equal(1, agent.DisposeCount);
     }
 
@@ -134,7 +143,7 @@ public partial class AgentflowTurnExecutorTests
 
         Assert.Equal(
             unavailable ? ["input", "human-gate-unavailable"] : ["input", "human-gate-rejected"],
-            messages.Select(MessageShape)
+            ConversationShapes(messages)
         );
         Assert.Empty(agent.Inputs);
         Assert.Equal(1, agent.DisposeCount);
@@ -148,7 +157,8 @@ public partial class AgentflowTurnExecutorTests
             [AgentflowNodeKind.HumanGate, AgentflowNodeKind.Agent, AgentflowNodeKind.Output],
             _ => agent
         );
-        fixture.Nodes[0].ConfigJson = """{"humanMode":" review ","humanPrompt":" Approve now "}""";
+        fixture.Nodes[0].ConfigJson =
+            """{"humanPrompt":" Approve now ","choices":[{"choiceId":"choice-1","label":"Approve"}],"allowResponseText":true}""";
 
         var handler = new FixedApprovalHandler(true, " accepted ");
         var messages = await CollectAsync(
@@ -160,10 +170,11 @@ public partial class AgentflowTurnExecutorTests
             )
         );
 
-        Assert.Equal(["input", "done", "done"], messages.Select(MessageShape));
+        Assert.Equal(["input", "done", "done"], ConversationShapes(messages));
         var gate = Assert.IsType<WorkflowGateInteraction>(Assert.Single(handler.Requests));
-        Assert.Equal("review", gate.Mode);
         Assert.Equal("Approve now", gate.Prompt);
+        Assert.Equal("choice-1", Assert.Single(gate.Choices).ChoiceId);
+        Assert.True(gate.AllowResponseText);
         Assert.Equal("input", gate.InputPreview);
         Assert.Single(agent.Inputs);
     }
@@ -180,8 +191,9 @@ public partial class AgentflowTurnExecutorTests
             fixture.Service.ExecuteStreamingAsync(fixture.Flow.Id, "input", TestContext.Current.CancellationToken)
         );
 
-        Assert.Equal(["input", "", "tool-approval-unavailable"], messages.Select(MessageShape));
-        Assert.Equal("approval-1", messages[2].AdditionalProperties!["providerRequestId"]);
+        Assert.Equal(["input", "", "tool-approval-unavailable"], ConversationShapes(messages));
+        var unavailable = Assert.Single(messages, message => MessageShape(message) == "tool-approval-unavailable");
+        Assert.Equal("approval-1", unavailable.AdditionalProperties!["providerRequestId"]);
     }
 
     [Fact]
@@ -196,9 +208,9 @@ public partial class AgentflowTurnExecutorTests
                 .GetAsyncEnumerator(TestContext.Current.CancellationToken)
         )
         {
-            Assert.True(await enumerator.MoveNextAsync());
+            Assert.True(await MoveNextConversationMessageAsync(enumerator));
             Assert.Equal("input", MessageShape(enumerator.Current));
-            Assert.True(await enumerator.MoveNextAsync());
+            Assert.True(await MoveNextConversationMessageAsync(enumerator));
             Assert.Equal("first", MessageShape(enumerator.Current));
         }
 
@@ -225,7 +237,7 @@ public partial class AgentflowTurnExecutorTests
         Assert.Equal(DurableExecutionSegmentStatus.Completed, result.Status);
         Assert.Equal(manifest.TurnId, result.TurnId);
         Assert.Equal(0, result.SegmentIndex);
-        Assert.Equal(["input", "first", "second", "firstsecond"], sink.Messages.Select(MessageShape));
+        Assert.Equal(["input", "first", "second", "firstsecond"], ConversationShapes(sink.Messages));
         Assert.Empty(result.PendingInteractions);
     }
 
@@ -248,7 +260,7 @@ public partial class AgentflowTurnExecutorTests
             TestContext.Current.CancellationToken
         );
         Assert.Equal(DurableExecutionSegmentStatus.WaitingForHuman, waiting.Status);
-        Assert.Equal(["input"], sink.Messages.Select(MessageShape));
+        Assert.Equal(["input"], ConversationShapes(sink.Messages));
         var request = Assert.Single(waiting.PendingInteractions);
         Assert.NotNull(waiting.Checkpoint);
         var checkpoint = DurableExecutionJson.DeserializeRequired<DurableAgentflowCheckpoint>(
@@ -268,7 +280,7 @@ public partial class AgentflowTurnExecutorTests
         Assert.Equal(1, result.SegmentIndex);
         Assert.Equal(
             approved ? ["input", "done", "done"] : ["input", "human-gate-rejected"],
-            sink.Messages.Select(MessageShape)
+            ConversationShapes(sink.Messages)
         );
         Assert.All(fixture.Agents.CreatedAgents, agent => Assert.True(agent.Disposed));
     }
@@ -317,7 +329,7 @@ public partial class AgentflowTurnExecutorTests
             sink.Messages.Where(message => message.Contents.Count > 0).Select(MessageShape)
         );
         Assert.All(
-            sink.Messages.Where(message => message.Contents.Count == 0),
+            sink.Messages.Where(message => message.Contents.Count == 0 && !IsNodeStatus(message)),
             message => Assert.Equal(AiRole.Assistant, message.Role)
         );
         Assert.DoesNotContain(
@@ -344,7 +356,7 @@ public partial class AgentflowTurnExecutorTests
 
         Assert.Equal(DurableExecutionSegmentStatus.Failed, result.Status);
         Assert.Equal("Agentflow did not restore human request 'unmatched'.", result.ErrorMessage);
-        Assert.Equal(["input", "done", "done", ""], sink.Messages.Select(MessageShape));
+        Assert.Equal(["input", "done", "done", ""], ConversationShapes(sink.Messages));
         Assert.Equal(result.ErrorMessage, ErrorText(sink.Messages[^1]));
     }
 
@@ -384,9 +396,12 @@ public partial class AgentflowTurnExecutorTests
         );
 
         Assert.Equal(DurableExecutionSegmentStatus.Failed, result.Status);
-        Assert.Equal(["input", "workflow-error"], sink.Messages.Select(MessageShape));
+        Assert.Equal(["input", "workflow-error"], ConversationShapes(sink.Messages));
         Assert.Equal("scripted failure", result.ErrorMessage);
-        Assert.Equal(result.ErrorMessage, ErrorText(sink.Messages[1]));
+        Assert.Equal(
+            result.ErrorMessage,
+            ErrorText(Assert.Single(sink.Messages, message => MessageShape(message) == "workflow-error"))
+        );
         Assert.Equal(1, agent.DisposeCount);
     }
 
@@ -410,7 +425,7 @@ public partial class AgentflowTurnExecutorTests
         );
         Assert.Equal(DurableExecutionSegmentStatus.WaitingForHuman, waiting.Status);
         Assert.Equal(2, waiting.PendingInteractions.Count);
-        Assert.Equal(["input"], sink.Messages.Select(MessageShape));
+        Assert.Equal(["input"], ConversationShapes(sink.Messages));
 
         var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
@@ -471,7 +486,13 @@ public partial class AgentflowTurnExecutorTests
                 )
             );
             Assert.Equal(ErrorCodes.ResourceNotFound.Code, error.Code);
-            Assert.Null(await fixture.Service.GetMermaidAsync(fixture.Flow.Id, TestContext.Current.CancellationToken));
+            Assert.Null(
+                await fixture.Service.CreateAiWorkflow(
+                    fixture.Flow.Id,
+                    AgentflowTurnTestHost.FirstRevision,
+                    TestContext.Current.CancellationToken
+                )
+            );
         }
         Assert.Empty(fixture.Agents.CreatedAgents);
     }
@@ -617,6 +638,12 @@ public partial class AgentflowTurnExecutorTests
                         Name = $"Node {index}",
                         Kind = kind,
                         RelateId = kind == AgentflowNodeKind.Agent ? agentId : null,
+                        RoutingStrategy =
+                            kind == AgentflowNodeKind.HumanGate
+                                ? AgentflowRoutingStrategy.Choice
+                                : AgentflowRoutingStrategy.Direct,
+                        ConfigJson =
+                            kind == AgentflowNodeKind.HumanGate ? GateOptions() : AgentflowDefinitionJson.EmptyOptions,
                     }
             )
             .ToArray();
@@ -638,6 +665,7 @@ public partial class AgentflowTurnExecutorTests
                 EdgeId = $"edge-{index}",
                 SourceNodeId = nodes[index].NodeId,
                 TargetNodeId = nodes[index + 1].NodeId,
+                ChoiceId = nodes[index].Kind == AgentflowNodeKind.HumanGate ? "choice-1" : null,
             })
             .ToList();
         edges.Add(
@@ -685,6 +713,8 @@ public partial class AgentflowTurnExecutorTests
             UserId = "tester",
             AgentId = flowId,
             AgentType = AgentRuntimeType.Agentflow,
+            AgentflowRevision = AgentflowTurnTestHost.FirstRevision.RootRevision,
+            AgentflowDependencies = AgentflowTurnTestHost.FirstRevision.Dependencies,
             Input = new AgwUserInput { Author = "user", Contents = [new AgwTextContent { Content = "input" }] },
             Task = new DurableProjectTaskSnapshot
             {
@@ -709,6 +739,24 @@ public partial class AgentflowTurnExecutorTests
         await foreach (var message in stream)
             messages.Add(message);
         return messages;
+    }
+
+    private static IEnumerable<string> ConversationShapes(IEnumerable<AgwMessage> messages) =>
+        messages.Where(message => !IsNodeStatus(message)).Select(MessageShape);
+
+    private static bool IsNodeStatus(AgwMessage message) =>
+        message.AdditionalProperties?.TryGetValue("type", out var type) == true
+        && Equals(type, AgwMessageTypes.AgentflowNodeStatus);
+
+    private static async Task<bool> MoveNextConversationMessageAsync(IAsyncEnumerator<AgwMessage> enumerator)
+    {
+        while (await enumerator.MoveNextAsync())
+        {
+            if (!IsNodeStatus(enumerator.Current))
+                return true;
+        }
+
+        return false;
     }
 
     private static string MessageShape(AgwMessage message) =>

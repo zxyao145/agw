@@ -4,12 +4,19 @@ import { once } from "node:events";
 import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
-import { expect, test, type Route } from "@playwright/test";
+import { expect, test, type APIResponse, type Response, type Route } from "@playwright/test";
 
 type StandaloneHost = { root: string; origin: string };
 
 const serverAssembly = resolve("../../server/Agw.Standalone.Host/bin/Debug/net10.0/agw-server.dll");
 const scratch = resolve(".scratch/standalone-host");
+
+export async function readApiResult<T>(response: APIResponse | Response): Promise<T> {
+  const result = (await response.json()) as { code: number; data: T };
+  expect(response.ok(), JSON.stringify(result)).toBe(true);
+  expect(result.code).toBe(0);
+  return result.data;
+}
 
 export const standaloneHostTest = test.extend<{ standaloneHost: StandaloneHost }>({
   standaloneHost: async ({ page }, use) => {
@@ -23,7 +30,7 @@ export const standaloneHostTest = test.extend<{ standaloneHost: StandaloneHost }
         await waitForServer(server, origin);
         // 转发实际的 Server 响应，Web 页面使用同源 API 地址。
         // Forward real Server responses while the Web page uses same-origin API URLs.
-        await page.route("**/api/**", async (route) => {
+        await page.context().route("**/api/**", async (route) => {
           const requestUrl = new URL(route.request().url());
           if (requestUrl.pathname === "/api/notifications/stream") {
             return route.continue({ url: standaloneRequestUrl(requestUrl, origin) });

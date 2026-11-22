@@ -186,6 +186,11 @@ public sealed class DurableTurnUpgrade
         turn.TaskId = manifest.Task.TaskId;
         turn.TargetId = manifest.AgentId;
         turn.RuntimeType = manifest.AgentType;
+        turn.Extra = new ProjectConversationTurnExtra
+        {
+            AgentflowRevision = manifest.AgentflowRevision,
+            AgentflowDependencies = manifest.AgentflowDependencies?.Select(ToTurnDependency).ToArray(),
+        };
         turn.InputMessageId = input?.Id ?? Guid.Empty;
         turn.FirstSequence = firstSequence;
         turn.Status =
@@ -211,6 +216,18 @@ public sealed class DurableTurnUpgrade
         await db.SaveConversationChangesAsync(conversation.Id, manifest.Task.Generation, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
+
+    private static ProjectConversationTurnAgentflowDependency ToTurnDependency(
+        AgentflowDependencyRevision dependency
+    ) =>
+        new(
+            dependency.ParentAgentflowId,
+            dependency.ParentRevision,
+            dependency.ParentNodeId,
+            dependency.BlockMemberId,
+            dependency.TargetAgentflowId,
+            dependency.TargetRevision
+        );
 
     private static async Task UpgradeEventsAsync(
         AgwDbContext db,

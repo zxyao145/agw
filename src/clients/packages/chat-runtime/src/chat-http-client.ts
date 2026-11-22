@@ -274,12 +274,20 @@ export class ChatHttpClient {
 
   public getPermissionCapabilities(
     scope: ChatScope,
-    target: { type: "agent" | "agentflow"; id: string },
+    target: { type: "agent" | "agentflow"; id: string; agentflowRevision?: number },
     signal?: AbortSignal,
     origin: ChatEventOrigin = CLIENT_ORIGIN,
   ): Promise<ApiResponse<"/api/agents/permission-capabilities", "get">> {
     return this.createApi(scope, origin).client.apiGet("/api/agents/permission-capabilities", {
-      params: { query: { type: target.type === "agent" ? 0 : 1, id: target.id } },
+      params: {
+        query: {
+          type: target.type === "agent" ? 0 : 1,
+          id: target.id,
+          ...(target.type === "agentflow" && target.agentflowRevision !== undefined
+            ? { agentflowRevision: target.agentflowRevision }
+            : {}),
+        },
+      },
       signal,
     });
   }

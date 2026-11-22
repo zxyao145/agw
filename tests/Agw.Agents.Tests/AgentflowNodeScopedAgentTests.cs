@@ -116,7 +116,12 @@ public sealed class AgentflowNodeScopedAgentTests : IDisposable
         Assert.NotEmpty(updates);
         Assert.All(
             updates,
-            update => Assert.Equal("Participant Node", update.AdditionalProperties!["nodeName"]?.ToString())
+            update =>
+            {
+                Assert.Equal("Participant Node", update.AdditionalProperties!["nodeName"]?.ToString());
+                Assert.Equal("block-node", update.AdditionalProperties["nodeId"]?.ToString());
+                Assert.Equal("block-node/participant-node", update.AdditionalProperties["nodePath"]?.ToString());
+            }
         );
     }
 

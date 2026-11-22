@@ -35,6 +35,7 @@ using Agw.Providers.Application.Facades;
 using Agw.Settings;
 using Agw.Settings.Application.Persistence;
 using Agw.Shared.Contracts;
+using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
@@ -134,6 +135,153 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
             start.Message.AdditionalProperties?[TurnMessageFactory.TurnIdKey]?.ToString()
         );
         Assert.Equal(ProjectConversationTurnStatus.Accepted, (await _kit.ReadTurnAsync(turnId)).Status);
+    }
+
+    [Fact]
+    public async Task ExecCommand_RevisionZero_UsesPublishedRevision()
+    {
+        var task = await _kit.SeedConversationAsync();
+        var agentflowId = Guid.CreateVersion7();
+        await _kit.SeedAgentflowAsync(agentflowId);
+
+        var accepted = await AcceptAgentflowAsync(
+            task,
+            agentflowId,
+            durable: _kit.Coordinator,
+            projects: _kit.CreateProjectRuntime()
+        );
+        var turn = await _kit.ReadTurnAsync(accepted.Request.TurnId);
+        var execution = await _kit.ReadExecutionAsync(accepted.Request.TurnId);
+        var manifest = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
+            execution.ManifestJson,
+            "durable execution manifest"
+        );
+
+        Assert.Equal(1, accepted.Request.Target.AgentflowRevision);
+        Assert.Equal(1, turn.Extra.AgentflowRevision);
+        Assert.Empty(turn.Extra.AgentflowDependencies!);
+        Assert.Equal(turn.Extra.AgentflowRevision, manifest.AgentflowRevision);
+        Assert.Empty(manifest.AgentflowDependencies!);
+    }
+
+    [Fact]
+    public async Task ExecCommand_Unpublished_ThrowsNotPublished()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var task = await _kit.SeedConversationAsync();
+        var agentflowId = Guid.CreateVersion7();
+        await _kit.SeedAgentflowAsync(agentflowId);
+        await using (var context = _kit.CreateContext())
+        {
+            await context
+                .Agentflows.Where(agentflow => agentflow.Id == agentflowId)
+                .ExecuteUpdateAsync(update => update.SetProperty(agentflow => agentflow.PublishedRevision, 0), token);
+        }
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() => AcceptAgentflowAsync(task, agentflowId));
+
+        Assert.Equal(ErrorCodes.AgentflowNotPublished.Code, exception.Code);
+        Assert.Equal(0, await _kit.CountTurnsAsync(task.ProjectConversationId));
+    }
+
+    [Fact]
+    public async Task ExecCommand_ExplicitRevision_UsesIt()
+    {
+        var task = await _kit.SeedConversationAsync();
+        var agentflowId = Guid.CreateVersion7();
+        await _kit.SeedAgentflowAsync(agentflowId);
+        await AddAgentflowRevisionAsync(agentflowId, 2, publish: false);
+
+        var accepted = await AcceptAgentflowAsync(
+            task,
+            agentflowId,
+            requestedRevision: 2,
+            durable: _kit.Coordinator,
+            projects: _kit.CreateProjectRuntime()
+        );
+        var turn = await _kit.ReadTurnAsync(accepted.Request.TurnId);
+        var execution = await _kit.ReadExecutionAsync(accepted.Request.TurnId);
+        var manifest = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
+            execution.ManifestJson,
+            "durable execution manifest"
+        );
+
+        Assert.Equal(2, accepted.Request.Target.AgentflowRevision);
+        Assert.Equal(2, turn.Extra.AgentflowRevision);
+        Assert.Equal(turn.Extra.AgentflowRevision, manifest.AgentflowRevision);
+        Assert.Empty(turn.Extra.AgentflowDependencies!);
+        Assert.Empty(manifest.AgentflowDependencies!);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_AgentflowRevisionOnAgentTarget_ThrowsInvalidParam()
+    {
+        var task = await _kit.SeedConversationAsync();
+        var agentId = Guid.CreateVersion7();
+        await _kit.SeedAgentAsync(agentId);
+        var acceptance = CreateAcceptance(projects: _kit.CreateProjectRuntime());
+        var request = new TurnAcceptanceRequest(
+            UserId,
+            Guid.CreateVersion7(),
+            new ExecutionTarget(agentId, AgentRuntimeType.Agent),
+            task.ProjectConversationId,
+            TurnPersistenceTestKit.CreateInput("hello"),
+            TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ProjectConversationId),
+            Stream: true
+        )
+        {
+            Task = task,
+            RequestedAgentflowRevision = 1,
+        };
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            acceptance.AcceptAsync(request, TestContext.Current.CancellationToken)
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Equal(0, await _kit.CountTurnsAsync(task.ProjectConversationId));
+    }
+
+    [Fact]
+    public async Task AcceptAsync_ResentTurnId_ReturnsTargetWithStoredRevision()
+    {
+        var task = await _kit.SeedConversationAsync();
+        var agentflowId = Guid.CreateVersion7();
+        await _kit.SeedAgentflowAsync(agentflowId);
+        var first = await AcceptAgentflowAsync(task, agentflowId);
+        await AddAgentflowRevisionAsync(agentflowId, 2, publish: true);
+
+        var repeated = await AcceptAgentflowAsync(task, agentflowId, turnId: first.Request.TurnId);
+
+        Assert.False(repeated.Created);
+        Assert.Equal(1, repeated.Request.Target.AgentflowRevision);
+        Assert.Equal(1, (await _kit.ReadTurnAsync(first.Request.TurnId)).Extra.AgentflowRevision);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_ReplayedAgentflowTurnWithoutDependencySnapshot_FailsClosed()
+    {
+        var task = await _kit.SeedConversationAsync();
+        var agentflowId = Guid.CreateVersion7();
+        await _kit.SeedAgentflowAsync(agentflowId);
+        var projectRuntime = _kit.CreateProjectRuntime();
+        var first = await AcceptAgentflowAsync(task, agentflowId, projects: projectRuntime);
+
+        await using (var dbContext = _kit.CreateContext())
+        {
+            var turn = await dbContext.ProjectConversationTurns.SingleAsync(
+                item => item.Id == first.Request.TurnId,
+                TestContext.Current.CancellationToken
+            );
+            turn.Extra = new ProjectConversationTurnExtra { AgentflowRevision = 1 };
+            await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            AcceptAgentflowAsync(task, agentflowId, first.Request.TurnId, projects: projectRuntime)
+        );
+
+        Assert.Equal(ErrorCodes.DurableExecutionConflict.Code, exception.Code);
     }
 
     [Fact]
@@ -512,7 +660,11 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
                 modelProviderReferences,
                 skillReferences,
                 currentUser,
-                new AgentDeletionCoordinator(context, kit.Locks),
+                new AgentDeletionCoordinator(
+                    context,
+                    kit.Locks,
+                    TurnPersistenceTestKit.CreateRevisionUsageReader(context)
+                ),
                 kit.Locks,
                 TestAgentAppService.CardClient,
                 kit.Clock
@@ -529,6 +681,7 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
             );
             var selection = await selectionResolver.ResolveAsync(
                 new ExecutionTarget(agentId, AgentRuntimeType.Agent),
+                null,
                 project,
                 token
             );
@@ -742,14 +895,18 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
     /// 受理服务使用实际的 Projects 任务解析与 Agent 权限检查。
     /// An acceptance service over the real Projects task resolution and Agent permission check.
     /// </summary>
-    private TurnAcceptanceService CreateResolvingAcceptance() =>
-        _kit.CreateAcceptance(
+    private TurnAcceptanceService CreateResolvingAcceptance()
+    {
+        var dbContext = _kit.ResolveScoped<Agw.Agents.Application.Persistence.IAgentsDbContext>();
+        return _kit.CreateAcceptance(
             _kit.CreateProjectTasks(),
             new AgentExecutionFacadeTests.WorkspaceProjects(),
             permissions: new Agw.Agents.Definitions.Agents.ExecutionPermissionService(
-                _kit.ResolveScoped<Agw.Agents.Application.Persistence.IAgentsDbContext>()
+                dbContext,
+                new AgentflowRevisionSnapshotReader(dbContext)
             )
         );
+    }
 
     private static Task<AcceptedTurn> AcceptForAsync(
         TurnAcceptanceService acceptance,
@@ -778,8 +935,15 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
         return agentId;
     }
 
-    private TurnAcceptanceService CreateAcceptance(DurableExecutionCoordinator? durable = null) =>
-        _kit.CreateAcceptance(projectTasks: null, new AgentExecutionFacadeTests.WorkspaceProjects(), durable);
+    private TurnAcceptanceService CreateAcceptance(
+        DurableExecutionCoordinator? durable = null,
+        IProjectRuntimeFacade? projects = null
+    ) =>
+        _kit.CreateAcceptance(
+            projectTasks: null,
+            projects ?? new AgentExecutionFacadeTests.WorkspaceProjects(),
+            durable
+        );
 
     private async Task<AcceptedTurn> AcceptAsync(
         AgentExecutionTask task,
@@ -807,5 +971,54 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
             },
             TestContext.Current.CancellationToken
         );
+    }
+
+    private Task<AcceptedTurn> AcceptAgentflowAsync(
+        AgentExecutionTask task,
+        Guid agentflowId,
+        Guid? turnId = null,
+        int requestedRevision = 0,
+        DurableExecutionCoordinator? durable = null,
+        IProjectRuntimeFacade? projects = null
+    ) =>
+        CreateAcceptance(durable, projects)
+            .AcceptAsync(
+                new TurnAcceptanceRequest(
+                    UserId,
+                    turnId,
+                    new ExecutionTarget(agentflowId, AgentRuntimeType.Agentflow),
+                    task.ProjectConversationId,
+                    TurnPersistenceTestKit.CreateInput("hello"),
+                    TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ProjectConversationId),
+                    Stream: true
+                )
+                {
+                    Task = task,
+                    RequestedAgentflowRevision = requestedRevision,
+                },
+                TestContext.Current.CancellationToken
+            );
+
+    private async Task AddAgentflowRevisionAsync(Guid agentflowId, int revision, bool publish)
+    {
+        await using var context = _kit.CreateContext();
+        var agentflow = await context.Agentflows.SingleAsync(
+            item => item.Id == agentflowId,
+            TestContext.Current.CancellationToken
+        );
+        context.AgentflowRevisions.Add(
+            new AgentflowRevision
+            {
+                AgentflowId = agentflowId,
+                Revision = revision,
+                CreateBy = UserId,
+                CreateTime = TimeProvider.System.GetUtcNow(),
+                UpdateBy = UserId,
+            }
+        );
+        agentflow.LatestRevision = revision;
+        if (publish)
+            agentflow.PublishedRevision = revision;
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 }

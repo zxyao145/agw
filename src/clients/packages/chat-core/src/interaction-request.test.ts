@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { AiMessage } from "@agw/api";
 import type { InteractionRequest } from "@agw/execution-core";
-import { getPendingInteraction, parseSimpleUserInput } from "./human-interaction";
+import {
+  getAgentflowCheckpointMessage,
+  getPendingInteraction,
+  parseSimpleUserInput,
+} from "./human-interaction";
 import { buildConversationRenderModel, isHiddenControlMessage } from "./conversation-render-model";
 import { prepareClaudeHistory } from "./message-presentation";
 
@@ -32,8 +36,14 @@ const requests: InteractionRequest[] = [
     kind: "workflow-gate",
     interactionId: "gate-1",
     prompt: "Continue?",
-    source: { nodeId: "review", nodeName: "Review", providerScopeId: "workflow-port-1" },
-    mode: "input",
+    source: {
+      nodeId: "parent",
+      nodePath: "parent/review",
+      nodeName: "Review",
+      providerScopeId: "workflow-port-1",
+    },
+    choices: [{ choiceId: "continue", label: "Continue" }],
+    allowResponseText: true,
     inputPreview: "Draft",
   },
   {
@@ -97,6 +107,28 @@ test("tool requests need no node ID and preserve JSON null arguments", () => {
   assert.equal(pending?.kind, "tool-approval");
   assert.deepEqual(pending?.source, {});
   assert.equal(pending?.kind === "tool-approval" && pending.arguments, null);
+});
+
+test("a workflow-gate request without choices is ignored", () => {
+  assert.equal(getPendingInteraction(message({ ...requests[1], choices: undefined })), null);
+  assert.equal(getPendingInteraction(message({ ...requests[1], choices: [null] })), null);
+});
+
+test("checkpoint messages read nodeId", () => {
+  assert.deepEqual(
+    getAgentflowCheckpointMessage({
+      messageId: "checkpoint",
+      role: "system",
+      contents: [],
+      additionalProperties: {
+        type: "agentflow-checkpoint",
+        checkpointOccurrenceId: "occurrence",
+        nodeId: "review",
+        checkpointName: "Review",
+      },
+    }),
+    { occurrenceId: "occurrence", nodeId: "review", name: "Review" },
+  );
 });
 
 for (const inputKind of ["confirm", "select", "input", "editor"]) {

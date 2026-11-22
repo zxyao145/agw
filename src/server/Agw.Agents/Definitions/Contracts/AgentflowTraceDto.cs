@@ -33,4 +33,6 @@ public sealed class AgentflowTraceDto
     public AgentflowNodeExecutionStatus Status { get; init; }
 
     public string? Error { get; init; }
+
+    public AgentflowTraceExtra Extra { get; init; } = new();
 }

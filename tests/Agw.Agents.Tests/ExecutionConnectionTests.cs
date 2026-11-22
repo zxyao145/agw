@@ -2,11 +2,14 @@ using System.Collections.Concurrent;
 using System.Data.Common;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
+using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Turns;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Runtime;
@@ -18,6 +21,7 @@ using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Inbound.SignalR;
 using Agw.Agents.Execution.Outbound;
+using Agw.Agents.Execution.Outbound.SignalR;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
@@ -36,10 +40,13 @@ using Agw.Settings.Application.Persistence;
 using Agw.Shared.Contracts;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
+using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Runtime;
 using Microsoft.Agents.AI;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -85,6 +92,7 @@ public class ExecutionConnectionTests
         services.AddScoped<ProjectResolver>();
         services.AddScoped<IProjectDefaultResolver, ProjectDefaultResolver>();
         services.AddScoped<ExecutionPermissionService>();
+        services.AddScoped<IAgentflowRevisionSnapshotReader, AgentflowRevisionSnapshotReader>();
         services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
         var dataRoot = Path.Combine(
             AppContext.BaseDirectory,
@@ -224,6 +232,171 @@ public class ExecutionConnectionTests
         await connection.DisposeAsync();
         Assert.True(Assert.Single(runtimeFactory.Created).IsDisposed);
         Assert.True(runtimeFactory.Disposed);
+    }
+
+    [Fact]
+    public async Task ListPinnedRevisionsAsync_InProcessCheckpoint_RequiresLiveCurrentRuntimeOccurrence()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var fixture = await CreateFixtureAsync();
+        using var userScope = UserInfoUtil.Push(
+            new ClaimsPrincipal(
+                new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "user-id")], authenticationType: "Test")
+            )
+        );
+        await using var dbContext = fixture.Persistence.CreateContext();
+        var flowId = Guid.CreateVersion7();
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var taskId = Guid.CreateVersion7();
+        var turnId = Guid.CreateVersion7();
+        var occurrenceId = Guid.CreateVersion7();
+        dbContext.Projects.Add(
+            new Project
+            {
+                Id = projectId,
+                Name = "Checkpoint pins",
+                CreateBy = "user-id",
+            }
+        );
+        dbContext.ProjectConversations.Add(
+            new ProjectConversation
+            {
+                Id = conversationId,
+                ProjectId = projectId,
+                ContextId = "checkpoint-context",
+                Title = "Checkpoint pins",
+                CreateBy = "user-id",
+            }
+        );
+        dbContext.Agentflows.Add(
+            new Agentflow
+            {
+                Id = flowId,
+                Name = "Checkpoint pins",
+                LatestRevision = 1,
+                PublishedRevision = 1,
+                CreateBy = "user-id",
+            }
+        );
+        dbContext.AgentflowRevisions.Add(
+            new AgentflowRevision
+            {
+                AgentflowId = flowId,
+                Revision = 1,
+                CreateBy = "user-id",
+            }
+        );
+        dbContext.ProjectConversationTurns.Add(
+            new ProjectConversationTurn
+            {
+                Id = turnId,
+                ProjectConversationId = conversationId,
+                TaskId = taskId,
+                TargetId = flowId,
+                RuntimeType = AgentRuntimeType.Agentflow,
+                Status = ProjectConversationTurnStatus.Running,
+                InputMessageId = Guid.CreateVersion7(),
+                FirstSequence = 1,
+                StartedAt = TimeProvider.System.GetUtcNow(),
+                Extra = new ProjectConversationTurnExtra { AgentflowRevision = 1, AgentflowDependencies = [] },
+            }
+        );
+        var record = new AgentflowCheckpointRecord
+        {
+            Id = occurrenceId,
+            SourceTurnId = turnId,
+            ProjectId = projectId,
+            ProjectConversationId = conversationId,
+            ContextId = "checkpoint-context",
+            TaskId = taskId,
+            AgentflowId = flowId,
+            AgentflowRevision = 1,
+            RuntimeVersion = AgentflowCheckpointRuntime.Version,
+            UserId = "user-id",
+            IsDurable = false,
+            BoundarySequence = 1,
+            MarkersJson = "[]",
+            CheckpointJson = "{}",
+            CreateBy = "user-id",
+        };
+        dbContext.AgentflowCheckpoints.Add(record);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var task = new AgentExecutionTask
+        {
+            TaskId = taskId,
+            ProjectConversationId = conversationId,
+            ProjectId = projectId,
+            ContextId = "checkpoint-context",
+        };
+        var runtime = AgentflowRuntimeFactory.CreateRuntime(
+            flowId,
+            task,
+            new ExecutionSettings(projectId, conversationId),
+            deferHumanInteractions: false
+        );
+        using var payload = JsonDocument.Parse("{}");
+        var checkpoint = new AgentflowCheckpointSnapshot(
+            occurrenceId,
+            turnId,
+            flowId,
+            1,
+            1,
+            AgentflowCheckpointRuntime.Version,
+            [],
+            new AgentflowRevisionSnapshot(1, []),
+            new DurableAgentflowCheckpoint
+            {
+                SessionId = "session",
+                CheckpointId = "checkpoint",
+                Payload = payload.RootElement.Clone(),
+            }
+        );
+        var runtimeHost = new InProcessTurnHost(
+            new ExecutionTarget(flowId, AgentRuntimeType.Agentflow),
+            runtime,
+            "workspace",
+            DirectoryIdentitySnapshot.Capture([AppContext.BaseDirectory]),
+            0
+        );
+        var coordinator = (InProcessExecutionCoordinator)
+            typeof(ExecutionConnectionContext)
+                .GetField("_inProcess", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(fixture.Context)!;
+        typeof(InProcessExecutionCoordinator)
+            .GetProperty(nameof(InProcessExecutionCoordinator.Host), BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(coordinator, runtimeHost);
+
+        using var signalRHost = await new HostBuilder()
+            .ConfigureServices(services => services.AddSignalR())
+            .StartAsync(cancellationToken);
+        await using var registry = new ExecutionConnectionRegistry(
+            signalRHost.Services.GetRequiredService<IServiceScopeFactory>(),
+            signalRHost.Services.GetRequiredService<IHubContext<ExecutionHub, IExecutionHubClient>>(),
+            signalRHost.Services.GetRequiredService<IHostApplicationLifetime>(),
+            NullLoggerFactory.Instance
+        );
+        Assert.True(GetConnections(registry).TryAdd("connection", fixture.Connection));
+        var reader = new AgentflowRevisionUsageReader(
+            dbContext,
+            new ConversationTurnStore(dbContext, TimeProvider.System),
+            new AgentflowRevisionSnapshotReader(dbContext),
+            registry
+        );
+
+        Assert.Empty(await reader.ListPinnedRevisionsAsync(cancellationToken));
+        runtime.CheckpointState.Register(checkpoint);
+        Assert.Contains((flowId, 1), await reader.ListPinnedRevisionsAsync(cancellationToken));
+
+        record.RuntimeVersion--;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        Assert.Empty(await reader.ListPinnedRevisionsAsync(cancellationToken));
+
+        record.RuntimeVersion = AgentflowCheckpointRuntime.Version;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await fixture.Connection.DisposeAsync();
+        Assert.Empty(await reader.ListPinnedRevisionsAsync(cancellationToken));
     }
 
     private sealed class BlockingQueryInterceptor : DbCommandInterceptor

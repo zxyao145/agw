@@ -126,10 +126,16 @@ public sealed class DurableSchedulerTests
                         TargetId = target.AgentId,
                         TargetType = ConversationTurnTargetType.Agent,
                     },
-                    Durable = kit.Coordinator.CreateRegistration(
-                        request,
-                        TurnMessageFactory.CreateStarted(request.Envelope)
-                    ),
+                    Register = (_, _) =>
+                        Task.FromResult(
+                            new TurnAcceptanceRegistration(
+                                [],
+                                kit.Coordinator.CreateRegistration(
+                                    request,
+                                    TurnMessageFactory.CreateStarted(request.Envelope)
+                                )
+                            )
+                        ),
                 },
                 token
             );

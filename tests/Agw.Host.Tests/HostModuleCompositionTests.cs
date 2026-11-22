@@ -167,7 +167,10 @@ public sealed class HostModuleCompositionTests
                 .AddTools(configuration)
                 .AddNotifications(configuration, runWorkers: false)
                 .AddAgents(configuration)
-                .AddAgentExecution(configuration)
+                .AddAgentExecution(
+                    configuration,
+                    new Agw.Agents.Execution.DependencyInjection.RegistrationOptions(AddExecutionTransport: false)
+                )
                 .AddExtensions(configuration, "Standalone")
                 .AddExtensionCapabilities()
                 .AddFiles(configuration)

@@ -463,7 +463,12 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         await TurnPipeline.RunAsync(
             request.Envelope,
             scope,
-            _agentTurns.RunAsync(scope, runtime, new TurnInput(request.Input), linkedToken),
+            _agentTurns.RunAsync(
+                scope,
+                runtime,
+                new TurnInput(request.Input) { AgentflowSnapshot = request.AgentflowSnapshot },
+                linkedToken
+            ),
             request.Stream,
             sink,
             linkedToken
@@ -472,9 +477,10 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
 
     private static TurnInput CreateAgentflowInput(ExecutionRequest request) =>
         request.ResumeCheckpoint is not { } checkpoint
-            ? new TurnInput(request.Input)
+            ? new TurnInput(request.Input) { AgentflowSnapshot = request.AgentflowSnapshot }
             : new TurnInput(request.Input)
             {
+                AgentflowSnapshot = request.AgentflowSnapshot,
                 Resume = new TurnResume
                 {
                     Checkpoint = checkpoint.Checkpoint,

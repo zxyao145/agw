@@ -61,6 +61,7 @@ function createConnection(provider = "distributed") {
 
 function createSession(connection: ReturnType<typeof createConnection>) {
   const messages: AiMessage[] = [];
+  const statuses: unknown[] = [];
   const closeErrors: Error[] = [];
   const reconnectStates: unknown[] = [];
   jest
@@ -80,10 +81,11 @@ function createSession(connection: ReturnType<typeof createConnection>) {
     }),
     scope: { serverId: "profile-1", projectId: "project-1", conversationId: "conversation-1" },
     onMessage: (message) => messages.push(message),
+    onStatus: (status) => statuses.push(status),
     onClose: (error) => closeErrors.push(error),
     onReconnecting: (state) => reconnectStates.push(state),
   });
-  return { session, messages, closeErrors, reconnectStates };
+  return { session, messages, statuses, closeErrors, reconnectStates };
 }
 
 function createInput(messageId: string) {
@@ -128,7 +130,7 @@ test("builds the Mobile execution setting through the shared protocol", () => {
 
 test("sets mode only when requested and reuses the connection across turns", async () => {
   const fake = createConnection();
-  const { session, messages } = createSession(fake);
+  const { session, messages, statuses } = createSession(fake);
   await session.configure({
     projectId: "project-1",
     conversationId: "conversation-1",
@@ -147,6 +149,7 @@ test("sets mode only when requested and reuses the connection across turns", asy
   fake.emit(
     createMessage("mode-1", {
       type: "mode-status",
+      agentId: "agent-1",
       mode: "plan",
     }),
   );
@@ -181,11 +184,8 @@ test("sets mode only when requested and reuses the connection across turns", asy
     { type: "SetModeCommand", agentId: "agent-1", mode: "plan" },
   ]);
   expect(fake.commands.filter((command) => command.type === "ExecCommand")).toHaveLength(2);
-  expect(messages.map((message) => message.messageId)).toEqual([
-    "mode-1",
-    "finished-1",
-    "finished-2",
-  ]);
+  expect(messages.map((message) => message.messageId)).toEqual(["finished-1", "finished-2"]);
+  expect(statuses).toEqual([{ type: "mode-status", agentId: "agent-1", mode: "plan" }]);
   expect(fake.connection.stop).not.toHaveBeenCalled();
 
   await session.dispose();

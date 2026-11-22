@@ -18,6 +18,7 @@ const command: ExecutionCommandRequest = {
   conversationId: "conversation-1",
   agentId: "agent-1",
   agentType: 0,
+  agentflowRevision: 3,
   input: message,
 };
 const response: InteractionResponse = {

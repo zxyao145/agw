@@ -14,6 +14,7 @@ internal interface IExtensionExecutionSelectionResolver
 {
     Task<ExtensionCapabilitySelection> ResolveAsync(
         ExecutionTarget target,
+        AgentflowRevisionSnapshot? snapshot,
         ProjectRuntimeSnapshot project,
         CancellationToken cancellationToken
     );
@@ -38,6 +39,7 @@ internal sealed class ExtensionExecutionSelectionResolver : IExtensionExecutionS
 
     public async Task<ExtensionCapabilitySelection> ResolveAsync(
         ExecutionTarget target,
+        AgentflowRevisionSnapshot? snapshot,
         ProjectRuntimeSnapshot project,
         CancellationToken cancellationToken
     )
@@ -58,10 +60,13 @@ internal sealed class ExtensionExecutionSelectionResolver : IExtensionExecutionS
         }
         else
         {
+            var acceptedSnapshot = snapshot ?? throw new AgwException(ErrorCodes.DurableExecutionConflict);
             await VisitAgentflowAsync(
                     target.AgentId,
-                    new HashSet<Guid>(),
-                    new HashSet<Guid>(),
+                    acceptedSnapshot.RootRevision,
+                    acceptedSnapshot,
+                    new HashSet<(Guid AgentflowId, int Revision)>(),
+                    new HashSet<(Guid AgentflowId, int Revision)>(),
                     toolSelections,
                     () => usesProjectCapabilities = true,
                     cancellationToken
@@ -82,18 +87,21 @@ internal sealed class ExtensionExecutionSelectionResolver : IExtensionExecutionS
 
     private async Task VisitAgentflowAsync(
         Guid agentflowId,
-        HashSet<Guid> visited,
-        HashSet<Guid> path,
+        int agentflowRevision,
+        AgentflowRevisionSnapshot snapshot,
+        HashSet<(Guid AgentflowId, int Revision)> visited,
+        HashSet<(Guid AgentflowId, int Revision)> path,
         HashSet<ExtensionToolSelection> toolSelections,
         Action markProjectCapabilitiesUsed,
         CancellationToken cancellationToken
     )
     {
-        if (path.Contains(agentflowId))
+        var key = (agentflowId, agentflowRevision);
+        if (path.Contains(key))
         {
             throw new AgwException(ErrorCodes.InvalidParam, $"Nested Agentflow cycle at '{agentflowId}'.");
         }
-        if (!visited.Add(agentflowId))
+        if (!visited.Add(key))
         {
             return;
         }
@@ -106,8 +114,13 @@ internal sealed class ExtensionExecutionSelectionResolver : IExtensionExecutionS
             throw new AgwException(ErrorCodes.ResourceNotFound, "The Agentflow was not found.");
         }
 
-        path.Add(agentflowId);
-        var nodes = await _agentflows.ListNodesAsync(agentflowId, cancellationToken).ConfigureAwait(false);
+        path.Add(key);
+        var nodes = await _agentflows
+            .ListNodesAsync(agentflowId, agentflowRevision, cancellationToken)
+            .ConfigureAwait(false);
+        var members = await _agentflows
+            .ListBlockMembersAsync(agentflowId, agentflowRevision, cancellationToken)
+            .ConfigureAwait(false);
         foreach (var node in nodes)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -126,6 +139,8 @@ internal sealed class ExtensionExecutionSelectionResolver : IExtensionExecutionS
             {
                 await VisitAgentflowAsync(
                         nestedAgentflowId,
+                        snapshot.GetTargetRevision(agentflowId, agentflowRevision, node.NodeId, blockMemberId: null),
+                        snapshot,
                         visited,
                         path,
                         toolSelections,
@@ -136,7 +151,37 @@ internal sealed class ExtensionExecutionSelectionResolver : IExtensionExecutionS
             }
         }
 
-        path.Remove(agentflowId);
+        foreach (var member in members)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (member.Kind == AgentflowNodeKind.Agent)
+            {
+                var agent =
+                    await _agents.GetAgentAsync(member.RelateId).ConfigureAwait(false)
+                    ?? throw new AgwException(ErrorCodes.ResourceNotFound, "An Agent in the Agentflow was not found.");
+                if (agent.Type != AgentType.External)
+                {
+                    markProjectCapabilitiesUsed();
+                    await CollectAgentAsync(agent, toolSelections, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            else if (member.Kind == AgentflowNodeKind.WorkflowAsAgent)
+            {
+                await VisitAgentflowAsync(
+                        member.RelateId,
+                        snapshot.GetTargetRevision(agentflowId, agentflowRevision, member.NodeId, member.MemberId),
+                        snapshot,
+                        visited,
+                        path,
+                        toolSelections,
+                        markProjectCapabilitiesUsed,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+            }
+        }
+
+        path.Remove(key);
     }
 
     private async Task CollectAgentAsync(

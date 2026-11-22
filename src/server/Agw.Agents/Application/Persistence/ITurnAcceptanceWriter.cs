@@ -20,10 +20,30 @@ public sealed record TurnAcceptanceWrite
 {
     public required AcceptConversationTurnRequest Turn { get; init; }
 
-    public IReadOnlyList<Guid> ExtensionIds { get; init; } = [];
+    /// <summary>
+    /// 请求的根 revision；0 表示已发布的 revision，目标是 Agent 时为 0。
+    /// The requested root revision; 0 means the published revision, and it is 0 for an Agent target.
+    /// </summary>
+    public int RequestedAgentflowRevision { get; init; }
 
-    public DurableTurnRegistration? Durable { get; init; }
+    /// <summary>
+    /// 恢复 checkpoint 时沿用的快照；有值时不读取 published pointer。
+    /// The snapshot kept when resuming a checkpoint; published pointers are not read when it is set.
+    /// </summary>
+    public AgentflowRevisionSnapshot? PinnedSnapshot { get; init; }
+
+    /// <summary>
+    /// 快照确定之后、写入 Turn 之前，在受理事务内调用，返回 extension 与 Durable 登记。
+    /// Called inside the acceptance transaction after the snapshot is fixed and before the turn is written; returns the extensions and Durable registration.
+    /// </summary>
+    public required Func<
+        AgentflowRevisionSnapshot?,
+        CancellationToken,
+        Task<TurnAcceptanceRegistration>
+    > Register { get; init; }
 }
+
+public sealed record TurnAcceptanceRegistration(IReadOnlyList<Guid> ExtensionIds, DurableTurnRegistration? Durable);
 
 /// <summary>
 /// Durable 登记：WorkerId 不为空时受理实例立即在本地执行，记录写为 Running 并带租约；为空时写为 Queued，由 Worker 领取。

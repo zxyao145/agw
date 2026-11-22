@@ -2,7 +2,9 @@ import { MessageContentType, type AiMessage } from "@agw/api";
 import {
   getMessageStreamingScopeId,
   type InteractionRequest,
+  type InteractionResponse,
   type InteractionSource,
+  type WorkflowGateChoice,
 } from "@agw/execution-core";
 
 export type HumanInteractionQuestionOption = {
@@ -132,6 +134,7 @@ export function getPendingInteraction(message: AiMessage): PendingInteraction | 
   const source: InteractionSource = {};
   for (const key of [
     "nodeId",
+    "nodePath",
     "nodeName",
     "toolName",
     "callId",
@@ -157,16 +160,24 @@ export function getPendingInteraction(message: AiMessage): PendingInteraction | 
         kind: "tool-approval",
         ...(interaction.arguments === undefined ? {} : { arguments: interaction.arguments }),
       };
-    case "workflow-gate":
-      if (typeof interaction.mode !== "string") return null;
+    case "workflow-gate": {
+      const { choices, allowResponseText } = interaction;
+      if (
+        typeof allowResponseText !== "boolean" ||
+        !Array.isArray(choices) ||
+        !choices.every(isWorkflowGateChoice)
+      )
+        return null;
       return {
         ...common,
         kind: "workflow-gate",
-        mode: interaction.mode,
+        choices,
+        allowResponseText,
         ...(typeof interaction.inputPreview === "string"
           ? { inputPreview: interaction.inputPreview }
           : {}),
       };
+    }
     case "user-input": {
       const inputKind = readRequiredString(interaction.inputKind);
       if (!inputKind || !("payload" in interaction)) return null;
@@ -188,13 +199,30 @@ export function getPendingInteraction(message: AiMessage): PendingInteraction | 
   }
 }
 
+export function buildWorkflowGateResponse(
+  request: Extract<InteractionRequest, { kind: "workflow-gate" }>,
+  choiceId?: string,
+  text?: string,
+): Extract<InteractionResponse, { kind: "workflow-gate" }> {
+  const { kind, interactionId, allowResponseText } = request;
+  if (choiceId === undefined) return { kind, interactionId, approved: false };
+  const responseText = allowResponseText ? text?.trim() : undefined;
+  return {
+    kind,
+    interactionId,
+    approved: true,
+    choiceId,
+    ...(responseText ? { responseText } : {}),
+  };
+}
+
 export function getAgentflowCheckpointMessage(
   message: AiMessage,
 ): AgentflowCheckpointMessage | null {
   const properties = message.additionalProperties;
   if (properties?.type !== "agentflow-checkpoint") return null;
   const occurrenceId = readOptionalString(properties.checkpointOccurrenceId);
-  const nodeId = readOptionalString(properties.checkpointNodeId);
+  const nodeId = readOptionalString(properties.nodeId);
   if (!occurrenceId || !nodeId) return null;
   return {
     occurrenceId,
@@ -212,8 +240,8 @@ export function matchesHumanInteractionCall(
 ): boolean {
   if (!target.source.callId) return false;
   if (target.streamingScopeId && message.streamingScopeId !== target.streamingScopeId) return false;
-  const nodeId = message.additionalProperties?.interactionNodeId;
-  if (target.source.nodeId && typeof nodeId === "string" && nodeId !== target.source.nodeId)
+  const nodePath = message.additionalProperties?.nodePath;
+  if (target.source.nodePath && typeof nodePath === "string" && nodePath !== target.source.nodePath)
     return false;
   return message.contents.some(
     (content) =>
@@ -321,6 +349,10 @@ function parseRecord(value: unknown): Record<string, unknown> | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isWorkflowGateChoice(value: unknown): value is WorkflowGateChoice {
+  return isRecord(value) && typeof value.choiceId === "string" && typeof value.label === "string";
 }
 
 function readRequiredString(value: unknown): string | null {

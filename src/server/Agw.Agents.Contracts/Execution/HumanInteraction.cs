@@ -6,6 +6,7 @@ namespace Agw.Agents.Contracts.Execution;
 public sealed record InteractionSource
 {
     public string? NodeId { get; init; }
+    public string? NodePath { get; init; }
     public string? NodeName { get; init; }
     public string? ToolName { get; init; }
     public string? CallId { get; init; }
@@ -38,9 +39,12 @@ public sealed record ToolApprovalInteraction : InteractionRequest
 
 public sealed record WorkflowGateInteraction : InteractionRequest
 {
-    public string Mode { get; init; } = "approval";
+    public IReadOnlyList<WorkflowGateChoice> Choices { get; init; } = [];
+    public bool AllowResponseText { get; init; }
     public string? InputPreview { get; init; }
 }
+
+public sealed record WorkflowGateChoice(string ChoiceId, string Label);
 
 public sealed record UserInputInteraction : InteractionRequest
 {
@@ -75,6 +79,7 @@ public sealed record ToolApprovalDecision : InteractionResponse
 public sealed record WorkflowGateDecision : InteractionResponse
 {
     public required bool Approved { get; init; }
+    public string? ChoiceId { get; init; }
     public string? ResponseText { get; init; }
 }
 

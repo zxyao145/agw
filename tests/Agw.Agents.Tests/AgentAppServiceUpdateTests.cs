@@ -543,7 +543,8 @@ public class AgentAppServiceUpdateTests : IDisposable
             userInfo,
             new Agw.Infrastructure.Agents.AgentDeletionCoordinator(
                 _database.Context,
-                Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                TurnPersistenceTestKit.CreateRevisionUsageReader(_database.Context)
             )
         );
     }

@@ -4,6 +4,7 @@ using Agw.Agents.Execution.Commands.Setting;
 using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
@@ -147,6 +148,7 @@ public partial class ExecutionCommandHandlerTests
         new(
             new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             InMemoryApplicationLock.Shared,
-            TimeProvider.System
+            TimeProvider.System,
+            NullLogger<AgentflowCheckpointStore>.Instance
         );
 }

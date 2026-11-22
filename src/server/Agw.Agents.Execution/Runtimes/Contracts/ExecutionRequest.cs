@@ -26,6 +26,8 @@ internal sealed record ExecutionRequest(
 
     public AgentflowCheckpointSnapshot? ResumeCheckpoint { get; init; }
 
+    public AgentflowRevisionSnapshot? AgentflowSnapshot { get; init; }
+
     public IReadOnlyList<ExtensionExecutionPin> ExtensionPins { get; init; } = [];
 
     /// <summary>

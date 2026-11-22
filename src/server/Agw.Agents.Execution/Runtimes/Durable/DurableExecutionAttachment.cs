@@ -1,5 +1,6 @@
 using System.Globalization;
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
 using Agw.Agents.Execution.Outbound;
@@ -193,7 +194,7 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
     /// 原子创建 checkpoint 恢复分支，并将当前 connection 附着到新 execution。
     /// Atomically creates a checkpoint resume branch and attaches this connection to the new execution.
     /// </summary>
-    public async Task ResumeCheckpointAsync(
+    public async Task<AgentflowCheckpointSnapshot> ResumeCheckpointAsync(
         Guid occurrenceId,
         Guid resumeTurnId,
         Guid projectId,
@@ -201,10 +202,11 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
         string contextId,
         Guid agentflowId,
         CancellationToken cancellationToken,
-        DurableExecutionSettings? permissionSettings = null
+        DurableExecutionSettings? permissionSettings = null,
+        Func<AgentflowRevisionSnapshot, CancellationToken, Task>? validateSnapshot = null
     )
     {
-        await _coordinator
+        var snapshot = await _coordinator
             .ResumeCheckpointAsync(
                 occurrenceId,
                 resumeTurnId,
@@ -213,10 +215,12 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
                 agentflowId,
                 _userId,
                 cancellationToken,
-                permissionSettings
+                permissionSettings,
+                validateSnapshot
             )
             .ConfigureAwait(false);
         await AttachAsync(resumeTurnId, cursor: null, conversationId, cancellationToken).ConfigureAwait(false);
+        return snapshot;
     }
 
     /// <summary>

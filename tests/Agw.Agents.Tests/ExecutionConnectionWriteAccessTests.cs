@@ -12,6 +12,7 @@ using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
@@ -315,7 +316,8 @@ public partial class ExecutionCommandHandlerTests
             checkpointStore: new AgentflowCheckpointStore(
                 _persistence.Services.GetRequiredService<IServiceScopeFactory>(),
                 _persistence.Locks,
-                TimeProvider.System
+                TimeProvider.System,
+                NullLogger<AgentflowCheckpointStore>.Instance
             )
         );
         await context.ApplySettingsAsync(

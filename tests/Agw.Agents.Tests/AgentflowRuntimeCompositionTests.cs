@@ -139,7 +139,7 @@ public partial class AgentflowTurnExecutorTests
     }
 
     [Fact]
-    public async Task GetMermaidAsync_BuildAndCleanupFail_PreservesOriginalException()
+    public async Task CreateAiWorkflow_BuildAndCleanupFail_PreservesOriginalException()
     {
         var agent = new ScriptedAgent([], failOnDispose: true);
         var failure = new InvalidOperationException("construction failed");
@@ -150,7 +150,11 @@ public partial class AgentflowTurnExecutorTests
         );
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            fixture.Service.GetMermaidAsync(fixture.Flow.Id, TestContext.Current.CancellationToken)
+            fixture.Service.CreateAiWorkflow(
+                fixture.Flow.Id,
+                AgentflowTurnTestHost.FirstRevision,
+                TestContext.Current.CancellationToken
+            )
         );
 
         Assert.Same(failure, exception);
@@ -190,7 +194,7 @@ public partial class AgentflowTurnExecutorTests
             messages.Add(message);
         }
 
-        Assert.Equal(["input", "interaction-request"], messages.Select(MessageShape));
+        Assert.Equal(["input", "interaction-request"], ConversationShapes(messages));
         Assert.Empty(agent.Inputs);
         Assert.Equal(1, agent.DisposeCount);
     }

@@ -130,6 +130,7 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
         }
         var store = new DurableExecutionStore(
             database.Context,
+            database.Context,
             TimeProvider.System,
             database.Locks,
             database.Maintenance
@@ -177,6 +178,7 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
         database.Context.Add(row);
         await database.Context.SaveChangesAsync(token);
         var store = new DurableExecutionStore(
+            database.Context,
             database.Context,
             TimeProvider.System,
             database.Locks,

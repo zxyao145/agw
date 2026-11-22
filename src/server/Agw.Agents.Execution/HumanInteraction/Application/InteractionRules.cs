@@ -70,7 +70,18 @@ internal static class InteractionRules
                             _ => decision.Scope,
                         },
                 },
-            (WorkflowGateInteraction, WorkflowGateDecision) => response,
+            (WorkflowGateInteraction, WorkflowGateDecision { Approved: false }) => response,
+            (WorkflowGateInteraction gateRequest, WorkflowGateDecision decision)
+                when gateRequest.Choices.Any(choice =>
+                    string.Equals(choice.ChoiceId, decision.ChoiceId, StringComparison.Ordinal)
+                ) => decision with
+            {
+                ResponseText = gateRequest.AllowResponseText ? decision.ResponseText : null,
+            },
+            (WorkflowGateInteraction, WorkflowGateDecision) => throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "choiceId is not a choice of this request."
+            ),
             (UserInputInteraction, UserInputResponse { Cancelled: true }) => response,
             (UserInputInteraction, UserInputResponse { ResponseData: { } }) => response,
             _ => throw new AgwException(

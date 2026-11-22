@@ -1,4 +1,3 @@
-using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Domain.Behaviors;
 using Agw.Shared.Data.Entities.Agentflows;
 
@@ -7,106 +6,46 @@ namespace Agw.Agents.Tests;
 public sealed class AgentflowBehaviorTests
 {
     [Fact]
-    public void HasValidName_BlankName_ReturnsFalse()
+    public void StartRevisions_NewAgentflow_StartsAtOneAndIsUnpublished()
     {
-        // Arrange
-        var behavior = new AgentflowBehavior(new Agentflow { Name = "  " });
+        var agentflow = new Agentflow();
 
-        // Act
-        var result = behavior.HasValidName();
+        new AgentflowBehavior(agentflow).StartRevisions();
 
-        // Assert
-        Assert.False(result);
+        Assert.Equal(1, agentflow.LatestRevision);
+        Assert.Equal(0, agentflow.PublishedRevision);
     }
 
     [Fact]
-    public void TryReplaceGraph_ValidGraph_ReconcilesOwnedChildrenByKey()
+    public void TryAdvanceRevision_BaseRevisionIsLatest_IncrementsLatest()
     {
-        // Arrange
-        var agentflow = new Agentflow
-        {
-            Id = Guid.CreateVersion7(),
-            Name = "review-flow",
-            Nodes =
-            [
-                new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
-                new AgentflowNode { NodeId = "obsolete", Kind = AgentflowNodeKind.Output },
-            ],
-            Edges = [new AgentflowEdge { EdgeId = "obsolete-edge" }],
-        };
-        var trackedInput = agentflow.Nodes.First();
-        var nodes = new[]
-        {
-            new AgentflowNode
-            {
-                NodeId = "input",
-                Kind = AgentflowNodeKind.Input,
-                Name = "Start",
-            },
-            new AgentflowNode
-            {
-                NodeId = "output",
-                Kind = AgentflowNodeKind.Output,
-                Name = "Result",
-            },
-        };
-        var edges = new[]
-        {
-            new AgentflowEdge
-            {
-                EdgeId = "input-output",
-                SourceNodeId = "input",
-                TargetNodeId = "output",
-            },
-        };
+        var agentflow = new Agentflow { LatestRevision = 3, PublishedRevision = 2 };
 
-        // Act
-        var result = new AgentflowBehavior(agentflow).TryReplaceGraph(
-            nodes,
-            edges,
-            AgentflowConfigurationParser.Parse(nodes, edges),
-            new Dictionary<Guid, string>(),
-            summaryModelProviderVisible: false
-        );
+        var advanced = new AgentflowBehavior(agentflow).TryAdvanceRevision(3);
 
-        // Assert
-        Assert.True(result);
-        Assert.Same(trackedInput, agentflow.Nodes.Single(node => node.NodeId == "input"));
-        Assert.Equal("Start", trackedInput.Name);
-        Assert.Equal(agentflow.Id, agentflow.Nodes.Single(node => node.NodeId == "output").AgentflowId);
-        Assert.DoesNotContain(agentflow.Nodes, node => node.NodeId == "obsolete");
-        Assert.Equal("input-output", Assert.Single(agentflow.Edges).EdgeId);
-        Assert.Equal(agentflow.Id, agentflow.Edges.Single().AgentflowId);
+        Assert.True(advanced);
+        Assert.Equal(4, agentflow.LatestRevision);
+        Assert.Equal(2, agentflow.PublishedRevision);
     }
 
     [Fact]
-    public void TryReplaceGraph_InvalidGraph_ReturnsFalseWithoutMutation()
+    public void TryAdvanceRevision_BaseRevisionIsStale_LeavesLatestUnchanged()
     {
-        // Arrange
-        var agentflow = new Agentflow
-        {
-            Id = Guid.CreateVersion7(),
-            Name = "review-flow",
-            Nodes = [new AgentflowNode { NodeId = "reviewer" }],
-            Edges = [],
-        };
-        var originalNode = agentflow.Nodes.Single();
-        var nodes = new[]
-        {
-            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
-        };
+        var agentflow = new Agentflow { LatestRevision = 3, PublishedRevision = 2 };
 
-        // Act
-        var result = new AgentflowBehavior(agentflow).TryReplaceGraph(
-            nodes,
-            [],
-            AgentflowConfigurationParser.Parse(nodes, []),
-            new Dictionary<Guid, string>(),
-            summaryModelProviderVisible: false
-        );
+        var advanced = new AgentflowBehavior(agentflow).TryAdvanceRevision(2);
 
-        // Assert
-        Assert.False(result);
-        Assert.Same(originalNode, Assert.Single(agentflow.Nodes));
+        Assert.False(advanced);
+        Assert.Equal(3, agentflow.LatestRevision);
+    }
+
+    [Fact]
+    public void Publish_Revision_SetsPublishedPointer()
+    {
+        var agentflow = new Agentflow { LatestRevision = 3, PublishedRevision = 1 };
+
+        new AgentflowBehavior(agentflow).Publish(3);
+
+        Assert.Equal(3, agentflow.PublishedRevision);
     }
 }

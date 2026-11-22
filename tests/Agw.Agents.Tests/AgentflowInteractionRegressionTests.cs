@@ -110,11 +110,13 @@ public partial class AgentflowTurnExecutorTests
             AgentflowNodeKind.Agent,
             AgentflowNodeKind.Output,
         ]);
+        fixture.Nodes.Single(node => node.NodeId == "input").RoutingStrategy = AgentflowRoutingStrategy.FanOut;
         fixture.Edges.Remove(fixture.Edges.Queryable.Single(edge => edge.EdgeId == "edge-0"));
         await fixture.Edges.AddAsync(
             new AgentflowEdge
             {
                 AgentflowId = fixture.Flow.Id,
+                AgentflowRevision = AgentflowTurnTestHost.FirstRevision.RootRevision,
                 EdgeId = "input-second",
                 SourceNodeId = "input",
                 TargetNodeId = "node-1",
@@ -124,9 +126,11 @@ public partial class AgentflowTurnExecutorTests
             new AgentflowEdge
             {
                 AgentflowId = fixture.Flow.Id,
+                AgentflowRevision = AgentflowTurnTestHost.FirstRevision.RootRevision,
                 EdgeId = "parallel",
                 SourceNodeId = "node-0",
                 TargetNodeId = "node-2",
+                ChoiceId = "choice-1",
             }
         );
         return fixture;

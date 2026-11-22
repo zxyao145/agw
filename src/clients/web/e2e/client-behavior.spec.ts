@@ -1,7 +1,21 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { fulfillApiData, fulfillShellRead } from "./web-session-api";
+import {
+  agentflowTest,
+  createFlow,
+  flowNameInput,
+  openEditor,
+  sequentialDefinition,
+} from "./agentflow-editor-fixture";
 
-const agentflow = { id: "flow-1", name: "Review flow", enable: true, description: "" };
+const agentflow = {
+  id: "flow-1",
+  name: "Review flow",
+  enable: true,
+  description: "",
+  latestRevision: 1,
+  publishedRevision: 0,
+};
 
 async function mockApi(page: Page, handleWrite?: (route: Route) => Promise<void>) {
   await page.route("**/api/**", async (route) => {
@@ -19,19 +33,6 @@ async function mockApi(page: Page, handleWrite?: (route: Route) => Promise<void>
       "/api/agentflows": [agentflow],
       "/api/agents": [{ id: "agent-1", name: "Reviewer", enable: true }],
       "/api/model-providers": [],
-      "/api/agentflows/flow-1/nodes": [
-        { nodeId: "input", kind: 10, name: "Input", relateId: null, positionJson: '{"x":0,"y":0}' },
-        {
-          nodeId: "agent",
-          kind: 0,
-          name: "Reviewer",
-          relateId: "agent-1",
-          positionJson: '{"x":300,"y":0}',
-        },
-      ],
-      "/api/agentflows/flow-1/edges": [
-        { edgeId: "edge-1", sourceNodeId: "input", targetNodeId: "agent", kind: 0 },
-      ],
     };
     if (!(path in responses)) throw new Error(`Unexpected query: ${path}`);
     return fulfillApiData(route, responses[path]);
@@ -66,50 +67,59 @@ test("login failure stays editable and a successful retry returns to the request
   expect(attempts).toBe(2);
 });
 
-test("Agentflow saving freezes edits, failed writes preserve the draft, and retry closes on success", async ({
-  page,
-}) => {
-  let release!: () => void;
-  let started!: () => void;
-  const responseReady = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const requestStarted = new Promise<void>((resolve) => {
-    started = resolve;
-  });
-  let writes = 0;
-  await mockApi(page, async (route) => {
-    expect(route.request().method()).toBe("PUT");
-    expect(new URL(route.request().url()).pathname).toBe("/api/agentflows/flow-1");
-    expect(route.request().postDataJSON().name).toBe("Submitted draft");
-    writes += 1;
-    if (writes === 1) {
-      started();
-      await responseReady;
-      await route.fulfill({ status: 503, json: { code: 5030001, title: "Unavailable" } });
-    } else {
-      await route.fulfill({ json: { code: 0, title: "OK" } });
+agentflowTest(
+  "Agentflow saving freezes edits, a failed write keeps the draft, and a retry shows the new version",
+  async ({ page, standaloneHost, requestToken, agentIds }) => {
+    const flow = await createFlow(
+      page,
+      standaloneHost.origin,
+      requestToken,
+      "Review flow",
+      sequentialDefinition(agentIds[0]),
+    );
+    let release!: () => void;
+    let started!: () => void;
+    const responseReady = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const requestStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let writes = 0;
+    await page.route("**/api/agentflows/revisions", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      expect(route.request().postDataJSON()).toMatchObject({
+        name: "Submitted draft",
+        baseRevision: 1,
+      });
+      writes += 1;
+      if (writes === 1) {
+        started();
+        await responseReady;
+        await route.abort("connectionreset");
+      } else {
+        await route.fallback();
+      }
+    });
+    const dialog = await openEditor(page, flow.name);
+    const name = flowNameInput(dialog);
+    const save = dialog.getByRole("button", { name: "Save", exact: true });
+    await name.fill("Submitted draft");
+    await save.click();
+    await requestStarted;
+    try {
+      await expect(name).toBeDisabled();
+      await expect(name).toHaveValue("Submitted draft");
+      await expect(dialog.getByRole("button", { name: "Saving…", exact: true })).toBeDisabled();
+    } finally {
+      release();
     }
-  });
-  await page.goto("/agentflows");
-  await page.getByTitle("Edit agentflow", { exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  const name = page.locator("#agentflowName");
-  await name.fill("Submitted draft");
-  await dialog.getByRole("button", { name: "Update", exact: true }).click();
-  await requestStarted;
-  try {
-    await name.click({ force: true });
-    await page.keyboard.type("Unsent edit");
+    await expect(save).toBeEnabled();
     await expect(name).toHaveValue("Submitted draft");
-    await expect(dialog.getByRole("button", { name: "Updating...", exact: true })).toBeDisabled();
-  } finally {
-    release();
-  }
-  await expect(dialog.getByRole("button", { name: "Update", exact: true })).toBeEnabled();
-  await expect(name).toHaveValue("Submitted draft");
-  await expect(dialog.getByText("Unsaved changes", { exact: true })).toBeVisible();
-  await dialog.getByRole("button", { name: "Update", exact: true }).click();
-  await expect(dialog).toHaveCount(0);
-  expect(writes).toBe(2);
-});
+    await expect(dialog.getByText("Unsaved changes", { exact: true })).toBeVisible();
+    await save.click();
+    await expect(dialog.getByText("v2", { exact: true })).toBeVisible();
+    await expect(dialog).toBeVisible();
+    expect(writes).toBe(2);
+  },
+);

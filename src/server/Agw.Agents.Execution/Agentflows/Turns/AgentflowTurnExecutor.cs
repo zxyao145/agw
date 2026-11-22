@@ -59,7 +59,9 @@ public sealed class AgentflowTurnExecutor
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(input);
-        var resources = await _runtimeFactory.PrepareTurnAsync(runtime, scope, cancellationToken).ConfigureAwait(false);
+        var resources = await _runtimeFactory
+            .PrepareTurnAsync(runtime, scope, input.AgentflowSnapshot, cancellationToken)
+            .ConfigureAwait(false);
         await foreach (
             var message in TurnHistory.RunAsync(
                 scope,
@@ -95,6 +97,8 @@ public sealed class AgentflowTurnExecutor
         var workflowLease =
             await _runtimeFactory.CreateAiWorkflow(
                 resources.Agentflow,
+                resources.Snapshot.RootRevision,
+                resources.Snapshot,
                 cancellationToken,
                 resources.SessionScope,
                 resources.TraceContext,
@@ -145,6 +149,12 @@ public sealed class AgentflowTurnExecutor
         var workflow = workflowLease.Workflow;
         var checkpointNodeNames = workflowLease.Metadata.CheckpointNodes;
         var humanGateNodes = workflowLease.Metadata.HumanGateNodes;
+        var nodeIds = workflowLease.Metadata.NodeIdsByExecutorId.Values.ToHashSet(StringComparer.Ordinal);
+        var nodeIdsByRequestPortId = workflowLease.Metadata.NodeIdsByExecutorId.ToDictionary(
+            mapping => MafApprovalAdapter.GetWorkflowRequestScope(mapping.Key),
+            mapping => mapping.Value,
+            StringComparer.Ordinal
+        );
         var handler = scope.InteractionHandler;
         var resume = input.Resume;
         _logger.LogInformation("Constructed workflow: {Workflow}", WorkflowVisualizer.ToMermaidString(workflow));
@@ -170,12 +180,6 @@ public sealed class AgentflowTurnExecutor
             )
             .ConfigureAwait(false);
         await using var run = checkpointedRun.Run;
-        var definitionFingerprint =
-            _checkpointSupport.IsAvailable && sessionScope.ConversationId != Guid.Empty
-                ? await _checkpointSupport
-                    .GetDefinitionFingerprintAsync(agentflowId, cancellationToken)
-                    .ConfigureAwait(false)
-                : null;
         // 存档已包含未完成 Turn 的队列，恢复时不能再触发一次入口执行。
         // The checkpoint already holds the unfinished turn's queue, so a resume must not trigger the entry again.
         if (resume?.Checkpoint == null)
@@ -226,6 +230,20 @@ public sealed class AgentflowTurnExecutor
                         {
                             waiting.TryAdd(waitingRequest.InteractionId, waitingRequest);
                         }
+                        else if (interaction.Answered is { } answeredRequest)
+                        {
+                            if (
+                                CreateInteractionNodeStatus(
+                                    answeredRequest,
+                                    nodeIds,
+                                    answeredRequest is WorkflowGateInteraction
+                                        ? AgwAgentflowNodeStatus.Completed
+                                        : AgwAgentflowNodeStatus.Running
+                                ) is
+                                { } answeredStatus
+                            )
+                                yield return answeredStatus;
+                        }
                         else if (interaction.Rejection is { } rejection)
                         {
                             await run.CancelRunAsync().ConfigureAwait(false);
@@ -258,10 +276,49 @@ public sealed class AgentflowTurnExecutor
 
                     case ExecutorInvokedEvent invoke:
                         _logger.LogInformation("Starting {ExecutorId}", invoke.ExecutorId);
+                        if (
+                            workflowLease.Metadata.NodeIdsByExecutorId.TryGetValue(
+                                invoke.ExecutorId,
+                                out var runningNodeId
+                            )
+                        )
+                            yield return CreateNodeStatusMessage(
+                                runningNodeId,
+                                AgwAgentflowNodeStatus.Running,
+                                interactionId: null,
+                                Guid.CreateVersion7().Normalize()
+                            );
                         break;
 
                     case ExecutorCompletedEvent complete:
                         _logger.LogInformation("Completed {ExecutorId}, {Data}", complete.ExecutorId, complete.Data);
+                        if (
+                            workflowLease.Metadata.NodeIdsByExecutorId.TryGetValue(
+                                complete.ExecutorId,
+                                out var completedNodeId
+                            )
+                        )
+                            yield return CreateNodeStatusMessage(
+                                completedNodeId,
+                                AgwAgentflowNodeStatus.Completed,
+                                interactionId: null,
+                                Guid.CreateVersion7().Normalize()
+                            );
+                        break;
+
+                    case ExecutorFailedEvent failed:
+                        if (
+                            workflowLease.Metadata.NodeIdsByExecutorId.TryGetValue(
+                                failed.ExecutorId,
+                                out var failedNodeId
+                            )
+                        )
+                            yield return CreateNodeStatusMessage(
+                                failedNodeId,
+                                AgwAgentflowNodeStatus.Failed,
+                                interactionId: null,
+                                Guid.CreateVersion7().Normalize()
+                            );
                         break;
 
                     case RequestInfoEvent requestInfo:
@@ -288,7 +345,12 @@ public sealed class AgentflowTurnExecutor
                         }
 
                         var request =
-                            CreateInteractionRequest(externalRequest, humanGateNodes, scope.InteractionRequests)
+                            CreateInteractionRequest(
+                                externalRequest,
+                                humanGateNodes,
+                                nodeIdsByRequestPortId,
+                                scope.InteractionRequests
+                            )
                             ?? throw new AgwException(
                                 ErrorCodes.AgentExecutionFailed,
                                 $"External request '{externalRequest.RequestId}' is unsupported."
@@ -311,6 +373,17 @@ public sealed class AgentflowTurnExecutor
                                 state.Outcome = TurnOutcome.Completed;
                                 yield break;
                             }
+                            if (
+                                CreateInteractionNodeStatus(
+                                    request,
+                                    nodeIds,
+                                    request is WorkflowGateInteraction
+                                        ? AgwAgentflowNodeStatus.Completed
+                                        : AgwAgentflowNodeStatus.Running
+                                ) is
+                                { } answeredStatus
+                            )
+                                yield return answeredStatus;
                             break;
                         }
 
@@ -329,6 +402,11 @@ public sealed class AgentflowTurnExecutor
                             state.Outcome = TurnOutcome.Completed;
                             yield break;
                         }
+                        if (
+                            CreateInteractionNodeStatus(request, nodeIds, AgwAgentflowNodeStatus.Waiting) is
+                            { } waitingStatus
+                        )
+                            yield return waitingStatus;
                         // 每个独立请求等待回答期间继续消费 Workflow 事件。
                         // Keep consuming workflow events while each independent request awaits its response.
                         pendingInteractions.Add(
@@ -339,6 +417,7 @@ public sealed class AgentflowTurnExecutor
                                 handler,
                                 resources.TraceContext,
                                 agentflowId,
+                                resources.Snapshot.RootRevision,
                                 interactionToken
                             )
                         );
@@ -403,9 +482,10 @@ public sealed class AgentflowTurnExecutor
                                 sessionScope.ContextId,
                                 resources.TraceContext.TaskId,
                                 agentflowId,
+                                resources.Snapshot.RootRevision,
+                                resources.Snapshot,
                                 scope.UserId,
                                 isDurable: scope.Context.Provider == ExecutionProvider.Distributed,
-                                definitionFingerprint,
                                 checkpointedRun.Store,
                                 completed.CompletionInfo?.Checkpoint,
                                 checkpointMarkers,
@@ -519,6 +599,7 @@ public sealed class AgentflowTurnExecutor
         IInteractionHandler handler,
         AgentflowExecutionTraceContext trace,
         Guid agentflowId,
+        int agentflowRevision,
         CancellationToken cancellationToken
     )
     {
@@ -528,13 +609,14 @@ public sealed class AgentflowTurnExecutor
         // A wait boundary returned synchronously means the node has not run, so no HumanGate execution is recorded.
         if (completed is InteractionResolution.Pending)
         {
-            return new WorkflowInteractionResult(Rejection: null, Waiting: request);
+            return new WorkflowInteractionResult(Rejection: null, Waiting: request, Answered: null);
         }
 
         using var activity = request is WorkflowGateInteraction gate
             ? AgentflowNodeExecutionActivity.StartHumanGate(
                 trace,
                 agentflowId,
+                agentflowRevision,
                 gate.Source.NodeId!,
                 gate.Source.NodeName,
                 GetHumanGateMessages(externalRequest)
@@ -545,7 +627,7 @@ public sealed class AgentflowTurnExecutor
             var resolution = completed ?? await resolving.ConfigureAwait(false);
             if (resolution is not InteractionResolution.Resolved resolved)
             {
-                return new WorkflowInteractionResult(Rejection: null, Waiting: request);
+                return new WorkflowInteractionResult(Rejection: null, Waiting: request, Answered: null);
             }
             var rejection = await SendResponseAsync(run, externalRequest, request, resolved.Response)
                 .ConfigureAwait(false);
@@ -553,7 +635,11 @@ public sealed class AgentflowTurnExecutor
                 activity?.Reject();
             else
                 activity?.Complete();
-            return new WorkflowInteractionResult(rejection, Waiting: null);
+            return new WorkflowInteractionResult(
+                rejection,
+                Waiting: null,
+                Answered: rejection == null ? request : null
+            );
         }
         catch (OperationCanceledException)
         {
@@ -589,7 +675,11 @@ public sealed class AgentflowTurnExecutor
             }
             await run.SendResponseAsync(
                     externalRequest.CreateResponse(
-                        CreateHumanGateResponseMessages(GetHumanGateMessages(externalRequest), decision)
+                        CreateHumanGateResponseMessages(
+                            GetHumanGateMessages(externalRequest),
+                            (WorkflowGateInteraction)request,
+                            decision
+                        )
                     )
                 )
                 .ConfigureAwait(false);
@@ -605,7 +695,23 @@ public sealed class AgentflowTurnExecutor
         return null;
     }
 
-    private sealed record WorkflowInteractionResult(AgwMessage? Rejection, InteractionRequest? Waiting);
+    private static AgwMessage? CreateInteractionNodeStatus(
+        InteractionRequest request,
+        IReadOnlySet<string> nodeIds,
+        string status
+    )
+    {
+        var nodeId = request.Source.NodeId;
+        return nodeId is not null && nodeIds.Contains(nodeId)
+            ? CreateNodeStatusMessage(nodeId, status, request.InteractionId, Guid.CreateVersion7().Normalize())
+            : null;
+    }
+
+    private sealed record WorkflowInteractionResult(
+        AgwMessage? Rejection,
+        InteractionRequest? Waiting,
+        InteractionRequest? Answered
+    );
 
     private sealed class WorkflowRunState
     {

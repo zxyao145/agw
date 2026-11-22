@@ -15,6 +15,7 @@ using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
@@ -372,7 +373,8 @@ public sealed partial class DurableExecutionStoreTests
         await new AgentflowCheckpointStore(
             _kit.Services.GetRequiredService<IServiceScopeFactory>(),
             _kit.Locks,
-            _clock
+            _clock,
+            NullLogger<AgentflowCheckpointStore>.Instance
         ).RecordAsync(
             turnId,
             task.ProjectId,
@@ -380,9 +382,10 @@ public sealed partial class DurableExecutionStoreTests
             task.ContextId,
             task.TaskId,
             Guid.CreateVersion7(),
+            1,
+            new AgentflowRevisionSnapshot(1, []),
             UserId,
             isDurable: true,
-            new string('a', 64),
             new DurableAgentflowCheckpoint
             {
                 SessionId = "late",

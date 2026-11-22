@@ -221,6 +221,29 @@ public class AgentHandlerFactoryTests
     }
 
     [Fact]
+    public async Task PublishArtifactsAsync_NodeStatusMessage_AddsNoArtifact()
+    {
+        var bridge = new FakeAgentExecutionBridge
+        {
+            ExecuteStreamingAsyncImpl = (_, _, _, _) => ToAsyncEnumerable(CreateNodeStatusMessage()),
+        };
+        var handler = CreateHandler("alpha", bridge);
+        var queue = new AgentEventQueue(capacity: 16);
+
+        await handler.ExecuteAsync(
+            CreateRequestContext(streamingResponse: true, parts: [Part.FromText("hello")]),
+            queue,
+            TestContext.Current.CancellationToken
+        );
+        queue.Complete(exception: null);
+
+        var events = await DrainAsync(queue, TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(events, response => response.ArtifactUpdate != null);
+        Assert.Contains(events, response => response.StatusUpdate?.Status?.State == TaskState.Completed);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenExecutionThrows_FailsTask()
     {
         var bridge = new FakeAgentExecutionBridge
@@ -717,6 +740,20 @@ public class AgentHandlerFactoryTests
 
     private static AgwMessage CreateTextMessage(string text) =>
         new(Guid.CreateVersion7().ToString("N"), "$agent", AiRole.System, [new AgwTextContent { Content = text }]);
+
+    private static AgwMessage CreateNodeStatusMessage() =>
+        new(
+            Guid.CreateVersion7().ToString("N"),
+            "$agent",
+            AiRole.System,
+            [],
+            new AdditionalPropertiesDictionary
+            {
+                ["type"] = AgwMessageTypes.AgentflowNodeStatus,
+                ["nodeId"] = "node",
+                ["status"] = "running",
+            }
+        );
 
     private static AgwMessage CreateTurnFinishedMessage(string? status = null) =>
         new(

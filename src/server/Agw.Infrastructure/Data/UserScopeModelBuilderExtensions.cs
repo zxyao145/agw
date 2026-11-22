@@ -213,6 +213,32 @@ internal static partial class UserScopeModelBuilderExtensions
                             )
             );
         modelBuilder
+            .Entity<AgentflowRevision>()
+            .HasQueryFilter(
+                UserScopeQueryFilterNames.UserScope,
+                revision =>
+                    context.UserScopeBypass
+                    || context.UserScopeIsActive
+                        && context
+                            .Set<Agentflow>()
+                            .Any(agentflow =>
+                                agentflow.Id == revision.AgentflowId && agentflow.CreateBy == context.CurrentUserId
+                            )
+            );
+        modelBuilder
+            .Entity<AgentflowBlockMember>()
+            .HasQueryFilter(
+                UserScopeQueryFilterNames.UserScope,
+                member =>
+                    context.UserScopeBypass
+                    || context.UserScopeIsActive
+                        && context
+                            .Set<Agentflow>()
+                            .Any(agentflow =>
+                                agentflow.Id == member.AgentflowId && agentflow.CreateBy == context.CurrentUserId
+                            )
+            );
+        modelBuilder
             .Entity<AgentflowEdge>()
             .HasQueryFilter(
                 UserScopeQueryFilterNames.UserScope,

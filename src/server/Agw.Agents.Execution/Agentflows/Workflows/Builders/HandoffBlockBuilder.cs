@@ -1,3 +1,5 @@
+using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Microsoft.Agents.AI.Workflows;
 
 namespace Agw.Agents.Execution.Agentflows.Workflows.Builders;
@@ -16,7 +18,7 @@ internal static class HandoffBlockBuilder
         }
 
         var participantAgents = participants.Select(participant => participant.Agent).ToList();
-        var config = AgentflowBlockBuildSupport.ReadConfig(context.BlockNode);
+        var config = AgentflowDefinitionJson.ReadOptions<HandoffBlockOptions>(context.BlockNode);
         var builder = AgentWorkflowBuilder
             .CreateHandoffBuilderWith(participantAgents[0])
             .AddParticipants(participantAgents.Skip(1));

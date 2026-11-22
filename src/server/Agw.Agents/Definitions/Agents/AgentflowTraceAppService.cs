@@ -124,6 +124,7 @@ public class AgentflowTraceAppService
                     DurationMilliseconds = trace.DurationMilliseconds,
                     Status = trace.Status,
                     Error = trace.Error,
+                    Extra = trace.Extra,
                 })
                 .ToList(),
             Total = total,

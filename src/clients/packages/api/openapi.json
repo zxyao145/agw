@@ -1393,17 +1393,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow[]"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto[]"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow[]"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto[]"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow[]"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto[]"
                 }
               }
             }
@@ -1440,17 +1440,54 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Agentflows"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
                 }
               }
             }
@@ -1489,17 +1526,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflowDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflowDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflowDto"
                 }
               }
             }
@@ -1507,7 +1544,7 @@
         }
       }
     },
-    "/api/agentflows/{id}": {
+    "/api/agentflows/detail": {
       "get": {
         "tags": [
           "Agentflows"
@@ -1515,8 +1552,54 @@
         "parameters": [
           {
             "name": "id",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDetailResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDetailResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDetailResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agentflows/revisions": {
+      "get": {
+        "tags": [
+          "Agentflows"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
             "schema": {
               "type": "string",
               "format": "uuid"
@@ -1529,53 +1612,42 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowRevisionDto[]"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowRevisionDto[]"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowRevisionDto[]"
                 }
               }
             }
           }
         }
       },
-      "put": {
+      "post": {
         "tags": [
           "Agentflows"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AgentflowUpdateRequest"
+                "$ref": "#/components/schemas/AgentflowSaveRevisionRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/AgentflowUpdateRequest"
+                "$ref": "#/components/schemas/AgentflowSaveRevisionRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/AgentflowUpdateRequest"
+                "$ref": "#/components/schemas/AgentflowSaveRevisionRequest"
               }
             }
           },
@@ -1587,55 +1659,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "Agentflows"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto"
                 }
               }
             }
@@ -1643,39 +1677,48 @@
         }
       }
     },
-    "/api/agentflows/mermaid/{id}": {
-      "get": {
+    "/api/agentflows/published": {
+      "put": {
         "tags": [
           "Agentflows"
         ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowPublishRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowPublishRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowPublishRequest"
+              }
             }
-          }
-        ],
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfstring"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfstring"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfstring"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto"
                 }
               }
             }
@@ -1683,79 +1726,48 @@
         }
       }
     },
-    "/api/agentflows/{id}/nodes": {
-      "get": {
+    "/api/agentflows/validate": {
+      "post": {
         "tags": [
           "Agentflows"
         ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflowNode[]"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflowNode[]"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflowNode[]"
-                }
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowValidateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowValidateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowValidateRequest"
               }
             }
-          }
-        }
-      }
-    },
-    "/api/agentflows/{id}/edges": {
-      "get": {
-        "tags": [
-          "Agentflows"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflowEdge[]"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowValidateResponse"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflowEdge[]"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowValidateResponse"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflowEdge[]"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowValidateResponse"
                 }
               }
             }
@@ -1794,17 +1806,64 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentflow"
+                  "$ref": "#/components/schemas/ApiResultOfAgentflowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agentflows/mermaid": {
+      "get": {
+        "tags": [
+          "Agentflows"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfstring"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfstring"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfstring"
                 }
               }
             }
@@ -2361,6 +2420,17 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "agentflowRevision",
+            "in": "query",
+            "schema": {
+              "type": [
+                "null",
+                "integer"
+              ],
+              "format": "int32"
             }
           }
         ],
@@ -9958,13 +10028,153 @@
           }
         }
       },
-      "Agentflow": {
+      "AgentflowBlockMemberDto": {
+        "required": [
+          "memberId",
+          "kind",
+          "relateId",
+          "name",
+          "instructions",
+          "isManager"
+        ],
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AgentflowBlockMemberKind"
+          },
+          "relateId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isManager": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AgentflowBlockMemberKind": {
+        "enum": [
+          "agent",
+          "workflowAsAgent"
+        ]
+      },
+      "AgentflowConditionField": {
+        "enum": [
+          "contains",
+          "notContains",
+          "equals",
+          "author",
+          "role",
+          "minMessages",
+          "result"
+        ]
+      },
+      "AgentflowConditionRuleDto": {
+        "required": [
+          "field",
+          "value",
+          "path"
+        ],
+        "type": "object",
+        "properties": {
+          "field": {
+            "$ref": "#/components/schemas/AgentflowConditionField"
+          },
+          "value": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "AgentflowCreateRequest": {
+        "required": [
+          "name",
+          "description",
+          "definition"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "definition": {
+            "$ref": "#/components/schemas/AgentflowDefinitionDto"
+          }
+        }
+      },
+      "AgentflowDefinitionDto": {
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowNodeDto"
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowEdgeDto"
+            }
+          }
+        }
+      },
+      "AgentflowDetailResponse": {
+        "required": [
+          "agentflow",
+          "revision",
+          "definition"
+        ],
+        "type": "object",
+        "properties": {
+          "agentflow": {
+            "$ref": "#/components/schemas/AgentflowDto"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/AgentflowDefinitionDto"
+          }
+        }
+      },
+      "AgentflowDto": {
         "required": [
           "id",
           "name",
+          "description",
           "enable",
-          "systemPrompt",
-          "createTime"
+          "latestRevision",
+          "publishedRevision",
+          "createTime",
+          "updateTime"
         ],
         "type": "object",
         "properties": {
@@ -9984,180 +10194,35 @@
           "enable": {
             "type": "boolean"
           },
-          "systemPrompt": {
-            "type": "string"
+          "latestRevision": {
+            "type": "integer",
+            "format": "int32"
           },
-          "summaryModelProviderId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "nodes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentflowNode"
-            }
-          },
-          "edges": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentflowEdge"
-            }
+          "publishedRevision": {
+            "type": "integer",
+            "format": "int32"
           },
           "createTime": {
             "type": "string",
             "format": "date-time"
           },
-          "createBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "updateTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "updateBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "AgentflowCreateRequest": {
-        "required": [
-          "name",
-          "description",
-          "nodes",
-          "edges"
-        ],
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "nodes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentflowNodeRequest"
-            }
-          },
-          "edges": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentflowEdgeRequest"
-            }
-          },
-          "summaryModelProviderId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          }
-        }
-      },
-      "AgentflowEdge": {
-        "required": [
-          "agentflowId",
-          "edgeId",
-          "sourceNodeId",
-          "targetNodeId",
-          "kind",
-          "createTime"
-        ],
-        "type": "object",
-        "properties": {
-          "agentflowId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "edgeId": {
-            "type": "string"
-          },
-          "sourceNodeId": {
-            "type": "string"
-          },
-          "targetNodeId": {
-            "type": "string"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/AgentflowEdgeKind"
-          },
-          "label": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "conditionJson": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "configJson": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "sourceNode": {
-            "$ref": "#/components/schemas/AgentflowNode"
-          },
-          "targetNode": {
-            "$ref": "#/components/schemas/AgentflowNode"
-          },
-          "createTime": {
             "type": "string",
             "format": "date-time"
-          },
-          "createBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "updateTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "updateBy": {
-            "type": [
-              "null",
-              "string"
-            ]
           }
         }
       },
-      "AgentflowEdgeKind": {
-        "type": "integer"
-      },
-      "AgentflowEdgeRequest": {
+      "AgentflowEdgeDto": {
         "required": [
           "edgeId",
           "sourceNodeId",
           "targetNodeId",
-          "kind",
+          "isFanInBarrier",
+          "isSwitchDefault",
+          "switchCaseOrder",
+          "choiceId",
           "label",
-          "conditionJson",
-          "configJson"
+          "conditions"
         ],
         "type": "object",
         "properties": {
@@ -10170,8 +10235,21 @@
           "targetNodeId": {
             "type": "string"
           },
-          "kind": {
-            "$ref": "#/components/schemas/AgentflowEdgeKind"
+          "isFanInBarrier": {
+            "type": "boolean"
+          },
+          "isSwitchDefault": {
+            "type": "boolean"
+          },
+          "switchCaseOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "choiceId": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "label": {
             "type": [
@@ -10179,17 +10257,11 @@
               "string"
             ]
           },
-          "conditionJson": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "configJson": {
-            "type": [
-              "null",
-              "string"
-            ]
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowConditionRuleDto"
+            }
           }
         }
       },
@@ -10209,24 +10281,100 @@
           }
         }
       },
-      "AgentflowNode": {
+      "AgentflowGateChoiceDto": {
         "required": [
-          "agentflowId",
-          "nodeId",
-          "kind",
-          "createTime"
+          "choiceId",
+          "label"
         ],
         "type": "object",
         "properties": {
-          "agentflowId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "nodeId": {
+          "choiceId": {
             "type": "string"
           },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
+      "AgentflowNodeDto": {
+        "required": [
+          "kind",
+          "nodeId",
+          "routingStrategy"
+        ],
+        "type": "object",
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/AgentflowNodeDtoAgentflowInputNodeDto"
+          },
+          {
+            "$ref": "#/components/schemas/AgentflowNodeDtoAgentflowAgentNodeDto"
+          },
+          {
+            "$ref": "#/components/schemas/AgentflowNodeDtoAgentflowWorkflowAsAgentNodeDto"
+          },
+          {
+            "$ref": "#/components/schemas/AgentflowNodeDtoAgentflowPromptAdapterNodeDto"
+          },
+          {
+            "$ref": "#/components/schemas/AgentflowNodeDtoAgentflowClearMessagesNodeDto"
+          },
+          {
+            "$ref": "#/components/schemas/AgentflowNodeDtoAgentflowHumanGateNodeDto"
+          },
+          {
+            "$ref": "#/components/schemas/AgentflowNodeDtoAgentflowCheckpointMarkerNodeDto"
+          },
+          {
+            "$ref": "#/components/schemas/AgentflowNodeDtoAgentflowOutputNodeDto"
+          },
+          {
+            "$ref": "#/components/schemas/AgentflowNodeDtoAgentflowConcurrentBlockNodeDto"
+          },
+          {
+            "$ref": "#/components/schemas/AgentflowNodeDtoAgentflowHandoffBlockNodeDto"
+          },
+          {
+            "$ref": "#/components/schemas/AgentflowNodeDtoAgentflowGroupChatBlockNodeDto"
+          },
+          {
+            "$ref": "#/components/schemas/AgentflowNodeDtoAgentflowMagenticBlockNodeDto"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "kind",
+          "mapping": {
+            "input": "#/components/schemas/AgentflowNodeDtoAgentflowInputNodeDto",
+            "agent": "#/components/schemas/AgentflowNodeDtoAgentflowAgentNodeDto",
+            "workflowAsAgent": "#/components/schemas/AgentflowNodeDtoAgentflowWorkflowAsAgentNodeDto",
+            "promptAdapter": "#/components/schemas/AgentflowNodeDtoAgentflowPromptAdapterNodeDto",
+            "clearMessages": "#/components/schemas/AgentflowNodeDtoAgentflowClearMessagesNodeDto",
+            "humanGate": "#/components/schemas/AgentflowNodeDtoAgentflowHumanGateNodeDto",
+            "checkpointMarker": "#/components/schemas/AgentflowNodeDtoAgentflowCheckpointMarkerNodeDto",
+            "output": "#/components/schemas/AgentflowNodeDtoAgentflowOutputNodeDto",
+            "concurrentBlock": "#/components/schemas/AgentflowNodeDtoAgentflowConcurrentBlockNodeDto",
+            "handoffBlock": "#/components/schemas/AgentflowNodeDtoAgentflowHandoffBlockNodeDto",
+            "groupChatBlock": "#/components/schemas/AgentflowNodeDtoAgentflowGroupChatBlockNodeDto",
+            "magenticBlock": "#/components/schemas/AgentflowNodeDtoAgentflowMagenticBlockNodeDto"
+          }
+        }
+      },
+      "AgentflowNodeDtoAgentflowAgentNodeDto": {
+        "required": [
+          "relateId",
+          "instructions",
+          "nodeId",
+          "name",
+          "position",
+          "routingStrategy",
+          "kind"
+        ],
+        "properties": {
           "kind": {
-            "$ref": "#/components/schemas/AgentflowNodeKind"
+            "enum": [
+              "agent"
+            ],
+            "type": "string"
           },
           "relateId": {
             "type": [
@@ -10235,17 +10383,116 @@
             ],
             "format": "uuid"
           },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nodeId": {
+            "type": "string"
+          },
           "name": {
             "type": [
               "null",
               "string"
             ]
           },
-          "positionJson": {
+          "position": {
+            "$ref": "#/components/schemas/AgentflowPositionDto"
+          },
+          "routingStrategy": {
+            "$ref": "#/components/schemas/AgentflowRoutingStrategy"
+          }
+        }
+      },
+      "AgentflowNodeDtoAgentflowCheckpointMarkerNodeDto": {
+        "required": [
+          "checkpointName",
+          "nodeId",
+          "name",
+          "position",
+          "routingStrategy",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "checkpointMarker"
+            ],
+            "type": "string"
+          },
+          "checkpointName": {
             "type": [
               "null",
               "string"
             ]
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "position": {
+            "$ref": "#/components/schemas/AgentflowPositionDto"
+          },
+          "routingStrategy": {
+            "$ref": "#/components/schemas/AgentflowRoutingStrategy"
+          }
+        }
+      },
+      "AgentflowNodeDtoAgentflowClearMessagesNodeDto": {
+        "required": [
+          "nodeId",
+          "name",
+          "position",
+          "routingStrategy",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "clearMessages"
+            ],
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "position": {
+            "$ref": "#/components/schemas/AgentflowPositionDto"
+          },
+          "routingStrategy": {
+            "$ref": "#/components/schemas/AgentflowRoutingStrategy"
+          }
+        }
+      },
+      "AgentflowNodeDtoAgentflowConcurrentBlockNodeDto": {
+        "required": [
+          "instructions",
+          "members",
+          "nodeId",
+          "name",
+          "position",
+          "routingStrategy",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "concurrentBlock"
+            ],
+            "type": "string"
           },
           "instructions": {
             "type": [
@@ -10253,46 +10500,458 @@
               "string"
             ]
           },
-          "configJson": {
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowBlockMemberDto"
+            }
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "name": {
             "type": [
               "null",
               "string"
             ]
           },
-          "sourceEdges": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentflowEdge"
-            }
+          "position": {
+            "$ref": "#/components/schemas/AgentflowPositionDto"
           },
-          "targetEdges": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentflowEdge"
-            }
+          "routingStrategy": {
+            "$ref": "#/components/schemas/AgentflowRoutingStrategy"
+          }
+        }
+      },
+      "AgentflowNodeDtoAgentflowGroupChatBlockNodeDto": {
+        "required": [
+          "instructions",
+          "members",
+          "maxRounds",
+          "nodeId",
+          "name",
+          "position",
+          "routingStrategy",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "groupChatBlock"
+            ],
+            "type": "string"
           },
-          "createTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createBy": {
+          "instructions": {
             "type": [
               "null",
               "string"
             ]
           },
-          "updateTime": {
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowBlockMemberDto"
+            }
+          },
+          "maxRounds": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "position": {
+            "$ref": "#/components/schemas/AgentflowPositionDto"
+          },
+          "routingStrategy": {
+            "$ref": "#/components/schemas/AgentflowRoutingStrategy"
+          }
+        }
+      },
+      "AgentflowNodeDtoAgentflowHandoffBlockNodeDto": {
+        "required": [
+          "instructions",
+          "members",
+          "handoffInstructions",
+          "enableReturnToPrevious",
+          "autonomous",
+          "autonomousTurnLimit",
+          "continuationPrompt",
+          "nodeId",
+          "name",
+          "position",
+          "routingStrategy",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "handoffBlock"
+            ],
+            "type": "string"
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowBlockMemberDto"
+            }
+          },
+          "handoffInstructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enableReturnToPrevious": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "autonomous": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "autonomousTurnLimit": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "continuationPrompt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "position": {
+            "$ref": "#/components/schemas/AgentflowPositionDto"
+          },
+          "routingStrategy": {
+            "$ref": "#/components/schemas/AgentflowRoutingStrategy"
+          }
+        }
+      },
+      "AgentflowNodeDtoAgentflowHumanGateNodeDto": {
+        "required": [
+          "humanPrompt",
+          "choices",
+          "allowResponseText",
+          "nodeId",
+          "name",
+          "position",
+          "routingStrategy",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "humanGate"
+            ],
+            "type": "string"
+          },
+          "humanPrompt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowGateChoiceDto"
+            }
+          },
+          "allowResponseText": {
+            "type": "boolean"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "position": {
+            "$ref": "#/components/schemas/AgentflowPositionDto"
+          },
+          "routingStrategy": {
+            "$ref": "#/components/schemas/AgentflowRoutingStrategy"
+          }
+        }
+      },
+      "AgentflowNodeDtoAgentflowInputNodeDto": {
+        "required": [
+          "nodeId",
+          "name",
+          "position",
+          "routingStrategy",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "input"
+            ],
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "position": {
+            "$ref": "#/components/schemas/AgentflowPositionDto"
+          },
+          "routingStrategy": {
+            "$ref": "#/components/schemas/AgentflowRoutingStrategy"
+          }
+        }
+      },
+      "AgentflowNodeDtoAgentflowMagenticBlockNodeDto": {
+        "required": [
+          "instructions",
+          "members",
+          "maxRounds",
+          "maxStalls",
+          "maxResets",
+          "requirePlanSignoff",
+          "nodeId",
+          "name",
+          "position",
+          "routingStrategy",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "magenticBlock"
+            ],
+            "type": "string"
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowBlockMemberDto"
+            }
+          },
+          "maxRounds": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "maxStalls": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "maxResets": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "requirePlanSignoff": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "position": {
+            "$ref": "#/components/schemas/AgentflowPositionDto"
+          },
+          "routingStrategy": {
+            "$ref": "#/components/schemas/AgentflowRoutingStrategy"
+          }
+        }
+      },
+      "AgentflowNodeDtoAgentflowOutputNodeDto": {
+        "required": [
+          "enableSummary",
+          "summaryModelProviderId",
+          "instructions",
+          "nodeId",
+          "name",
+          "position",
+          "routingStrategy",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "output"
+            ],
+            "type": "string"
+          },
+          "enableSummary": {
+            "type": "boolean"
+          },
+          "summaryModelProviderId": {
             "type": [
               "null",
               "string"
             ],
-            "format": "date-time"
+            "format": "uuid"
           },
-          "updateBy": {
+          "instructions": {
             "type": [
               "null",
               "string"
             ]
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "position": {
+            "$ref": "#/components/schemas/AgentflowPositionDto"
+          },
+          "routingStrategy": {
+            "$ref": "#/components/schemas/AgentflowRoutingStrategy"
+          }
+        }
+      },
+      "AgentflowNodeDtoAgentflowPromptAdapterNodeDto": {
+        "required": [
+          "instructions",
+          "nodeId",
+          "name",
+          "position",
+          "routingStrategy",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "promptAdapter"
+            ],
+            "type": "string"
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "position": {
+            "$ref": "#/components/schemas/AgentflowPositionDto"
+          },
+          "routingStrategy": {
+            "$ref": "#/components/schemas/AgentflowRoutingStrategy"
+          }
+        }
+      },
+      "AgentflowNodeDtoAgentflowWorkflowAsAgentNodeDto": {
+        "required": [
+          "relateId",
+          "instructions",
+          "nodeId",
+          "name",
+          "position",
+          "routingStrategy",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "workflowAsAgent"
+            ],
+            "type": "string"
+          },
+          "relateId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "position": {
+            "$ref": "#/components/schemas/AgentflowPositionDto"
+          },
+          "routingStrategy": {
+            "$ref": "#/components/schemas/AgentflowRoutingStrategy"
           }
         }
       },
@@ -10302,54 +10961,132 @@
       "AgentflowNodeKind": {
         "type": "integer"
       },
-      "AgentflowNodeRequest": {
+      "AgentflowPositionDto": {
         "required": [
-          "nodeId",
-          "kind",
-          "relateId",
-          "name",
-          "positionJson",
-          "instructions",
-          "configJson"
+          "x",
+          "y"
         ],
         "type": "object",
         "properties": {
-          "nodeId": {
-            "type": "string"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/AgentflowNodeKind"
-          },
-          "relateId": {
+          "x": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
             "type": [
-              "null",
+              "number",
               "string"
             ],
+            "format": "double"
+          },
+          "y": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "AgentflowProblem": {
+        "required": [
+          "code",
+          "message",
+          "nodeId",
+          "edgeId"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "edgeId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "定义中的一项问题；NodeId 与 EdgeId 至多一个有值。\nOne problem in a definition; at most one of NodeId and EdgeId is set."
+      },
+      "AgentflowPublishRequest": {
+        "required": [
+          "agentflowId",
+          "revision"
+        ],
+        "type": "object",
+        "properties": {
+          "agentflowId": {
+            "type": "string",
             "format": "uuid"
           },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "AgentflowRevisionDto": {
+        "required": [
+          "revision",
+          "createTime"
+        ],
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "createTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AgentflowRoutingStrategy": {
+        "enum": [
+          "direct",
+          "fanOut",
+          "switch",
+          "choice"
+        ]
+      },
+      "AgentflowSaveRevisionRequest": {
+        "required": [
+          "agentflowId",
+          "baseRevision",
+          "name",
+          "description",
+          "definition"
+        ],
+        "type": "object",
+        "properties": {
+          "agentflowId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "baseRevision": {
+            "type": "integer",
+            "format": "int32"
+          },
           "name": {
+            "type": "string"
+          },
+          "description": {
             "type": [
               "null",
               "string"
             ]
           },
-          "positionJson": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "instructions": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "configJson": {
-            "type": [
-              "null",
-              "string"
-            ]
+          "definition": {
+            "$ref": "#/components/schemas/AgentflowDefinitionDto"
           }
         }
       },
@@ -10436,45 +11173,58 @@
               "null",
               "string"
             ]
+          },
+          "extra": {
+            "$ref": "#/components/schemas/AgentflowTraceExtra"
           }
         }
       },
-      "AgentflowUpdateRequest": {
+      "AgentflowTraceExtra": {
         "required": [
-          "name",
-          "description",
-          "nodes",
-          "edges"
+          "agentflowRevision"
         ],
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "nodes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentflowNodeRequest"
-            }
-          },
-          "edges": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentflowEdgeRequest"
-            }
-          },
-          "summaryModelProviderId": {
+          "agentflowRevision": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "AgentflowValidateRequest": {
+        "required": [
+          "agentflowId",
+          "name",
+          "definition"
+        ],
+        "type": "object",
+        "properties": {
+          "agentflowId": {
             "type": [
               "null",
               "string"
             ],
             "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/AgentflowDefinitionDto"
+          }
+        }
+      },
+      "AgentflowValidateResponse": {
+        "required": [
+          "problems"
+        ],
+        "type": "object",
+        "properties": {
+          "problems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowProblem"
+            }
           }
         }
       },
@@ -11128,6 +11878,7 @@
       "AgwContentAgwDataContent": {
         "required": [
           "uri",
+          "type",
           "kind",
           "mediaType",
           "data"
@@ -11165,6 +11916,7 @@
       },
       "AgwContentAgwErrorContent": {
         "required": [
+          "type",
           "kind",
           "content"
         ],
@@ -11206,6 +11958,7 @@
       },
       "AgwContentAgwFunctionCallContent": {
         "required": [
+          "type",
           "kind"
         ],
         "properties": {
@@ -11237,6 +11990,7 @@
       },
       "AgwContentAgwFunctionResultContent": {
         "required": [
+          "type",
           "kind"
         ],
         "properties": {
@@ -11268,6 +12022,7 @@
       },
       "AgwContentAgwTextContent": {
         "required": [
+          "type",
           "kind"
         ],
         "properties": {
@@ -11299,6 +12054,7 @@
       },
       "AgwContentAgwTextReasoningContent": {
         "required": [
+          "type",
           "kind"
         ],
         "properties": {
@@ -11332,6 +12088,7 @@
         "required": [
           "uri",
           "mediaType",
+          "type",
           "kind"
         ],
         "properties": {
@@ -11364,6 +12121,7 @@
       },
       "AgwContentAgwUsageContent": {
         "required": [
+          "type",
           "kind"
         ],
         "properties": {
@@ -11506,7 +12264,7 @@
           }
         }
       },
-      "ApiResultOfAgentflow": {
+      "ApiResultOfAgentflowDetailResponse": {
         "required": [
           "code",
           "title"
@@ -11519,7 +12277,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/Agentflow"
+                "$ref": "#/components/schemas/AgentflowDetailResponse"
               }
             ]
           },
@@ -11538,7 +12296,39 @@
           }
         }
       },
-      "ApiResultOfAgentflow[]": {
+      "ApiResultOfAgentflowDto": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentflowDto"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfAgentflowDto[]": {
         "required": [
           "code",
           "title"
@@ -11551,7 +12341,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/Agentflow"
+              "$ref": "#/components/schemas/AgentflowDto"
             }
           },
           "code": {
@@ -11569,7 +12359,7 @@
           }
         }
       },
-      "ApiResultOfAgentflowEdge[]": {
+      "ApiResultOfAgentflowRevisionDto[]": {
         "required": [
           "code",
           "title"
@@ -11582,7 +12372,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/AgentflowEdge"
+              "$ref": "#/components/schemas/AgentflowRevisionDto"
             }
           },
           "code": {
@@ -11600,7 +12390,7 @@
           }
         }
       },
-      "ApiResultOfAgentflowNode[]": {
+      "ApiResultOfAgentflowValidateResponse": {
         "required": [
           "code",
           "title"
@@ -11608,13 +12398,14 @@
         "type": "object",
         "properties": {
           "data": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/AgentflowNode"
-            }
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentflowValidateResponse"
+              }
+            ]
           },
           "code": {
             "type": "integer",
@@ -13300,7 +14091,7 @@
           }
         }
       },
-      "ApiResultOfPagedResultOfAgentflow": {
+      "ApiResultOfPagedResultOfAgentflowDto": {
         "required": [
           "code",
           "title"
@@ -13313,7 +14104,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/PagedResultOfAgentflow"
+                "$ref": "#/components/schemas/PagedResultOfAgentflowDto"
               }
             ]
           },
@@ -18402,7 +19193,7 @@
           }
         }
       },
-      "PagedResultOfAgentflow": {
+      "PagedResultOfAgentflowDto": {
         "required": [
           "items",
           "total",
@@ -18414,7 +19205,7 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Agentflow"
+              "$ref": "#/components/schemas/AgentflowDto"
             }
           },
           "total": {

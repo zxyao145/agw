@@ -1,4 +1,4 @@
-import { getPermissionStatus, type InteractionResponse } from "@agw/execution-core";
+import type { ExecutionStatusEvent, InteractionResponse } from "@agw/execution-core";
 import {
   buildChatTargetOptions,
   createUuidV7,
@@ -30,7 +30,6 @@ import {
   getLatestAgentMode,
   getMessageStreamingScopeId,
   getTurnFinishedStatus,
-  isModeControlMessage,
   isTurnStartMessage,
   isUserTurnMessage,
   markTurnMessage,
@@ -64,7 +63,7 @@ import { type ExecutionReconnectState, MobileExecutionSession } from "./native-e
 
 export type Project = components["schemas"]["ProjectResponse"];
 export type Agent = components["schemas"]["AgentListResponse"];
-export type Agentflow = components["schemas"]["Agentflow"];
+export type Agentflow = components["schemas"]["AgentflowDto"];
 export type AgentSuggestion = components["schemas"]["AgentSuggestionResponse"];
 
 const EMPTY_PROJECTS: Project[] = [];
@@ -291,7 +290,7 @@ function NativeWorkspaceSession({
   const agentflowsQuery = useQuery({
     queryKey: ["mobile", workspaceScope, "agentflows"],
     enabled: Boolean(client),
-    queryFn: async () => (await client!.apiGet("/api/agentflows")) as unknown as Agentflow[],
+    queryFn: () => client!.apiGet("/api/agentflows"),
   });
   const conversationsQueryKey = React.useMemo(
     () => ["mobile", workspaceScope, "conversations", selectedProjectId] as const,
@@ -488,34 +487,31 @@ function NativeWorkspaceSession({
   const agentSuggestions = commandSource.mode === "system" ? commandSource.suggestions : [];
   const supportsAgentMode = agentSuggestions.some((suggestion) => suggestion.text === "/mode_set");
 
+  const applyExecutionStatus = React.useCallback((status: ExecutionStatusEvent) => {
+    if (status.type === "permission-status") {
+      setActivePermissionMode(status.activePermissionMode);
+      if (status.nextPermissionMode) setPermissionModeState(status.nextPermissionMode);
+      setPermissionChangePending(status.permissionChangePending);
+    } else if (status.type === "mode-change-failed") {
+      batcherRef.current?.flush(executionGenerationRef.current);
+      modeChangeGenerationRef.current += 1;
+      setAgentModeState(confirmedAgentModeRef.current);
+      setOperationError(status.message ?? "Failed to change agent mode.");
+    } else if (status.type === "mode-status") {
+      batcherRef.current?.flush(executionGenerationRef.current);
+      confirmedAgentModeRef.current = status.mode;
+      setAgentModeState(status.mode);
+    }
+  }, []);
+
   const applyExecutionMessage = React.useCallback(
     (incoming: AiMessage) => {
       const generation = executionGenerationRef.current;
-      const permissionStatus = getPermissionStatus(incoming);
-      if (permissionStatus) {
-        setActivePermissionMode(permissionStatus.activePermissionMode);
-        if (permissionStatus.nextPermissionMode)
-          setPermissionModeState(permissionStatus.nextPermissionMode);
-        setPermissionChangePending(permissionStatus.permissionChangePending);
-        return;
-      }
-      if (incoming.additionalProperties?.type === "mode-change-failed") {
-        batcherRef.current?.flush(generation);
-        modeChangeGenerationRef.current += 1;
-        setAgentModeState(confirmedAgentModeRef.current);
-        const detail = incoming.contents.find(
-          (content) => typeof content.content === "string" && content.content.trim(),
-        )?.content;
-        setOperationError(typeof detail === "string" ? detail : "Failed to change agent mode.");
-        return;
-      }
-
       const nextAgentMode = getAgentMode(incoming);
       if (nextAgentMode) {
         batcherRef.current?.flush(generation);
         confirmedAgentModeRef.current = nextAgentMode;
         setAgentModeState(nextAgentMode);
-        if (isModeControlMessage(incoming)) return;
       }
 
       const initCommands = getClaudeInitCommands(incoming);
@@ -666,6 +662,9 @@ function NativeWorkspaceSession({
           onMessage: (incoming) => {
             if (executionSessionRef.current === nextSession) applyExecutionMessage(incoming);
           },
+          onStatus: (status) => {
+            if (executionSessionRef.current === nextSession) applyExecutionStatus(status);
+          },
           onClose: () => {
             if (executionSessionRef.current === nextSession) disposeExecutionSession();
           },
@@ -719,6 +718,7 @@ function NativeWorkspaceSession({
     },
     [
       applyExecutionMessage,
+      applyExecutionStatus,
       chatClient,
       disposeExecutionSession,
       workspaceScope,

@@ -80,6 +80,9 @@ internal sealed class ExecutionConnection : IAsyncDisposable
         }
     }
 
+    internal IReadOnlySet<Guid> GetInProcessCheckpointOccurrenceIds() =>
+        Volatile.Read(ref _disposed) == 0 ? _context.GetInProcessCheckpointOccurrenceIds() : new HashSet<Guid>();
+
     /// <summary>
     /// 连接是否仍在执行这个对话的 Turn。查询来自这条连接自己、且它的 Turn 已写出结束消息时不算：它的客户端已收到结果，剩下的释放由下一条命令等待。
     /// Whether the connection still runs a turn of the conversation. When the query comes from this connection itself and its turn has written the finish message, it does not count: its client already has the result, and the next command waits for the remaining release.

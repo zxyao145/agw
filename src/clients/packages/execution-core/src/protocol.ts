@@ -64,6 +64,9 @@ export function buildExecCommand<TInput>(request: ExecutionCommandRequest<TInput
     conversationId: request.conversationId,
     agentId: request.agentId,
     agentType: request.agentType,
+    ...(request.agentflowRevision && request.agentflowRevision > 0
+      ? { agentflowRevision: request.agentflowRevision }
+      : {}),
     ...(request.turnId ? { turnId: request.turnId } : {}),
     stream: request.stream ?? true,
     input: request.input,
@@ -247,9 +250,4 @@ export function getLatestAgentMode(
   }
 
   return fallback;
-}
-
-export function isModeControlMessage(message: ExecutionMessage): boolean {
-  const type = message.additionalProperties?.type;
-  return type === "mode-status" || type === "mode-change-failed";
 }

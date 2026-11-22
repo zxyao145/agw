@@ -10,9 +10,10 @@ internal static class InteractionTestData
         string id,
         string nodeId = "node",
         string? name = null,
-        string mode = "approval",
         string prompt = "Continue?",
-        IReadOnlyList<ChatMessage>? messages = null
+        IReadOnlyList<ChatMessage>? messages = null,
+        IReadOnlyList<WorkflowGateChoice>? choices = null,
+        bool allowResponseText = true
     ) =>
         new()
         {
@@ -23,8 +24,9 @@ internal static class InteractionTestData
                 NodeName = name,
                 ProviderRequestId = id,
             },
-            Mode = mode,
             Prompt = prompt,
+            Choices = choices ?? [new WorkflowGateChoice("choice-1", "Approve")],
+            AllowResponseText = allowResponseText,
             InputPreview = messages?.LastOrDefault()?.Text,
         };
 
@@ -69,7 +71,8 @@ internal static class InteractionTestData
         bool approved,
         string? text = null,
         string scope = "once",
-        JsonElement? data = null
+        JsonElement? data = null,
+        string? choiceId = null
     ) =>
         request switch
         {
@@ -83,6 +86,7 @@ internal static class InteractionTestData
             {
                 InteractionId = request.InteractionId,
                 Approved = approved,
+                ChoiceId = approved ? choiceId ?? "choice-1" : null,
                 ResponseText = text,
             },
             UserInputInteraction => new UserInputResponse

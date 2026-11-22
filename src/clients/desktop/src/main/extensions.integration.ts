@@ -1406,18 +1406,24 @@ async function viewsAndLayout(): Promise<void> {
  */
 async function eventsViewLayout(): Promise<void> {
   type SourceVersion = { id: string; version: number | string };
+  const sourceListPath = "/api/events/sources/list";
+  const { total: initialSourceCount } = await hostApi<{ total: number }>(sourceListPath);
   const sources: SourceVersion[] = [];
   for (let index = 1; index <= 30; index += 1) {
     sources.push(
       await hostSend<SourceVersion>("POST", "/api/events/sources/create", {
-        name: `Layout source ${index}`,
+        name: `webhook.layout-source-${index}`,
         kind: 1,
-        config: { format: "cloudevents", auth: { kind: "BearerToken" } },
-        secret: `layout-token-${index}`,
+        config: { eventTypes: ["layout.source.received"] },
         enabled: true,
       }),
     );
   }
+  const firstPage = await hostApi<{ items: { name: string }[]; total: number }>(sourceListPath);
+  assert.equal(firstPage.total, initialSourceCount + sources.length);
+  const layoutSourcesOnFirstPage = firstPage.items.filter(({ name }) =>
+    name.startsWith("webhook.layout-source-"),
+  ).length;
   const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
   await clickHost('.agw-ribbon [data-entry-id="agw.ribbon.events"]');
   const page = `[...document.querySelectorAll('.agw-main-workspace[data-view-id="agw.events"] h1')].find((item) => item.textContent === "Events")?.closest("section")`;
@@ -1430,13 +1436,13 @@ async function eventsViewLayout(): Promise<void> {
   })()`);
   const pagination = `document.querySelector('.agw-main-workspace [aria-label="Rows per page"]')`;
   await untilHost(
-    `document.querySelectorAll('.agw-main-workspace button[aria-label^="Delete Layout source"]').length === 20`,
+    `document.querySelectorAll('.agw-main-workspace button[aria-label^="Delete webhook.layout-source-"]').length === ${layoutSourcesOnFirstPage}`,
     "the first page of Layout sources",
   );
   const workspaceText = await evalHost<string>(
     `document.querySelector(".agw-main-workspace").textContent`,
   );
-  assert.match(workspaceText, /Showing 1–20 of 30/u);
+  assert.ok(workspaceText.includes(`Showing 1–20 of ${firstPage.total}`));
   assert.equal(await evalHost<boolean>(`Boolean(${pagination})`), true);
 
   host().setZoomFactor(0.75);
@@ -2657,7 +2663,7 @@ async function writeProbe(
       await outcome(() => session.send({ target: { type: "agent", id: ${JSON.stringify(config.agentId)} }, text: "read only" })),
       await outcome(() => session.interrupt()),
       await outcome(() => session.setPermissionMode("fullAccess")),
-      await outcome(() => session.respond({ kind: "workflow-gate", interactionId: "gate", approved: true })),
+      await outcome(() => session.respond({ kind: "workflow-gate", interactionId: "gate", approved: true, choiceId: "continue" })),
     ];
     if (${JSON.stringify(keep)}) {
       const texts = [];
@@ -7105,42 +7111,62 @@ async function darkModeAndExtensionViews(): Promise<void> {
   await chooseTheme("default");
 }
 
-/** 包含五种边线的最小 Agentflow。The smallest Agentflow with all five edge kinds. */
+/** 覆盖分支、等待与人工选择的 Agentflow。An Agentflow covering branches, waiting and a human choice. */
 function themeEdgesAgentflow(): Record<string, unknown> {
-  const node = (nodeId: string, kind: number, relateId: string | null, x: number, y: number) => ({
+  const node = (nodeId: string, kind: string, routingStrategy: string, x: number, y: number) => ({
     nodeId,
     kind,
-    relateId,
+    routingStrategy,
     name: nodeId,
-    positionJson: JSON.stringify({ x, y }),
-    instructions: null,
-    configJson: null,
+    position: { x, y },
   });
-  const edge = (edgeId: string, sourceNodeId: string, targetNodeId: string, kind: number) => ({
+  const edge = (edgeId: string, sourceNodeId: string, targetNodeId: string) => ({
     edgeId,
     sourceNodeId,
     targetNodeId,
-    kind,
     label: null,
-    conditionJson: kind === 3 ? JSON.stringify({ contains: "urgent" }) : null,
-    configJson: kind === 3 ? JSON.stringify({ switchCaseOrder: 0 }) : null,
+    conditions: [],
+    isFanInBarrier: false,
+    isSwitchDefault: false,
+    switchCaseOrder: 0,
+    choiceId: null,
   });
   return {
     name: "Theme edges",
     description: "Desktop theme integration test graph",
-    nodes: [
-      node("input", 10, null, 0, 120),
-      node("agent-a", 0, config.agentId, 320, 0),
-      node("agent-b", 0, config.agentId, 640, 240),
-      node("output", 9, null, 960, 120),
-    ],
-    edges: [
-      edge("e-switch-case", "input", "agent-a", 3),
-      edge("e-switch-default", "input", "agent-b", 4),
-      edge("e-fan-out", "agent-a", "agent-b", 1),
-      edge("e-fan-in", "agent-a", "output", 2),
-      edge("e-direct", "agent-b", "output", 0),
-    ],
+    definition: {
+      nodes: [
+        node("input", "input", "fanOut", 0, 120),
+        {
+          ...node("agent-a", "agent", "switch", 320, 0),
+          relateId: config.agentId,
+          instructions: "",
+        },
+        {
+          ...node("agent-b", "agent", "direct", 640, 300),
+          relateId: config.agentId,
+          instructions: "",
+        },
+        {
+          ...node("gate", "humanGate", "choice", 640, 0),
+          humanPrompt: "Review the result.",
+          choices: [{ choiceId: "continue", label: "Continue" }],
+          allowResponseText: false,
+        },
+        { ...node("output", "output", "direct", 960, 120), enableSummary: false },
+      ],
+      edges: [
+        edge("e-fan-out", "input", "agent-a"),
+        edge("e-direct", "input", "agent-b"),
+        {
+          ...edge("e-switch-case", "agent-a", "gate"),
+          conditions: [{ field: "contains", value: "urgent", path: "" }],
+        },
+        { ...edge("e-switch-default", "agent-a", "agent-b"), isSwitchDefault: true },
+        { ...edge("e-choice", "gate", "output"), choiceId: "continue" },
+        { ...edge("e-wait", "agent-b", "output"), isFanInBarrier: true },
+      ],
+    },
   };
 }
 
@@ -7150,12 +7176,13 @@ const AGENTFLOW_GRAPH = `(() => {
   const markers = [...dialog.querySelectorAll("marker")];
   const edges = Object.fromEntries([...dialog.querySelectorAll(".react-flow__edge")].map((edge) => {
     const path = edge.querySelector("path.react-flow__edge-path");
-    const marker = markers.find((item) => path.getAttribute("marker-end") === "url('#" + item.id + "')");
-    const arrow = getComputedStyle(marker.querySelector("polyline"));
+    const markerId = path.getAttribute("marker-end")?.replace(/[^#]*#|['"\\)]/g, "");
+    const marker = markers.find((item) => item.id === markerId);
+    const arrow = getComputedStyle(marker.querySelector("polyline, path"));
     return [edge.dataset.testid, [getComputedStyle(path).stroke, arrow.stroke, arrow.fill]];
   }));
   const nodes = [...dialog.querySelectorAll(".react-flow__node")].map((node) => [node.dataset.id, node.style.transform, Boolean(node.querySelector(".border-primary"))]);
-  const labels = [...dialog.querySelectorAll(".react-flow__edge-textwrapper")].map((label) => label.textContent);
+  const labels = [...dialog.querySelectorAll(".react-flow__edgelabel-renderer span[title]")].map((label) => label.textContent);
   return { edges, nodes, labels, unsaved: dialog.textContent.includes("Unsaved changes") };
 })()`;
 
@@ -7663,8 +7690,8 @@ async function cssThemes(): Promise<void> {
 }
 
 /**
- * Agentflow 边线：构建器中五种边线与 SVG 箭头使用主题变量，切换主题时一起变化，节点、边线数据、选中状态与未保存修改保持。
- * Agentflow edges: the builder's five edge kinds and their SVG arrowheads use the theme variables and change together
+ * Agentflow 的连线与 SVG 箭头使用主题变量，切换主题时一起变化，节点、连线、选中状态与未保存修改保持。
+ * The editor's edges and SVG arrowheads use the theme variable and change together
  * with the theme, while nodes, edge data, the selection and unsaved changes stay.
  */
 async function agentflowEdgeThemes(): Promise<void> {
@@ -7677,11 +7704,32 @@ async function agentflowEdgeThemes(): Promise<void> {
   );
   await evalHost(`${row}.querySelector('[title="Edit agentflow"]').click(); true`);
   await untilHost(
-    `${OPEN_DIALOG}?.querySelectorAll(".react-flow__edge").length === 5 && ${OPEN_DIALOG}.querySelectorAll("marker polyline").length === 5`,
-    "the five edges in the builder",
+    `${OPEN_DIALOG}?.querySelectorAll(".react-flow__edge").length === 6 && Boolean(${OPEN_DIALOG}.querySelector("marker"))`,
+    "the six edges in the editor",
   );
+  type Graph = {
+    edges: Record<string, [string, string, string]>;
+    nodes: [string, string, boolean][];
+    labels: string[];
+    unsaved: boolean;
+  };
+  const colors = (color: string) =>
+    Object.fromEntries(
+      ["e-fan-out", "e-direct", "e-switch-case", "e-switch-default", "e-choice", "e-wait"].map(
+        (id) => [`rf__edge-${id}`, [color, color, color]],
+      ),
+    );
+  assert.deepEqual((await evalHost<Graph>(AGENTFLOW_GRAPH)).edges, colors("rgb(71, 85, 105)"));
+  await applyAppearanceInPlace({ theme: CONTRAST_THEME });
+  await until(
+    async () =>
+      isDeepStrictEqual((await evalHost<Graph>(AGENTFLOW_GRAPH)).edges, colors("rgb(1, 2, 3)")),
+    "the test theme edge colors",
+  );
+  await applyAppearanceInPlace({ theme: "default" });
   // 拖动 agent-b：选中它并产生未保存修改。Dragging agent-b selects it and makes an unsaved change.
   const node = `${OPEN_DIALOG}.querySelector('.react-flow__node[data-id="agent-b"]')`;
+  await evalHost(`${node}.click(); true`);
   const start = await evalHost<{ x: number; y: number }>(`(() => {
     const rect = ${node}.getBoundingClientRect();
     return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + 12) };
@@ -7704,44 +7752,14 @@ async function agentflowEdgeThemes(): Promise<void> {
     clickCount: 1,
   });
   await untilHost(`${OPEN_DIALOG}.textContent.includes("Unsaved changes")`, "the moved agent-b");
-  // 拖动不会选中节点，点击才会。A drag does not select a node; a click does.
-  const end = { x: start.x + 40, y: start.y + 30 };
-  host().sendInputEvent({ type: "mouseDown", ...end, button: "left", clickCount: 1 });
-  host().sendInputEvent({ type: "mouseUp", ...end, button: "left", clickCount: 1 });
   await untilHost(`Boolean(${node}.querySelector(".border-primary"))`, "the selected agent-b");
-  type Graph = {
-    edges: Record<string, [string, string, string]>;
-    nodes: [string, string, boolean][];
-    labels: string[];
-    unsaved: boolean;
-  };
   const before = await evalHost<Graph>(AGENTFLOW_GRAPH);
-  const colors = (values: Record<string, string>) =>
-    Object.fromEntries(
-      Object.entries(values).map(([id, color]) => [`rf__edge-${id}`, [color, color, color]]),
-    );
-  assert.deepEqual(
-    before.edges,
-    colors({
-      "e-direct": "rgb(71, 85, 105)",
-      "e-fan-out": "rgb(37, 99, 235)",
-      "e-fan-in": "rgb(217, 119, 6)",
-      "e-switch-case": "rgb(124, 58, 237)",
-      "e-switch-default": "rgb(219, 39, 119)",
-    }),
-  );
 
   await applyAppearanceInPlace({ theme: CONTRAST_THEME });
-  const contrast = colors({
-    "e-direct": "rgb(1, 2, 3)",
-    "e-fan-out": "rgb(4, 5, 6)",
-    "e-fan-in": "rgb(7, 8, 9)",
-    "e-switch-case": "rgb(10, 11, 12)",
-    "e-switch-default": "rgb(13, 14, 15)",
-  });
   await until(
-    async () => isDeepStrictEqual((await evalHost<Graph>(AGENTFLOW_GRAPH)).edges, contrast),
-    "the test theme edge colors",
+    async () =>
+      (await evalHost<Graph>(AGENTFLOW_GRAPH)).edges["rf__edge-e-choice"]?.[0] === "rgb(1, 2, 3)",
+    "the test theme choice edge color",
   );
   const after = await evalHost<Graph>(AGENTFLOW_GRAPH);
   assert.deepEqual({ ...after, edges: before.edges }, before);
@@ -7751,9 +7769,7 @@ async function agentflowEdgeThemes(): Promise<void> {
     "the Default edge colors",
   );
   assert.deepEqual(await evalHost<Graph>(AGENTFLOW_GRAPH), before);
-  pass(
-    "the test theme recolors the five Agentflow edges and their arrowheads together while nodes, edge data, the selection and unsaved changes stay",
-  );
+  pass("the test theme recolors Agentflow edges and their arrowheads while retaining editor state");
 
   await pressEscape();
   await untilHost(
@@ -7762,7 +7778,7 @@ async function agentflowEdgeThemes(): Promise<void> {
   );
   await clickText("Discard", `[...document.querySelectorAll('[role="alertdialog"]')].at(-1)`);
   await untilHost(`!${OPEN_DIALOG}`, "the builder to close");
-  await hostSend("DELETE", `/api/agentflows/${created.id}`);
+  await hostSend("DELETE", `/api/agentflows?id=${encodeURIComponent(created.id)}`);
 }
 
 /**

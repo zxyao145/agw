@@ -1,14 +1,18 @@
 using Agw.Infrastructure.Data;
 using Agw.Shared.Configuration;
+using Agw.Tests;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql;
 
 namespace Agw.Infrastructure.Tests;
 
 public sealed class InitialMigrationTests
 {
+    public static bool PostgresEnabled => !string.IsNullOrWhiteSpace(IsolatedTestConnections.Postgres);
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -60,6 +64,10 @@ public sealed class InitialMigrationTests
                 "turn_sequence",
                 "last_event_sequence",
                 "agentflow_checkpoint",
+                "agentflow_revision",
+                "agentflow_block_member",
+                "published_revision",
+                "runtime_version",
                 "external_agent_kind",
                 "additional_directories",
                 "response_schema",
@@ -243,6 +251,99 @@ public sealed class InitialMigrationTests
         Assert.False(await TableExistsAsync(connection, "agent_file_memory", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "project_context", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "project_task_record", cancellationToken));
+    }
+
+    [Fact]
+    public async Task MigrateAsync_SqliteFromPreviousMigration_DeletesAgentflowRowsAndKeepsTurns()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(token);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(
+                connection,
+                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
+            )
+            .UseSnakeCaseNamingConvention();
+        await using var dbContext = new AgwDbContext(options.Options);
+
+        await VerifyAgentflowRevisionUpgradeAsync(dbContext, token);
+    }
+
+    [Fact(SkipUnless = nameof(PostgresEnabled), Skip = "Requires an isolated PostgreSQL test server.")]
+    public async Task MigrateAsync_PostgresFromPreviousMigration_DeletesAgentflowRowsAndKeepsTurns()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var admin = new NpgsqlConnectionStringBuilder(IsolatedTestConnections.Postgres) { Pooling = false };
+        var database = $"agw_agentflow_revision_migration_{Guid.NewGuid():N}";
+        await using var connection = new NpgsqlConnection(admin.ConnectionString);
+        await connection.OpenAsync(token);
+        await using var create = new NpgsqlCommand($"CREATE DATABASE \"{database}\"", connection);
+        await create.ExecuteNonQueryAsync(token);
+        try
+        {
+            var target = new NpgsqlConnectionStringBuilder(admin.ConnectionString) { Database = database };
+            var options = new DbContextOptionsBuilder<AgwDbContext>();
+            AgwDbContextOptionsConfigurator.Configure(options, DatabaseProvider.Postgres, target.ConnectionString);
+            await using var dbContext = new AgwDbContext(options.Options);
+
+            await VerifyAgentflowRevisionUpgradeAsync(dbContext, token);
+        }
+        finally
+        {
+            await using var drop = new NpgsqlCommand($"DROP DATABASE \"{database}\" WITH (FORCE)", connection);
+            await drop.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+    }
+
+    private static async Task VerifyAgentflowRevisionUpgradeAsync(AgwDbContext dbContext, CancellationToken token)
+    {
+        var previous = dbContext
+            .Database.GetMigrations()
+            .Single(name => name.EndsWith("_AddExecutionSteer", StringComparison.Ordinal));
+        await dbContext.GetService<IMigrator>().MigrateAsync(previous, token);
+        var flow = Guid.CreateVersion7();
+        var turn = Guid.CreateVersion7();
+        var conversation = Guid.CreateVersion7();
+        var project = Guid.CreateVersion7();
+        var task = Guid.CreateVersion7();
+        var timestamp = new DateTimeOffset(2026, 11, 21, 12, 0, 0, TimeSpan.Zero);
+        const string checkpoint = "{}";
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO agentflow (id, name, system_prompt, create_time)
+            VALUES ({flow}, 'Legacy workflow', '', {timestamp});
+            INSERT INTO agentflow_node (agentflow_id, node_id, kind, create_time)
+            VALUES ({flow}, 'input', 10, {timestamp});
+            INSERT INTO agentflow_edge (agentflow_id, edge_id, source_node_id, target_node_id, kind, create_time)
+            VALUES ({flow}, 'edge', 'input', 'input', 0, {timestamp});
+            INSERT INTO agentflow_checkpoint (id, source_turn_id, project_id, project_conversation_id, context_id,
+                task_id, agentflow_id, user_id, is_durable, boundary_sequence, definition_fingerprint, markers_json,
+                checkpoint_json, create_time)
+            VALUES ({Guid.CreateVersion7()}, {turn}, {project}, {conversation}, 'context', {task}, {flow},
+                'owner', {false}, 1, 'old', '[]', {checkpoint}, {timestamp});
+            INSERT INTO agentflow_trace (id, start_time_utc, project_id, context_id, task_id, agentflow_id,
+                node_id, node_kind, input, duration_milliseconds, status)
+            VALUES ({Guid.CreateVersion7()}, {timestamp}, {project}, 'context', {task}, {flow}, 'input', 'Input', '', 0, 0);
+            INSERT INTO project_conversation_turn (id, project_conversation_id, target_id, runtime_type, status,
+                input_message_id, first_sequence, step_count, started_at)
+            VALUES ({turn}, {conversation}, {flow}, 'agentflow', 'completed', {Guid.CreateVersion7()}, 1, 0, {timestamp});
+            """,
+            token
+        );
+
+        await dbContext.Database.MigrateAsync(token);
+
+        Assert.False(await dbContext.Agentflows.IgnoreQueryFilters().AnyAsync(token));
+        Assert.False(await dbContext.AgentflowNodes.IgnoreQueryFilters().AnyAsync(token));
+        Assert.False(await dbContext.AgentflowEdges.IgnoreQueryFilters().AnyAsync(token));
+        Assert.False(await dbContext.AgentflowCheckpoints.IgnoreQueryFilters().AnyAsync(token));
+        Assert.False(await dbContext.AgentflowNodeExecutionTraces.IgnoreQueryFilters().AnyAsync(token));
+        var extra = await dbContext
+            .Database.SqlQuery<string>($"SELECT extra AS \"Value\" FROM project_conversation_turn WHERE id = {turn}")
+            .SingleAsync(token);
+        Assert.Equal("{}", extra);
     }
 
     private static async Task<bool> TableExistsAsync(

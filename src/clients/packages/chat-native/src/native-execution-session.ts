@@ -1,4 +1,4 @@
-import type { HumanResponseCommandInput } from "@agw/execution-core";
+import type { ExecutionStatusEvent, HumanResponseCommandInput } from "@agw/execution-core";
 import type { AiMessage } from "@agw/api";
 import type { ChatConversationScope, ChatHttpClient } from "@agw/chat-runtime/chat-http-client";
 import type {
@@ -33,6 +33,7 @@ export type NativeExecutionSessionOptions = {
   client: ChatHttpClient;
   scope: ChatConversationScope;
   onMessage(message: AiMessage): void;
+  onStatus?(status: ExecutionStatusEvent): void;
   onClose?(error: Error): void;
   onReconnecting?(state: ExecutionReconnectState | null): void;
 };
@@ -57,6 +58,7 @@ export class NativeExecutionSession {
     this.options = options;
     this.session = options.client.createExecutionSession(options.scope, {
       onMessage: (message) => this.handleMessage(message),
+      onStatus: (status) => this.options.onStatus?.(status),
       onClose: (error) => {
         const normalized = error ?? new Error("Execution connection closed.");
         this.finishTerminal(null, normalized);

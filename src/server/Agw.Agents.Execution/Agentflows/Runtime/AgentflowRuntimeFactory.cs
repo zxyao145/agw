@@ -2,6 +2,7 @@ using System.Collections.Frozen;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Domain.Topology;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Composition;
@@ -30,7 +31,6 @@ namespace Agw.Agents.Execution.Agentflows.Runtime;
 /// </summary>
 public sealed class AgentflowRuntimeFactory
 {
-    private readonly ILogger<AgentflowRuntimeFactory> _logger;
     private readonly IAgentflowDefinitionReader _definitions;
     private readonly IAgentRuntimeFactory _agentRuntimeFactory;
     private readonly IAgentTurnSummaryService _summaryService;
@@ -41,29 +41,29 @@ public sealed class AgentflowRuntimeFactory
     private readonly IConversationHistoryWriter? _conversationHistoryWriter;
     private readonly IConversationHandoffProvider? _conversationHandoffProvider;
     private readonly ExecutionPermissionService? _permissions;
-    private readonly AgentflowWorkflowCompiler _workflowCompiler = new();
+    private readonly AgentflowWorkflowCompiler _workflowCompiler;
 
     public AgentflowRuntimeFactory(
-        ILogger<AgentflowRuntimeFactory> logger,
         IAgentflowDefinitionReader definitions,
         IAgentRuntimeFactory agentRuntimeFactory,
         IAgentTurnSummaryService summaryService,
         IProviderSessionState providerSessionState,
         IProjectDefaultResolver projectDefaults,
         IProjectRuntimeFacade projects,
+        ILogger<AgentflowWorkflowCompiler> workflowCompilerLogger,
         AgentSessionStateStore? sessionStateStore = null,
         IConversationHistoryWriter? conversationHistoryWriter = null,
         IConversationHandoffProvider? conversationHandoffProvider = null,
         ExecutionPermissionService? permissions = null
     )
     {
-        _logger = logger;
         _definitions = definitions;
         _agentRuntimeFactory = agentRuntimeFactory;
         _summaryService = summaryService;
         _providerSessionState = providerSessionState;
         _projectDefaults = projectDefaults;
         _projects = projects;
+        _workflowCompiler = new AgentflowWorkflowCompiler(workflowCompilerLogger);
         _sessionStateStore = sessionStateStore;
         _conversationHistoryWriter = conversationHistoryWriter;
         _conversationHandoffProvider = conversationHandoffProvider;
@@ -84,9 +84,11 @@ public sealed class AgentflowRuntimeFactory
     internal async Task<AgentflowTurnResources> PrepareTurnAsync(
         AgentflowRuntime runtime,
         ExecutionScope scope,
+        AgentflowRevisionSnapshot? snapshot,
         CancellationToken cancellationToken
     )
     {
+        var pinnedSnapshot = snapshot ?? throw new AgwException(ErrorCodes.DurableExecutionConflict);
         var agentflow =
             await GetVisibleAgentflowAsync(runtime.AgentflowId, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.ResourceNotFound, "The Agentflow was not found.");
@@ -112,7 +114,10 @@ public sealed class AgentflowRuntimeFactory
             agentflow,
             sessionScope,
             new AgentflowExecutionTraceContext(projectId, contextId, runtime.Task.TaskId)
-        );
+        )
+        {
+            Snapshot = pinnedSnapshot,
+        };
     }
 
     internal static AgwUserInput CreateUserInput(string input) =>
@@ -160,30 +165,10 @@ public sealed class AgentflowRuntimeFactory
         return AgwMessageUtil.CreateExecutionInputMessages(input, AgentRuntimeType.Agentflow, agentflowId, handoff);
     }
 
-    public async Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default)
-    {
-        var agentflow = await GetVisibleAgentflowAsync(agentflowId, cancellationToken);
-        if (agentflow == null)
-        {
-            return null;
-        }
-
-        var workflowLease = await CreateAiWorkflow(agentflow, cancellationToken);
-        if (workflowLease == null)
-        {
-            return null;
-        }
-
-        await using (workflowLease)
-        {
-            var mermaidString = WorkflowVisualizer.ToMermaidString(workflowLease.Workflow);
-            _logger.LogInformation("Constructed workflow: {Workflow}", mermaidString);
-            return mermaidString;
-        }
-    }
-
     public async Task<AgentflowWorkflowLease?> CreateAiWorkflow(
         Guid agentflowId,
+        int agentflowRevision,
+        AgentflowRevisionSnapshot snapshot,
         CancellationToken cancellationToken = default
     )
     {
@@ -193,11 +178,13 @@ public sealed class AgentflowRuntimeFactory
             return null;
         }
 
-        return await CreateAiWorkflow(agentflow, cancellationToken);
+        return await CreateAiWorkflow(agentflow, agentflowRevision, snapshot, cancellationToken);
     }
 
     internal async Task<AgentflowWorkflowLease?> CreateAiWorkflow(
         Agentflow agentflow,
+        int agentflowRevision,
+        AgentflowRevisionSnapshot snapshot,
         CancellationToken cancellationToken,
         AgentflowAgentSessionScope? sessionScope = null,
         AgentflowExecutionTraceContext? executionTraceContext = null,
@@ -210,9 +197,9 @@ public sealed class AgentflowRuntimeFactory
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (_permissions != null)
+        if (_permissions != null && ancestors is null)
             ExecutionPermissionService.Validate(
-                await _permissions.GetAsync(AgentRuntimeType.Agentflow, agentflow.Id, cancellationToken),
+                await _permissions.GetAgentflowAsync(agentflow.Id, snapshot, cancellationToken),
                 sessionScope?.PermissionState.Current
             );
         if (ancestors?.Contains(agentflow.Id) == true)
@@ -220,8 +207,13 @@ public sealed class AgentflowRuntimeFactory
             throw new AgwException(ErrorCodes.InvalidParam, $"Nested Agentflow cycle at '{agentflow.Id}'.");
         }
         var path = new HashSet<Guid>(ancestors ?? Enumerable.Empty<Guid>()) { agentflow.Id };
-        var agentflowNodes = await _definitions.ListNodesAsync(agentflow.Id, cancellationToken);
-        var agentflowEdges = await _definitions.ListEdgesAsync(agentflow.Id, cancellationToken);
+        var agentflowNodes = await _definitions.ListNodesAsync(agentflow.Id, agentflowRevision, cancellationToken);
+        var agentflowEdges = await _definitions.ListEdgesAsync(agentflow.Id, agentflowRevision, cancellationToken);
+        var agentflowMembers = await _definitions.ListBlockMembersAsync(
+            agentflow.Id,
+            agentflowRevision,
+            cancellationToken
+        );
         if (agentflowNodes.Count == 0)
         {
             return null;
@@ -276,8 +268,16 @@ public sealed class AgentflowRuntimeFactory
                         return null;
                     }
 
+                    var targetRevision = snapshot.GetTargetRevision(
+                        agentflow.Id,
+                        agentflowRevision,
+                        node.NodeId,
+                        blockMemberId: null
+                    );
                     var flowNode = await CreateAiWorkflow(
                         relatedAgentflow,
+                        targetRevision,
+                        snapshot,
                         cancellationToken,
                         sessionScope,
                         executionTraceContext,
@@ -313,6 +313,90 @@ public sealed class AgentflowRuntimeFactory
                 nodeIdToAgent[node.NodeId] = aiAgent;
             }
 
+            foreach (var member in agentflowMembers)
+            {
+                AIAgent? memberAgent;
+                if (member.Kind == AgentflowNodeKind.Agent)
+                {
+                    var nodeAgent = await _agentRuntimeFactory.CreateAgentflowNodeAgentAsync(
+                        member.RelateId,
+                        sessionScope?.ProjectId,
+                        sessionScope?.ConversationId ?? Guid.Empty,
+                        environmentVariables,
+                        deferHumanInteractions,
+                        cancellationToken: cancellationToken,
+                        permissionMode: sessionScope?.PermissionState.Current,
+                        extensionPins: extensionPins,
+                        acceptedExtensionCapabilities: acceptedExtensionCapabilities,
+                        extensionIds: extensionIds
+                    );
+                    memberAgent = nodeAgent?.Agent;
+                    if (nodeAgent is not null)
+                    {
+                        resources.Add(new AgentflowAgentLifetime(nodeAgent.Agent));
+                        var memberKey = AgentflowBlockMemberKey.Create(member.NodeId, member.MemberId);
+                        nodeEngineKinds[memberKey] = nodeAgent.EngineKind;
+                        if (nodeAgent.SummaryModelProviderId is { } modelProviderId)
+                            nodeResultOptions[memberKey] = new AgentflowNodeResultOptions(
+                                modelProviderId,
+                                nodeAgent.UseStructuredResult
+                            );
+                    }
+                }
+                else if (member.Kind == AgentflowNodeKind.WorkflowAsAgent)
+                {
+                    var relatedAgentflow = await GetVisibleAgentflowAsync(member.RelateId, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (relatedAgentflow is null)
+                    {
+                        await DisposeWorkflowResourcesWithoutThrowingAsync(resources).ConfigureAwait(false);
+                        return null;
+                    }
+
+                    var targetRevision = snapshot.GetTargetRevision(
+                        agentflow.Id,
+                        agentflowRevision,
+                        member.NodeId,
+                        member.MemberId
+                    );
+                    var flowNode = await CreateAiWorkflow(
+                            relatedAgentflow,
+                            targetRevision,
+                            snapshot,
+                            cancellationToken,
+                            sessionScope,
+                            executionTraceContext,
+                            environmentVariables,
+                            deferHumanInteractions,
+                            path,
+                            extensionPins,
+                            acceptedExtensionCapabilities,
+                            extensionIds
+                        )
+                        .ConfigureAwait(false);
+                    if (flowNode is null)
+                    {
+                        await DisposeWorkflowResourcesWithoutThrowingAsync(resources).ConfigureAwait(false);
+                        return null;
+                    }
+
+                    resources.Add(flowNode);
+                    memberAgent = flowNode.Workflow.AsAIAgent(executionEnvironment: InProcessExecution.Lockstep);
+                }
+                else
+                {
+                    continue;
+                }
+
+                if (memberAgent is null)
+                {
+                    await DisposeWorkflowResourcesWithoutThrowingAsync(resources).ConfigureAwait(false);
+                    return null;
+                }
+
+                nodeIdToAgent[AgentflowBlockMemberKey.Create(member.NodeId, member.MemberId)] = memberAgent;
+            }
+
             if (nodeIdToAgent.Count == 0)
             {
                 await DisposeWorkflowResourcesWithoutThrowingAsync(resources).ConfigureAwait(false);
@@ -321,17 +405,14 @@ public sealed class AgentflowRuntimeFactory
 
             var summaryContext =
                 sessionScope != null
-                    ? new AgentflowSummaryContext(
-                        _summaryService,
-                        agentflow.SummaryModelProviderId,
-                        sessionScope.ProjectId,
-                        sessionScope.ContextId
-                    )
+                    ? new AgentflowSummaryContext(_summaryService, sessionScope.ProjectId, sessionScope.ContextId)
                     : null;
-            var workflow = _workflowCompiler.Compile(
+            var compilation = _workflowCompiler.Compile(
                 agentflow,
+                agentflowRevision,
                 orderedNodes,
                 agentflowEdges,
+                agentflowMembers,
                 nodeIdToAgent,
                 sessionScope,
                 executionTraceContext,
@@ -339,7 +420,7 @@ public sealed class AgentflowRuntimeFactory
                 nodeEngineKinds,
                 nodeResultOptions
             );
-            if (workflow == null)
+            if (compilation == null)
             {
                 await DisposeWorkflowResourcesWithoutThrowingAsync(resources).ConfigureAwait(false);
                 return null;
@@ -350,7 +431,14 @@ public sealed class AgentflowRuntimeFactory
                     .Where(node => node.Kind == AgentflowNodeKind.HumanGate)
                     .ToFrozenDictionary(
                         node => node.NodeId,
-                        node => new AgentflowHumanGateNode(node.NodeId, node.Name, node.ConfigJson),
+                        node => new AgentflowHumanGateNode(
+                            node.NodeId,
+                            node.Name,
+                            AgentflowDefinitionJson.ReadOptions<HumanGateOptions>(node)
+                        )
+                        {
+                            NodePath = node.NodeId,
+                        },
                         StringComparer.Ordinal
                     ),
                 agentflowNodes
@@ -362,9 +450,10 @@ public sealed class AgentflowRuntimeFactory
                             AgentflowWorkflowCompiler.ResolveCheckpointName(node)
                         ),
                         StringComparer.Ordinal
-                    )
+                    ),
+                compilation.NodeIdsByExecutorId
             );
-            return new AgentflowWorkflowLease(workflow, resources, metadata);
+            return new AgentflowWorkflowLease(compilation.Workflow, resources, metadata);
         }
         catch
         {
@@ -434,4 +523,7 @@ internal sealed record AgentflowTurnResources(
     Agentflow Agentflow,
     AgentflowAgentSessionScope SessionScope,
     AgentflowExecutionTraceContext TraceContext
-);
+)
+{
+    public required AgentflowRevisionSnapshot Snapshot { get; init; }
+}
