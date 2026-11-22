@@ -1,15 +1,7 @@
 "use client";
 
 import * as React from "react";
-import {
-  Button,
-  Input,
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-  PopoverTrigger,
-} from "@agw/components";
-import { Plus } from "lucide-react";
+import { Input, Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@agw/components";
 
 import type { AgentDto, AgentflowDto, AgentflowNodeKind } from "../../../../types/agentflow";
 import type { NodeReference } from "./agentflow-document";
@@ -77,9 +69,11 @@ export function AgentflowNodeMenu({
     <Popover open={isOpen} onOpenChange={setOpen}>
       {trigger ? <PopoverTrigger asChild>{trigger}</PopoverTrigger> : null}
       {anchorStyle ? (
-        <PopoverAnchor>
-          <span aria-hidden="true" className="absolute h-px w-px" style={anchorStyle} />
-        </PopoverAnchor>
+        <PopoverAnchor
+          aria-hidden="true"
+          className="pointer-events-none absolute h-px w-px"
+          style={anchorStyle}
+        />
       ) : null}
       <PopoverContent side={anchorStyle ? "right" : "bottom"} align="start" className="w-80 p-2">
         <Input
@@ -155,13 +149,6 @@ export function AgentflowNodeMenu({
           ) : null}
         </div>
       </PopoverContent>
-      {!trigger ? (
-        <PopoverTrigger asChild>
-          <Button type="button" size="icon-sm" variant="outline" aria-label="Add node">
-            <Plus className="h-4 w-4" />
-          </Button>
-        </PopoverTrigger>
-      ) : null}
     </Popover>
   );
 }
