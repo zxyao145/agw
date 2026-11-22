@@ -458,7 +458,9 @@ Pi 通过显式加载随应用发布的 `agw-model-provider.mjs` 注册进程内
 
 所有经 `CreateDefinitionAgentAsync` 创建的 Agent 都自动启用上下文压缩，包括前台 System Agent、Agentflow 节点 Agent 和后台 Definition Agent。External Agent 与 Result Summary 使用的一次性 `IChatClient` 不经过这条管线。
 
-每个模型必须配置 `MaxContextWindowTokens` 和 `MaxOutputTokens`，且两者均为正数、输出上限小于上下文窗口。有效输入预算为 `MaxContextWindowTokens - MaxOutputTokens`；`ChatOptions.MaxOutputTokens` 同时使用模型的输出上限。新建、自动发现和默认种子模型的回退值分别为 `256_000` 与 `64_000`，管理员应按模型提供方的真实规格修正。
+每个模型都配置 `MaxContextWindowTokens` 和 `MaxOutputTokens`。两者均为正数，输出上限小于上下文窗口。有效输入预算为 `MaxContextWindowTokens - MaxOutputTokens`，`ChatOptions.MaxOutputTokens` 使用模型的输出上限。通用默认值分别为 `256_000` 与 `64_000`。
+
+通过 `OllamaNative` 获取模型列表时，Agw 从 `/api/ps` 读取已加载模型的上下文窗口。首次导入有测量值的模型时，Agw 采用该窗口，预留四分之一用于输出，输出上限为 64,000 Token。已保存的模型继续使用其配置。普通和流式请求的用量均可记录 Ollama 返回的 `prompt_eval_cached_count`。
 
 运行时使用 `ContextWindowCompactionPipeline` 构建两阶段策略，不调用额外的总结模型：
 
@@ -481,6 +483,10 @@ Anthropic 路径使用 `AnthropicReasoningChatClient` 在响应及流式片段�
 DeepSeek 的 Responses 端点使用 `OpenAiResponsesReasoningChatClient`：普通响应从 `reasoning.content` 读取文本，流式响应沿用 SDK 的 `reasoning_text.delta` 转换，工具续接与历史回放通过原生 reasoning item 写回 `content`。该端点不支持 `summary` 或 `encrypted_content`，因此出站副本只携带可读推理，保留 item ID 与工具调用对应关系，不改写存储中的不透明数据。此投影仅匹配 `api.deepseek.com`；官方 OpenAI、Azure 和自定义 Responses 网关保持 SDK 行为。
 
 Definition Agent 和 Result Summary 通过 Anthropic Messages 发送请求时，都会在请求体顶层设置 `"cache_control": {"type": "ephemeral"}`，使用默认的 5 分钟提示缓存。此设置适用于所有采用该格式的模型和端点。供应商返回的 `cache_creation_input_tokens` 和 `cache_read_input_tokens` 分别记录本次缓存写入与读取的 Token 数。
+
+`OpenAIChatCompletions` 按名称排列 Agw 提供的工具，使相同工具集合具有稳定的请求前缀。在 OpenAI 官方端点，支持缓存路由的早期模型会收到根据固定指令和工具名称生成的 `prompt_cache_key`。调用方指定的键优先。
+
+`OpenAIResponses` 在 OpenAI 官方端点使用 GPT-6.2 及后续系列时，将 Definition Agent 的固定指令和摘要请求的固定指令分别放入各自 `input` 开头的 `developer` 消息。当前请求追加的指令保留在顶层 `instructions`。使用服务端会话续接时沿用 SDK 的指令传递方式。
 
 ### Result Summary
 

@@ -8,7 +8,8 @@ import { Textarea } from "@agw/components";
 
 import { ProviderAuthConfigEditor } from "./provider-auth-config-editor";
 import { ProviderModelsEditor } from "./provider-models-editor";
-import type { ProviderAuthConfigRequest, ProviderModelDto, ProviderType } from "./types";
+import type { ProviderModelOption } from "./provider-models";
+import type { ProviderAuthConfigRequest, ProviderType } from "./types";
 
 const providerTypeOptions: ProviderType[] = [
   "OpenAIChatCompletions",
@@ -19,6 +20,10 @@ const providerTypeOptions: ProviderType[] = [
 
 interface ProviderFormFieldsProps {
   idPrefix: string;
+  modelOptions: ProviderModelOption[];
+  isDiscoveryPending: boolean;
+  fetchModels: () => void;
+  hasApiKey: boolean;
   name: string;
   setName: (value: string) => void;
   endpoint: string;
@@ -29,7 +34,6 @@ interface ProviderFormFieldsProps {
   setDescription: (value: string) => void;
   authConfigs: ProviderAuthConfigRequest[];
   setAuthConfigs: (value: ProviderAuthConfigRequest[]) => void;
-  models: ProviderModelDto[];
   selectedModelNames: string[];
   setSelectedModelNames: (value: string[]) => void;
   modelsLoading: boolean;
@@ -39,6 +43,10 @@ interface ProviderFormFieldsProps {
 
 export function ProviderFormFields({
   idPrefix,
+  modelOptions,
+  isDiscoveryPending,
+  fetchModels,
+  hasApiKey,
   name,
   setName,
   endpoint,
@@ -49,7 +57,6 @@ export function ProviderFormFields({
   setDescription,
   authConfigs,
   setAuthConfigs,
-  models,
   selectedModelNames,
   setSelectedModelNames,
   modelsLoading,
@@ -143,8 +150,10 @@ export function ProviderFormFields({
               idPrefix={idPrefix}
               providerType={providerType}
               endpoint={endpoint}
-              authConfigs={authConfigs}
-              models={models}
+              hasApiKey={hasApiKey}
+              modelOptions={modelOptions}
+              isDiscoveryPending={isDiscoveryPending}
+              fetchModels={fetchModels}
               selectedModelNames={selectedModelNames}
               onSelectedModelNamesChange={setSelectedModelNames}
               isLoading={modelsLoading}

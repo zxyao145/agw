@@ -19666,6 +19666,16 @@
             "items": {
               "type": "string"
             }
+          },
+          "ollamaContextWindows": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
+            }
           }
         }
       },
@@ -19700,6 +19710,16 @@
             "type": "array",
             "items": {
               "type": "string"
+            }
+          },
+          "ollamaContextWindows": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
             }
           }
         }
@@ -19818,6 +19838,16 @@
             ],
             "items": {
               "type": "string"
+            }
+          },
+          "ollamaContextWindows": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
             }
           }
         }

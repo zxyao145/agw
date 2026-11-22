@@ -377,7 +377,7 @@ public sealed class OpenAiReasoningChatClientTests
         public RecordingHandler Handler { get; } = new();
         public IChatClient Client { get; }
 
-        public ClientFixture(string endpoint)
+        public ClientFixture(string endpoint, string? stableInstructions = null)
         {
             var services = new ServiceCollection();
             services.AddHttpClient("reasoning-test").ConfigurePrimaryHttpMessageHandler(() => Handler);
@@ -393,7 +393,13 @@ public sealed class OpenAiReasoningChatClientTests
                     ),
                 }
             ).GetChatClient("thinking-model");
-            Client = OpenAiReasoningChatClient.Create(nativeClient, uri);
+            var reasoningClient = OpenAiReasoningChatClient.Create(nativeClient, uri);
+            Client = OpenAiChatCompletionsPromptCachingChatClient.Create(
+                reasoningClient,
+                uri,
+                "thinking-model",
+                stableInstructions
+            );
         }
 
         public async ValueTask DisposeAsync()

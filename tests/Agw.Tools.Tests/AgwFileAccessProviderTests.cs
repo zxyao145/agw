@@ -1,4 +1,6 @@
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
 using Agw.Shared.Exceptions;
@@ -97,6 +99,367 @@ public sealed class AgwFileAccessProviderTests : IDisposable
         );
 
         Assert.Equal("2\tb\n3\tc\n", ResultText(result));
+    }
+
+    [Fact]
+    public async Task ReadAsync_LargeSingleLine_ReturnsBoundedPagesWithoutBreakingTextUnits()
+    {
+        const int pageContentCharacterLimit = 16 * 1024;
+        var token = TestContext.Current.CancellationToken;
+        var content = string.Concat(
+            new string('界', pageContentCharacterLimit - 2),
+            "😀",
+            "\r\n",
+            new string('界', pageContentCharacterLimit - 3),
+            "\r\nend"
+        );
+        await File.WriteAllTextAsync(Path.Combine(_primary, "x"), content, token);
+
+        var pages = new List<string>();
+        JsonElement? continuation = null;
+        while (true)
+        {
+            var result = continuation is null
+                ? await InvokeAsync(AgwFileAccessProvider.ReadFileToolName, ("fileName", "x"))
+                : await InvokeAsync(
+                    AgwFileAccessProvider.ReadFileToolName,
+                    ("fileName", "x"),
+                    ("continuation", continuation.Value)
+                );
+            var page = ReadPage(result);
+            pages.Add(page.Content);
+            Assert.True(page.Content.Length <= pageContentCharacterLimit);
+            Assert.False(char.IsHighSurrogate(page.Content[^1]));
+            Assert.NotEqual('\r', page.Content[^1]);
+            continuation = page.Continuation;
+            if (continuation is null)
+            {
+                break;
+            }
+        }
+
+        Assert.Equal(4, pages.Count);
+        Assert.True(char.IsLowSurrogate(pages[0][^1]));
+        Assert.Equal("\r\n", pages[1]);
+        Assert.StartsWith(new string('界', pageContentCharacterLimit - 3), pages[2], StringComparison.Ordinal);
+        Assert.Equal("end", pages[3]);
+        Assert.Equal(content, string.Concat(pages));
+    }
+
+    [Theory]
+    [InlineData(65001)]
+    [InlineData(1200)]
+    [InlineData(1201)]
+    [InlineData(12000)]
+    [InlineData(12001)]
+    public async Task ReadAsync_UnicodeBom_PaginatesWideTextAfterSeek(int codePage)
+    {
+        var token = TestContext.Current.CancellationToken;
+        var encoding = Encoding.GetEncoding(codePage);
+        var content = string.Concat(new string('界', 16 * 1024 - 1), "😀尾");
+        var bytes = encoding.GetPreamble().Concat(encoding.GetBytes(content)).ToArray();
+        await File.WriteAllBytesAsync(Path.Combine(_primary, "utf16.txt"), bytes, token);
+
+        var first = ReadPage(await InvokeAsync(AgwFileAccessProvider.ReadFileToolName, ("fileName", "utf16.txt")));
+        Assert.NotNull(first.Continuation);
+        Assert.False(char.IsHighSurrogate(first.Content[^1]));
+        var lastResult = await InvokeAsync(
+            AgwFileAccessProvider.ReadFileToolName,
+            ("fileName", "utf16.txt"),
+            ("continuation", first.Continuation.Value)
+        );
+        var lastJson = Assert.IsType<JsonElement>(lastResult);
+        var last = ReadPage(lastJson);
+
+        Assert.Equal(JsonValueKind.Object, lastJson.ValueKind);
+        Assert.False(
+            lastJson.TryGetProperty("continuation", out var lastContinuation)
+                && lastContinuation.ValueKind != JsonValueKind.Null
+        );
+        Assert.Null(last.Continuation);
+        Assert.Equal(content, string.Concat(first.Content, last.Content));
+    }
+
+    [Theory]
+    [InlineData(65001)]
+    [InlineData(1200)]
+    [InlineData(1201)]
+    [InlineData(12000)]
+    [InlineData(12001)]
+    public async Task ReadAsync_EmbeddedBomAtContinuationBoundary_PreservesCharacter(int codePage)
+    {
+        var token = TestContext.Current.CancellationToken;
+        var content = string.Concat(new string('a', 16 * 1024), "\uFEFFtail");
+        var encoding = Encoding.GetEncoding(codePage);
+        await File.WriteAllTextAsync(Path.Combine(_primary, "embedded-bom.txt"), content, encoding, token);
+
+        var first = ReadPage(
+            await InvokeAsync(AgwFileAccessProvider.ReadFileToolName, ("fileName", "embedded-bom.txt"))
+        );
+        Assert.NotNull(first.Continuation);
+        var lastResult = await InvokeAsync(
+            AgwFileAccessProvider.ReadFileToolName,
+            ("fileName", "embedded-bom.txt"),
+            ("continuation", first.Continuation.Value)
+        );
+        var lastJson = Assert.IsType<JsonElement>(lastResult);
+        var last = ReadPage(lastJson);
+
+        Assert.Equal(JsonValueKind.Object, lastJson.ValueKind);
+        Assert.Equal("\uFEFFtail", last.Content);
+        Assert.Equal(content, string.Concat(first.Content, last.Content));
+    }
+
+    [Fact]
+    public async Task ReadAsync_NormalLinePastRemainingPageBudget_StartsOnNextPage()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var firstLine = new string('a', 16 * 1024 - 100);
+        var nextLine = new string('界', 8 * 1024 + 8);
+        await File.WriteAllTextAsync(
+            Path.Combine(_primary, "normal-lines.txt"),
+            $"{firstLine}\n{nextLine}\r\nend",
+            token
+        );
+
+        var first = ReadPage(
+            await InvokeAsync(AgwFileAccessProvider.ReadFileToolName, ("fileName", "normal-lines.txt"))
+        );
+        Assert.NotNull(first.Continuation);
+        var lastResult = await InvokeAsync(
+            AgwFileAccessProvider.ReadFileToolName,
+            ("fileName", "normal-lines.txt"),
+            ("continuation", first.Continuation.Value)
+        );
+        var lastJson = Assert.IsType<JsonElement>(lastResult);
+        var last = ReadPage(lastJson);
+
+        Assert.Equal($"{firstLine}\n", first.Content);
+        Assert.Equal($"{nextLine}\r\nend", last.Content);
+        Assert.False(
+            lastJson.TryGetProperty("continuation", out var lastContinuation)
+                && lastContinuation.ValueKind != JsonValueKind.Null
+        );
+    }
+
+    [Fact]
+    public async Task ReadAsync_InvalidUtf8_PaginatesUsingDecodedOffsets()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var path = Path.Combine(_primary, "invalid-utf8.txt");
+        var bytes = Encoding
+            .UTF8.GetBytes(new string('a', 1_000))
+            .Concat(new byte[] { 0xFF })
+            .Concat(Encoding.UTF8.GetBytes(new string('b', 16 * 1024)))
+            .ToArray();
+        await File.WriteAllBytesAsync(path, bytes, token);
+        var expected = await File.ReadAllTextAsync(path, token);
+
+        var pages = new List<string>();
+        JsonElement? continuation = null;
+        while (true)
+        {
+            var result = continuation is null
+                ? await InvokeAsync(AgwFileAccessProvider.ReadFileToolName, ("fileName", "invalid-utf8.txt"))
+                : await InvokeAsync(
+                    AgwFileAccessProvider.ReadFileToolName,
+                    ("fileName", "invalid-utf8.txt"),
+                    ("continuation", continuation.Value)
+                );
+            var page = ReadPage(result);
+            pages.Add(page.Content);
+            continuation = page.Continuation;
+            if (continuation is null)
+            {
+                break;
+            }
+        }
+
+        Assert.Equal(expected, string.Concat(pages));
+    }
+
+    [Fact]
+    public async Task ReadAsync_ChangedFile_RejectsStaleContinuation()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await File.WriteAllTextAsync(Path.Combine(_primary, "stale.txt"), new string('x', 16 * 1024 + 1), token);
+        var first = ReadPage(await InvokeAsync(AgwFileAccessProvider.ReadFileToolName, ("fileName", "stale.txt")));
+        Assert.NotNull(first.Continuation);
+        await File.WriteAllTextAsync(Path.Combine(_primary, "stale.txt"), "changed size", token);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await InvokeAsync(
+                AgwFileAccessProvider.ReadFileToolName,
+                ("fileName", "stale.txt"),
+                ("continuation", first.Continuation.Value)
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
+    [Fact]
+    public async Task ReadAsync_ReplacedFileWithSameSizeAndTimestamp_RejectsStaleContinuation()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var path = Path.Combine(_primary, "replaced.txt");
+        var replacementPath = Path.Combine(_primary, "replacement.txt");
+        await File.WriteAllTextAsync(path, new string('x', 16 * 1024 + 1), token);
+        var previousWriteTime = File.GetLastWriteTimeUtc(path);
+        var first = ReadPage(await InvokeAsync(AgwFileAccessProvider.ReadFileToolName, ("fileName", "replaced.txt")));
+        Assert.NotNull(first.Continuation);
+
+        await File.WriteAllTextAsync(replacementPath, new string('y', 16 * 1024 + 1), token);
+        File.SetLastWriteTimeUtc(replacementPath, previousWriteTime);
+        Assert.Equal(previousWriteTime, File.GetLastWriteTimeUtc(replacementPath));
+        File.Move(replacementPath, path, overwrite: true);
+        Assert.Equal(previousWriteTime, File.GetLastWriteTimeUtc(path));
+
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await InvokeAsync(
+                AgwFileAccessProvider.ReadFileToolName,
+                ("fileName", "replaced.txt"),
+                ("continuation", first.Continuation.Value)
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
+    [Fact]
+    public async Task ReadAsync_DeletedFileWithContinuation_RejectsContinuation()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var path = Path.Combine(_primary, "removed.txt");
+        await File.WriteAllTextAsync(path, new string('x', 16 * 1024 + 1), token);
+        var first = ReadPage(await InvokeAsync(AgwFileAccessProvider.ReadFileToolName, ("fileName", "removed.txt")));
+        Assert.NotNull(first.Continuation);
+        File.Delete(path);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await InvokeAsync(
+                AgwFileAccessProvider.ReadFileToolName,
+                ("fileName", "removed.txt"),
+                ("continuation", first.Continuation.Value)
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
+    [Theory]
+    [InlineData("lineNumber", "5")]
+    [InlineData("byteOffset", "1")]
+    [InlineData("characterOffset", "1")]
+    [InlineData("lineHasContent", "true")]
+    [InlineData("codePage", "1200")]
+    public async Task ReadLinesAsync_ChangedContinuationPosition_ThrowsInvalidParam(string field, string value)
+    {
+        var token = TestContext.Current.CancellationToken;
+        const string fileName = "numbered.txt";
+        var content = string.Concat(Enumerable.Range(1, 205).Select(line => $"line-{line:D3}\n"));
+        await File.WriteAllTextAsync(Path.Combine(_primary, fileName), content, token);
+
+        var first = ReadPage(
+            await InvokeAsync(AgwFileAccessProvider.ReadLinesToolName, ("fileName", fileName), ("startLine", 1))
+        );
+        Assert.NotNull(first.Continuation);
+        var continuation = JsonNode.Parse(first.Continuation.Value.GetRawText())!.AsObject();
+        continuation[field] = JsonNode.Parse(value);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await InvokeAsync(
+                AgwFileAccessProvider.ReadLinesToolName,
+                ("fileName", fileName),
+                ("startLine", 1),
+                ("continuation", JsonSerializer.SerializeToElement(continuation))
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
+    [Fact]
+    public async Task ReadLinesAsync_LargeRange_ReturnsNumberedPagesWithinRequestedRange()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var content = string.Concat(Enumerable.Range(1, 205).Select(line => $"line-{line:D3}\r\n"));
+        await File.WriteAllTextAsync(Path.Combine(_primary, "large.txt"), content, token);
+
+        var pages = new List<string>();
+        JsonElement? continuation = null;
+        while (true)
+        {
+            var result = continuation is null
+                ? await InvokeAsync(
+                    AgwFileAccessProvider.ReadLinesToolName,
+                    ("fileName", "large.txt"),
+                    ("startLine", 3),
+                    ("endLine", 205)
+                )
+                : await InvokeAsync(
+                    AgwFileAccessProvider.ReadLinesToolName,
+                    ("fileName", "large.txt"),
+                    ("startLine", 3),
+                    ("endLine", 205),
+                    ("continuation", continuation.Value)
+                );
+            var page = ReadPage(result);
+            pages.Add(page.Content);
+            continuation = page.Continuation;
+            if (continuation is null)
+            {
+                break;
+            }
+        }
+
+        Assert.Equal(2, pages.Count);
+        Assert.Equal(
+            string.Concat(Enumerable.Range(3, 203).Select(line => $"{line}\tline-{line:D3}\r\n")),
+            string.Concat(pages)
+        );
+    }
+
+    [Fact]
+    public async Task ReadLinesAsync_LargeSingleLine_RepeatsNumberPrefixAcrossPages()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var line = string.Concat(new string('界', 16 * 1024 + 20), "😀");
+        await File.WriteAllTextAsync(Path.Combine(_primary, "long-line.txt"), $"{line}\r\nnext\n", token);
+
+        var firstResult = await InvokeAsync(
+            AgwFileAccessProvider.ReadLinesToolName,
+            ("fileName", "long-line.txt"),
+            ("startLine", 1),
+            ("endLine", 2)
+        );
+        var firstJson = Assert.IsType<JsonElement>(firstResult);
+        var first = ReadPage(firstJson);
+        Assert.NotNull(first.Continuation);
+
+        var lastResult = await InvokeAsync(
+            AgwFileAccessProvider.ReadLinesToolName,
+            ("fileName", "long-line.txt"),
+            ("startLine", 1),
+            ("endLine", 2),
+            ("continuation", first.Continuation.Value)
+        );
+        var lastJson = Assert.IsType<JsonElement>(lastResult);
+        var last = ReadPage(lastJson);
+        var terminatorIndex = last.Content.IndexOf("\r\n", 2, StringComparison.Ordinal);
+
+        Assert.Equal(JsonValueKind.Object, firstJson.ValueKind);
+        Assert.Equal(JsonValueKind.Object, lastJson.ValueKind);
+        Assert.False(
+            lastJson.TryGetProperty("continuation", out var lastContinuation)
+                && lastContinuation.ValueKind != JsonValueKind.Null
+        );
+        Assert.StartsWith("1\t", first.Content, StringComparison.Ordinal);
+        Assert.StartsWith("1\t", last.Content, StringComparison.Ordinal);
+        Assert.False(char.IsHighSurrogate(first.Content[^1]));
+        Assert.NotEqual('\r', first.Content[^1]);
+        Assert.Equal(line, first.Content[2..] + last.Content[2..terminatorIndex]);
+        Assert.Equal("2\tnext\n", last.Content[(terminatorIndex + 2)..]);
     }
 
     [Fact]
@@ -311,6 +674,24 @@ public sealed class AgwFileAccessProviderTests : IDisposable
     }
 
     private static string? ResultText(object? result) => Assert.IsType<JsonElement>(result).GetString();
+
+    private static (string Content, JsonElement? Continuation) ReadPage(object? result)
+    {
+        var json = Assert.IsType<JsonElement>(result);
+        if (json.ValueKind == JsonValueKind.String)
+        {
+            return (json.GetString()!, null);
+        }
+
+        Assert.Equal(JsonValueKind.Object, json.ValueKind);
+        json.TryGetProperty("continuation", out var continuation);
+        return (
+            json.GetProperty("content").GetString()!,
+            continuation.ValueKind == JsonValueKind.Undefined || continuation.ValueKind == JsonValueKind.Null
+                ? null
+                : continuation.Clone()
+        );
+    }
 
     private static List<T> ResultList<T>(object? result) =>
         Assert.IsType<JsonElement>(result).Deserialize<List<T>>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!;

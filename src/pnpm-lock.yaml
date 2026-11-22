@@ -1433,6 +1433,10 @@ importers:
       '@agw/integrations':
         specifier: workspace:*
         version: link:../integrations
+    devDependencies:
+      '@agw/test-harness':
+        specifier: workspace:*
+        version: link:../test-harness
 
   clients/packages/server-extensions:
     dependencies:

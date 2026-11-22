@@ -8,6 +8,26 @@ export type ProviderType = components["schemas"]["ProviderType"];
 
 export type ProviderAuthType = "ApiKey";
 
+export type OllamaContextWindows = NonNullable<
+  components["schemas"]["ProviderModelDiscoveryResponse"]["ollamaContextWindows"]
+>;
+
+export type ProviderModelDiscoveryScope = {
+  open: boolean;
+  providerId: string | null;
+  providerType: ProviderType;
+  endpoint: string;
+  apiKey: string | null;
+};
+
+export type ProviderModelDiscoveryMutationVariables = {
+  scope: ProviderModelDiscoveryScope;
+  previous: ProviderModelDiscoveryResponse | undefined;
+};
+
+export type ProviderModelDiscoveryResponse =
+  components["schemas"]["ProviderModelDiscoveryResponse"];
+
 export type ProviderAuthConfigRequest = {
   authType: ProviderAuthType;
   apiKey: string | null;
@@ -30,10 +50,6 @@ export type ProviderUpdateRequest = Omit<
 > & {
   providerType: ProviderType;
   authConfigs: ProviderAuthConfigRequest[];
-  modelNames: string[];
-};
-
-export type ProviderModelDiscoveryResponse = {
   modelNames: string[];
 };
 

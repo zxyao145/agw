@@ -131,6 +131,31 @@ public class SummaryChatClientFactoryTests
         await Assert.ThrowsAsync<ObjectDisposedException>(() => httpClient.GetAsync("api/version", cancellationToken));
     }
 
+    [Fact]
+    public async Task CreateAsync_OllamaConfiguration_ReportsCachedInputTokens()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var server = await OllamaChatClientFactoryTests.LocalOllamaServer.StartAsync(cancellationToken);
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
+        var modelProvider = await SeedModelProviderAsync(
+            dbContext,
+            ProviderType.OllamaNative,
+            $"{server.Address}/ollama",
+            [],
+            cancellationToken
+        );
+        await using var services = new ServiceCollection().AddHttpClient().BuildServiceProvider();
+        var httpClientFactory = services.GetRequiredService<IHttpClientFactory>();
+        var factory = CreateFactory(dbContext, httpClientFactory);
+
+        using var client = await factory.CreateAsync(modelProvider.Id, cancellationToken);
+        var response = await client!.GetResponseAsync([new(ChatRole.User, "7")], cancellationToken: cancellationToken);
+
+        Assert.Equal(7, response.Usage?.CachedInputTokenCount);
+    }
+
     private static async Task<AgwDbContext> CreateDbContextAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken

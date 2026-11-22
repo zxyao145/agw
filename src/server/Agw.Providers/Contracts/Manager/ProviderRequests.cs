@@ -10,7 +10,8 @@ public record ProviderCreateRequest(
     string? Description,
     string Endpoint,
     IReadOnlyList<ProviderAuthConfigRequest>? AuthConfigs,
-    IReadOnlyList<string>? ModelNames = null
+    IReadOnlyList<string>? ModelNames = null,
+    IReadOnlyDictionary<string, int>? OllamaContextWindows = null
 );
 
 public record ProviderUpdateRequest(
@@ -19,9 +20,13 @@ public record ProviderUpdateRequest(
     string? Description,
     string Endpoint,
     IReadOnlyList<ProviderAuthConfigRequest>? AuthConfigs,
-    IReadOnlyList<string>? ModelNames = null
+    IReadOnlyList<string>? ModelNames = null,
+    IReadOnlyDictionary<string, int>? OllamaContextWindows = null
 );
 
 public record ProviderModelDiscoveryRequest(ProviderType ProviderType, string Endpoint, string? ApiKey = null);
 
-public record ProviderModelDiscoveryResponse(IReadOnlyList<string> ModelNames);
+public record ProviderModelDiscoveryResponse(
+    IReadOnlyList<string> ModelNames,
+    IReadOnlyDictionary<string, int>? OllamaContextWindows = null
+);

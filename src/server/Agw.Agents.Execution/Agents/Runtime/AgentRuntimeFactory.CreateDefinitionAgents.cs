@@ -135,8 +135,18 @@ public partial class AgentRuntimeFactory
             var historyProvider = CreateHistoryProvider(EngineKind.Maf, structuredResult: responseFormat != null);
             var chatClient = provider.ProviderType switch
             {
-                ProviderType.OpenAIChatCompletions => CreateOpenAiChatClient(model, provider, authConfig!),
-                ProviderType.OpenAIResponses => CreateOpenAiResponsesChatClient(model, provider, authConfig!),
+                ProviderType.OpenAIChatCompletions => CreateOpenAiChatClient(
+                    model,
+                    provider,
+                    authConfig!,
+                    AgentRuntimeFactoryUtil.BuildInstructions(agentDefinition.SystemPrompt)
+                ),
+                ProviderType.OpenAIResponses => CreateOpenAiResponsesChatClient(
+                    model,
+                    provider,
+                    authConfig!,
+                    AgentRuntimeFactoryUtil.BuildInstructions(agentDefinition.SystemPrompt)
+                ),
                 ProviderType.Anthropic => CreateAnthropicChatClient(model, provider, authConfig!),
                 ProviderType.OllamaNative => _ollamaChatClientFactory.CreateClient(model, provider),
                 _ => throw new AgwException(
@@ -214,7 +224,8 @@ public partial class AgentRuntimeFactory
     private IChatClient CreateOpenAiChatClient(
         ModelProviderModelSnapshot model,
         ModelProviderProviderSnapshot provider,
-        ProviderAuthConfigSnapshot authConfig
+        ProviderAuthConfigSnapshot authConfig,
+        string stableInstructions
     )
     {
         var apiKey = ResolveApiKey(authConfig);
@@ -222,7 +233,13 @@ public partial class AgentRuntimeFactory
         var options = new OpenAIClientOptions { Endpoint = new Uri(provider.Endpoint) };
         var client = new OpenAIClient(credential, options);
         var chatCompletionClient = client.GetChatClient(model.Name);
-        return OpenAiReasoningChatClient.Create(chatCompletionClient, options.Endpoint);
+        var reasoningClient = OpenAiReasoningChatClient.Create(chatCompletionClient, options.Endpoint);
+        return OpenAiChatCompletionsPromptCachingChatClient.Create(
+            reasoningClient,
+            options.Endpoint,
+            model.Name,
+            stableInstructions
+        );
     }
 
     private IChatClient CreateAnthropicChatClient(
@@ -246,7 +263,8 @@ public partial class AgentRuntimeFactory
     private IChatClient CreateOpenAiResponsesChatClient(
         ModelProviderModelSnapshot model,
         ModelProviderProviderSnapshot provider,
-        ProviderAuthConfigSnapshot authConfig
+        ProviderAuthConfigSnapshot authConfig,
+        string stableInstructions
     )
     {
         var apiKey = ResolveApiKey(authConfig);
@@ -254,9 +272,15 @@ public partial class AgentRuntimeFactory
         var options = new OpenAIClientOptions { Endpoint = new Uri(provider.Endpoint) };
         var client = new OpenAIClient(credential, options);
 #pragma warning disable OPENAI001
-        return OpenAiResponsesReasoningChatClient.Create(
+        var responsesChatClient = OpenAiResponsesReasoningChatClient.Create(
             client.GetResponsesClient().AsIChatClient(model.Name),
             options.Endpoint
+        );
+        return OpenAiResponsesPromptCachingChatClient.Create(
+            responsesChatClient,
+            options.Endpoint,
+            model.Name,
+            stableInstructions
         );
 #pragma warning restore OPENAI001
     }

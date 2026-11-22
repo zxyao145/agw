@@ -18,6 +18,13 @@ import {
 } from "@agw/components";
 
 import { ProviderFormFields } from "./provider-form-fields";
+import {
+  findDiscoveryApiKey,
+  getProviderModelOptions,
+  getSelectedOllamaContextWindows,
+  getVisibleSelectedModelNames,
+} from "./provider-models";
+import { useProviderModelDiscovery } from "./use-provider-model-discovery";
 import type {
   ProviderAuthConfigRequest,
   ProviderDto,
@@ -42,6 +49,18 @@ export function EditProviderDialog({ provider, open, onOpenChange }: EditProvide
   const [endpoint, setEndpoint] = React.useState("");
   const [authConfigs, setAuthConfigs] = React.useState<ProviderAuthConfigRequest[]>([]);
   const [selectedModelNames, setSelectedModelNames] = React.useState<string[]>([]);
+  const apiKey = findDiscoveryApiKey(authConfigs);
+  const discoveryScope = React.useMemo(
+    () => ({
+      open,
+      providerId: provider?.id ?? null,
+      providerType,
+      endpoint,
+      apiKey,
+    }),
+    [open, provider?.id, providerType, endpoint, apiKey],
+  );
+  const discovery = useProviderModelDiscovery(discoveryScope);
 
   const modelsQuery = useQuery({
     queryKey: ["models"],
@@ -61,6 +80,10 @@ export function EditProviderDialog({ provider, open, onOpenChange }: EditProvide
     },
     enabled: open && provider !== null,
   });
+  const modelOptions = React.useMemo(
+    () => getProviderModelOptions(modelsQuery.data ?? [], discovery.data, providerType),
+    [discovery.data, modelsQuery.data, providerType],
+  );
 
   React.useEffect(() => {
     if (!open) {
@@ -130,9 +153,17 @@ export function EditProviderDialog({ provider, open, onOpenChange }: EditProvide
   });
 
   const handleUpdate = () => {
-    if (!provider) {
+    if (!provider || !modelDraftReady) {
       return;
     }
+
+    const visibleModelNames = getVisibleSelectedModelNames(selectedModelNames, modelOptions);
+    const ollamaContextWindows = getSelectedOllamaContextWindows(
+      providerType,
+      visibleModelNames,
+      modelsQuery.isSuccess ? modelsQuery.data : undefined,
+      discovery.data?.ollamaContextWindows ?? {},
+    );
 
     updateProviderMutation.mutate({
       name,
@@ -140,7 +171,8 @@ export function EditProviderDialog({ provider, open, onOpenChange }: EditProvide
       endpoint,
       description: description.trim() || null,
       authConfigs: normalizeAuthConfigs(authConfigs),
-      modelNames: selectedModelNames,
+      modelNames: visibleModelNames,
+      ...(ollamaContextWindows ? { ollamaContextWindows } : {}),
     });
   };
 
@@ -204,6 +236,10 @@ export function EditProviderDialog({ provider, open, onOpenChange }: EditProvide
 
           <ProviderFormFields
             idPrefix="edit-provider-"
+            modelOptions={modelOptions}
+            isDiscoveryPending={discovery.isPending}
+            fetchModels={discovery.fetchModels}
+            hasApiKey={apiKey !== null}
             name={name}
             setName={setName}
             endpoint={endpoint}
@@ -214,7 +250,6 @@ export function EditProviderDialog({ provider, open, onOpenChange }: EditProvide
             setDescription={setDescription}
             authConfigs={authConfigs}
             setAuthConfigs={setAuthConfigs}
-            models={modelsQuery.data ?? []}
             selectedModelNames={selectedModelNames}
             setSelectedModelNames={setSelectedModelNames}
             modelsLoading={modelsQuery.isLoading || modelRelationsQuery.isLoading}

@@ -18,6 +18,13 @@ import {
 } from "@agw/components";
 
 import { ProviderFormFields } from "./provider-form-fields";
+import {
+  findDiscoveryApiKey,
+  getProviderModelOptions,
+  getSelectedOllamaContextWindows,
+  getVisibleSelectedModelNames,
+} from "./provider-models";
+import { useProviderModelDiscovery } from "./use-provider-model-discovery";
 import type {
   ProviderAuthConfigRequest,
   ProviderCreateRequest,
@@ -38,12 +45,28 @@ export function CreateProviderDialog({ open, onOpenChange }: CreateProviderDialo
   const [endpoint, setEndpoint] = React.useState("");
   const [authConfigs, setAuthConfigs] = React.useState<ProviderAuthConfigRequest[]>([]);
   const [selectedModelNames, setSelectedModelNames] = React.useState<string[]>([]);
+  const apiKey = findDiscoveryApiKey(authConfigs);
+  const discoveryScope = React.useMemo(
+    () => ({
+      open,
+      providerId: "create",
+      providerType,
+      endpoint,
+      apiKey,
+    }),
+    [open, providerType, endpoint, apiKey],
+  );
+  const discovery = useProviderModelDiscovery(discoveryScope);
 
   const modelsQuery = useQuery({
     queryKey: ["models"],
     queryFn: async () => (await apiGet("/api/models")) as unknown as ProviderModelDto[],
     enabled: open,
   });
+  const modelOptions = React.useMemo(
+    () => getProviderModelOptions(modelsQuery.data ?? [], discovery.data, providerType),
+    [discovery.data, modelsQuery.data, providerType],
+  );
 
   const createProviderMutation = useMutation({
     mutationFn: async (body: ProviderCreateRequest) => {
@@ -69,18 +92,30 @@ export function CreateProviderDialog({ open, onOpenChange }: CreateProviderDialo
     },
   });
 
+  const modelSelectionReady = selectedModelNames.length === 0 || modelsQuery.isSuccess;
   const handleCreate = () => {
+    if (!modelSelectionReady) return;
+    const visibleModelNames = getVisibleSelectedModelNames(selectedModelNames, modelOptions);
+    const ollamaContextWindows = getSelectedOllamaContextWindows(
+      providerType,
+      visibleModelNames,
+      modelsQuery.isSuccess ? modelsQuery.data : undefined,
+      discovery.data?.ollamaContextWindows ?? {},
+    );
+
     createProviderMutation.mutate({
       name,
       providerType,
       endpoint,
       description: description.trim() || null,
       authConfigs: normalizeAuthConfigs(authConfigs),
-      modelNames: selectedModelNames,
+      modelNames: visibleModelNames,
+      ...(ollamaContextWindows ? { ollamaContextWindows } : {}),
     });
   };
 
-  const isDisabled = !name.trim() || !endpoint.trim() || createProviderMutation.isPending;
+  const isDisabled =
+    !name.trim() || !endpoint.trim() || !modelSelectionReady || createProviderMutation.isPending;
 
   return (
     <Dialog
@@ -129,6 +164,10 @@ export function CreateProviderDialog({ open, onOpenChange }: CreateProviderDialo
 
           <ProviderFormFields
             idPrefix="create-provider-"
+            modelOptions={modelOptions}
+            isDiscoveryPending={discovery.isPending}
+            fetchModels={discovery.fetchModels}
+            hasApiKey={apiKey !== null}
             name={name}
             setName={setName}
             endpoint={endpoint}
@@ -139,7 +178,6 @@ export function CreateProviderDialog({ open, onOpenChange }: CreateProviderDialo
             setDescription={setDescription}
             authConfigs={authConfigs}
             setAuthConfigs={setAuthConfigs}
-            models={modelsQuery.data ?? []}
             selectedModelNames={selectedModelNames}
             setSelectedModelNames={setSelectedModelNames}
             modelsLoading={modelsQuery.isLoading}

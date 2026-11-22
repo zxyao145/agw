@@ -73,11 +73,14 @@ public sealed class SummaryChatClientFactory : ISummaryChatClientFactory
         ProviderAuthConfigSnapshot authConfig
     )
     {
-        var client = new OpenAIClient(
-            new ApiKeyCredential(ResolveApiKey(authConfig)),
-            new OpenAIClientOptions { Endpoint = new Uri(configuration.Provider.Endpoint) }
+        var options = new OpenAIClientOptions { Endpoint = new Uri(configuration.Provider.Endpoint) };
+        var client = new OpenAIClient(new ApiKeyCredential(ResolveApiKey(authConfig)), options);
+        return OpenAiChatCompletionsPromptCachingChatClient.Create(
+            client.GetChatClient(configuration.Model.Name).AsIChatClient(),
+            options.Endpoint,
+            configuration.Model.Name,
+            stableInstructions: null
         );
-        return client.GetChatClient(configuration.Model.Name).AsIChatClient();
     }
 
     private static IChatClient CreateOpenAiResponsesClient(
@@ -85,13 +88,19 @@ public sealed class SummaryChatClientFactory : ISummaryChatClientFactory
         ProviderAuthConfigSnapshot authConfig
     )
     {
+        var endpoint = new Uri(configuration.Provider.Endpoint);
         var client = new OpenAIClient(
             new ApiKeyCredential(ResolveApiKey(authConfig)),
-            new OpenAIClientOptions { Endpoint = new Uri(configuration.Provider.Endpoint) }
+            new OpenAIClientOptions { Endpoint = endpoint }
         );
 #pragma warning disable OPENAI001
-        return client.GetResponsesClient().AsIChatClient(configuration.Model.Name);
+        var responsesChatClient = client.GetResponsesClient().AsIChatClient(configuration.Model.Name);
 #pragma warning restore OPENAI001
+        return OpenAiResponsesPromptCachingChatClient.CreateForSummary(
+            responsesChatClient,
+            endpoint,
+            configuration.Model.Name
+        );
     }
 
     private static IChatClient CreateAnthropicClient(
