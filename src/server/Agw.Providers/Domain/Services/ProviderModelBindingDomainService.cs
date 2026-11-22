@@ -55,13 +55,14 @@ public sealed class ProviderModelBindingDomainService
     }
 
     /// <summary>
-    /// <para>按模型名称选择供应商提供的模型：未选中的绑定被解除，所有者缺少的模型以默认 token 上限创建。</para>
-    /// <para>Selects a provider's models by name: unselected bindings are removed and models the owner lacks are created with default token limits.</para>
+    /// <para>按名称更新模型绑定，创建新模型时使用已知的上下文窗口。</para>
+    /// <para>Updates model bindings by name and uses reported context windows when creating new models.</para>
     /// </summary>
     public async Task<ProviderModelSelection> SelectModelsAsync(
         Guid providerId,
         IReadOnlyCollection<ModelProviderRelation> currentRelations,
         IReadOnlyList<string> modelNames,
+        IReadOnlyDictionary<string, int>? initialContextWindows,
         CancellationToken cancellationToken = default
     )
     {
@@ -80,7 +81,7 @@ public sealed class ProviderModelBindingDomainService
         var modelByName = existingModels.ToDictionary(model => model.Name, StringComparer.Ordinal);
         var createdModels = selectedNames
             .Where(modelName => !modelByName.ContainsKey(modelName))
-            .Select(CreateModelWithDefaultLimits)
+            .Select(name => CreateModel(name, initialContextWindows))
             .ToList();
         foreach (var model in createdModels)
         {
@@ -107,15 +108,20 @@ public sealed class ProviderModelBindingDomainService
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
-    private static AgwAiModel CreateModelWithDefaultLimits(string modelName)
+    private static AgwAiModel CreateModel(string modelName, IReadOnlyDictionary<string, int>? initialContextWindows)
     {
+        var contextWindow = AgwAiModel.DefaultMaxContextWindowTokens;
+        var outputLimit = AgwAiModel.DefaultMaxOutputTokens;
+        if (initialContextWindows != null && initialContextWindows.TryGetValue(modelName, out var allocatedWindow))
+        {
+            // 新模型将已分配窗口的四分之一用于输出，最多使用通用输出上限。
+            // Reserve a quarter of the allocated window for output, up to the standard output limit.
+            contextWindow = allocatedWindow;
+            outputLimit = Math.Clamp(allocatedWindow / 4, 1, outputLimit);
+        }
+
         var model = new AgwAiModel { Id = Guid.CreateVersion7() };
-        new AgwAiModelBehavior(model).Define(
-            modelName,
-            null,
-            AgwAiModel.DefaultMaxContextWindowTokens,
-            AgwAiModel.DefaultMaxOutputTokens
-        );
+        new AgwAiModelBehavior(model).Define(modelName, null, contextWindow, outputLimit);
         return model;
     }
 

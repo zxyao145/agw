@@ -1,4 +1,3 @@
-using System.Text;
 using Agw.Files.Abstracts.Dtos;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
@@ -49,7 +48,8 @@ internal sealed class AgwFileAccessProvider : AIContextProvider
           limiting the search with `directory` or `globPattern`. Pass the returned `continuation` to read the next page.
         - To make small edits to an existing file, prefer `file_access_replace` (substring replacement) or
           `file_access_replace_lines` (whole-line replacement) over rewriting the whole file.
-        - Use `file_access_read_lines` with `startLine` and `endLine` to read the code around a match.
+        - Use `file_access_read` for file content and `file_access_read_lines` with `startLine` and `endLine` for a range.
+          Pass any returned continuation back with the same file, range, and directory to read the next page.
         - File paths are relative to the selected Project directory. Omit `directoryId` for the primary directory;
           use a `directoryId` from the Project directory list for an additional directory.
         """;
@@ -105,46 +105,59 @@ internal sealed class AgwFileAccessProvider : AIContextProvider
     }
 
     [Description(
-        "Read the content of a file by name. Returns the file content or a message indicating the file was not found. To edit by 1-based line number afterwards, count lines terminated by \\n, \\r\\n, or a lone \\r; each line keeps its own terminator, and content ending in a terminator has no extra empty line after it."
+        "Read file text with original line endings. A single page returns a string. Larger reads return content and a continuation, up to 200 lines or 16,384 UTF-16 code units per page."
     )]
-    private async Task<string> ReadAsync(
+    private async Task<object> ReadAsync(
         string fileName,
+        [Description("Pass the previous continuation unchanged with the same file and directory.")]
+            FileReadContinuation? continuation = null,
         [Description(DirectoryIdDescription)] string? directoryId = null,
         CancellationToken cancellationToken = default
     )
     {
-        var content = await ResolveStore(directoryId).ReadAsync(fileName, cancellationToken).ConfigureAwait(false);
-        return content ?? $"File '{fileName}' not found.";
+        var page = await ResolveStore(directoryId)
+            .ReadPageAsync(
+                fileName,
+                new ProjectAgentFileReadOptions(1, null, NumberedLines: false),
+                continuation,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return ReadResult(page, fileName, continuation is not null);
     }
 
     [Description(
-        "Read part of a file by 1-based inclusive line number; omit endLine to read to the end of the file, and an endLine past the last line is clamped. Each line is prefixed with its number and a tab; everything after that tab is verbatim, including the line's own terminator, so it can be reused as a file_access_replace_lines new_line. Line numbers are 1-based and count lines terminated by \\n, \\r\\n, or a lone \\r, and content ending in a terminator has no extra empty line after it."
+        "Read a 1-based inclusive line range. Omit endLine to read through EOF. Each line starts with its number and a tab and keeps its CR, LF, or CRLF ending. Pages hold up to 200 lines or 16,384 UTF-16 code units. Remove repeated line numbers before joining long-line fragments for editing."
     )]
-    private async Task<string> ReadLinesAsync(
+    private async Task<object> ReadLinesAsync(
         string fileName,
         int startLine,
         int? endLine = null,
+        [Description("Pass the previous continuation unchanged with the same file, directory and line range.")]
+            FileReadContinuation? continuation = null,
         [Description(DirectoryIdDescription)] string? directoryId = null,
         CancellationToken cancellationToken = default
     )
     {
-        var lines = await ResolveStore(directoryId)
-            .ReadLinesAsync(fileName, startLine, endLine, cancellationToken)
+        var page = await ResolveStore(directoryId)
+            .ReadPageAsync(
+                fileName,
+                new ProjectAgentFileReadOptions(startLine, endLine, NumberedLines: true),
+                continuation,
+                cancellationToken
+            )
             .ConfigureAwait(false);
-        if (lines == null)
+        return ReadResult(page, fileName, continuation is not null);
+    }
+
+    private static object ReadResult(ProjectAgentFileReadPage? page, string fileName, bool continuationRequested)
+    {
+        if (page is null)
         {
             return $"File '{fileName}' not found.";
         }
 
-        // 每行保留自己的结束符，因此结束符同时充当行分隔符。
-        // Each line keeps its terminator, so it doubles as the row separator.
-        var builder = new StringBuilder();
-        for (var index = 0; index < lines.Count; index++)
-        {
-            builder.Append(startLine + index).Append('\t').Append(lines[index]);
-        }
-
-        return builder.ToString();
+        return page.Continuation is not null || continuationRequested ? page : page.Content;
     }
 
     [Description("Delete a file by name.")]

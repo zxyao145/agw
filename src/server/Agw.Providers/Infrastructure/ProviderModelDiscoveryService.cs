@@ -1,9 +1,11 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Agw.Providers.Application;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.Manager;
 using Agw.Shared.Exceptions;
+using Microsoft.Extensions.Logging;
 using OllamaSharp;
 using OllamaSharp.Models.Exceptions;
 
@@ -12,10 +14,15 @@ namespace Agw.Providers.Infrastructure;
 public class ProviderModelDiscoveryService : IProviderModelDiscoveryService
 {
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<ProviderModelDiscoveryService> _logger;
 
-    public ProviderModelDiscoveryService(IHttpClientFactory httpClientFactory)
+    public ProviderModelDiscoveryService(
+        IHttpClientFactory httpClientFactory,
+        ILogger<ProviderModelDiscoveryService> logger
+    )
     {
         _httpClientFactory = httpClientFactory;
+        _logger = logger;
     }
 
     public async Task<ProviderModelDiscoveryResponse> DiscoverAsync(
@@ -147,7 +154,39 @@ public class ProviderModelDiscoveryService : IProviderModelDiscoveryService
                 throw new AgwException(ErrorCodes.ProviderModelDiscoveryFailed);
             }
 
-            return CreateResponse(models.Select(model => model.Name));
+            var catalog = CreateResponse(models.Select(model => model.Name));
+            if (catalog.ModelNames.Count == 0)
+            {
+                return catalog;
+            }
+
+            try
+            {
+                var running =
+                    await client.ListRunningModelsAsync(cancellationToken).ConfigureAwait(false)
+                    ?? throw new AgwException(ErrorCodes.ProviderModelDiscoveryFailed);
+                var windows = running
+                    .Where(model =>
+                        model.ContextLength > 1 && catalog.ModelNames.Contains(model.Name, StringComparer.Ordinal)
+                    )
+                    .GroupBy(model => model.Name, StringComparer.Ordinal)
+                    .ToDictionary(group => group.Key, group => group.Min(model => model.ContextLength));
+                return catalog with { OllamaContextWindows = windows };
+            }
+            catch (HttpRequestException exception)
+                when (exception.StatusCode
+                        is HttpStatusCode.NotFound
+                            or HttpStatusCode.Unauthorized
+                            or HttpStatusCode.MethodNotAllowed
+                            or HttpStatusCode.NotImplemented
+                            or HttpStatusCode.Forbidden
+                )
+            {
+                // 部分 Ollama 网关仅开放模型目录，已加载窗口是可选信息。
+                // Some Ollama gateways expose only the catalog. Loaded context windows are optional.
+                _logger.LogWarning(exception, "Ollama model discovery could not access the running model list");
+                return catalog;
+            }
         }
         catch (AgwException)
         {

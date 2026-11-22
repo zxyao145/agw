@@ -10468,6 +10468,9 @@ export interface components {
       endpoint: string;
       authConfigs: null | components["schemas"]["ProviderAuthConfigRequest"][];
       modelNames?: null | string[];
+      ollamaContextWindows?: null | {
+        [key: string]: number;
+      };
     };
     ProviderModelDiscoveryRequest: {
       providerType: components["schemas"]["ProviderType"];
@@ -10476,6 +10479,9 @@ export interface components {
     };
     ProviderModelDiscoveryResponse: {
       modelNames: string[];
+      ollamaContextWindows?: null | {
+        [key: string]: number;
+      };
     };
     ProviderSessionArchiveRequest: {
       /** Format: uuid */
@@ -10511,6 +10517,9 @@ export interface components {
       endpoint: string;
       authConfigs: null | components["schemas"]["ProviderAuthConfigRequest"][];
       modelNames?: null | string[];
+      ollamaContextWindows?: null | {
+        [key: string]: number;
+      };
     };
     QuickPromptItem: {
       id: string;

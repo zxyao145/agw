@@ -35,7 +35,8 @@ internal sealed class AgwFileReadonlyAccessProvider : AIContextProvider
 
         - Use `file_access_ls` to locate directories. Search for specific names or phrases with `file_access_grep`,
           limiting the search with `directory` or `globPattern`. Pass the returned `continuation` to read the next page.
-        - Use `file_access_read_lines` with `startLine` and `endLine` to read the code around a match.
+        - Use `file_access_read_lines` with `startLine` and `endLine` to read around a match. To continue a paged
+          read, repeat the same arguments with the returned `continuation`.
         - File paths are relative to the selected Project directory. Omit `directoryId` for the primary directory;
           use a `directoryId` from the Project directory list for an additional directory.
         """;

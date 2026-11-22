@@ -1,5 +1,6 @@
 using Agw.Agents.Contracts.Catalog;
 using Agw.Providers.Application.Persistence;
+using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.Manager;
 using Agw.Providers.Domain.Behaviors;
 using Agw.Providers.Domain.Services;
@@ -84,6 +85,7 @@ public class ProviderAppService : IProviderAppService
             provider.Id,
             [],
             request.ModelNames ?? [],
+            request.ProviderType == ProviderType.OllamaNative ? request.OllamaContextWindows : null,
             cancellationToken
         );
         await _dbContext.Providers.AddAsync(provider, cancellationToken);
@@ -127,6 +129,7 @@ public class ProviderAppService : IProviderAppService
                     existing.Id,
                     existing.Models.ToList(),
                     request.ModelNames,
+                    request.ProviderType == ProviderType.OllamaNative ? request.OllamaContextWindows : null,
                     cancellationToken
                 );
 

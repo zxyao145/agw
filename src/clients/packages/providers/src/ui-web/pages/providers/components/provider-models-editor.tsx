@@ -1,11 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useMutation } from "@agw/components/query";
 import { RefreshCw } from "lucide-react";
-import { toast } from "sonner";
 
-import { apiPost } from "@agw/api";
 import { getApiErrorMessage } from "@agw/api";
 import { Badge } from "@agw/components";
 import { Button } from "@agw/components";
@@ -13,24 +10,23 @@ import { Checkbox } from "@agw/components";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@agw/components";
 
 import {
-  findDiscoveryApiKey,
+  getVisibleSelectedModelNames,
   isProviderModelDiscoveryApiKeyRequired,
   isProviderModelDiscoverySupported,
-  mergeProviderModelOptions,
 } from "./provider-models";
-import type {
-  ProviderAuthConfigRequest,
-  ProviderModelDiscoveryResponse,
-  ProviderModelDto,
-  ProviderType,
-} from "./types";
+import type { ProviderModelOption } from "./provider-models";
+import type { ProviderType } from "./types";
+
+const contextWindowFormatter = new Intl.NumberFormat("en-US");
 
 interface ProviderModelsEditorProps {
   idPrefix: string;
   providerType: ProviderType;
   endpoint: string;
-  authConfigs: ProviderAuthConfigRequest[];
-  models: ProviderModelDto[];
+  hasApiKey: boolean;
+  modelOptions: ProviderModelOption[];
+  isDiscoveryPending: boolean;
+  fetchModels: () => void;
   selectedModelNames: string[];
   onSelectedModelNamesChange: (modelNames: string[]) => void;
   isLoading: boolean;
@@ -42,53 +38,32 @@ export function ProviderModelsEditor({
   idPrefix,
   providerType,
   endpoint,
-  authConfigs,
-  models,
+  hasApiKey,
+  modelOptions,
+  isDiscoveryPending,
+  fetchModels,
   selectedModelNames,
   onSelectedModelNamesChange,
   isLoading,
   error,
   onRetry,
 }: ProviderModelsEditorProps) {
-  const [discoveredModelNames, setDiscoveredModelNames] = React.useState<string[]>([]);
-  const apiKey = findDiscoveryApiKey(authConfigs);
   const discoverySupported = isProviderModelDiscoverySupported(providerType);
   const apiKeyRequired = isProviderModelDiscoveryApiKeyRequired(providerType);
-  const modelOptions = React.useMemo(
-    () => mergeProviderModelOptions(models, discoveredModelNames),
-    [models, discoveredModelNames],
+  const visibleSelectedModelNames = React.useMemo(
+    () => getVisibleSelectedModelNames(selectedModelNames, modelOptions),
+    [modelOptions, selectedModelNames],
   );
-  const selectedNames = React.useMemo(() => new Set(selectedModelNames), [selectedModelNames]);
+  const selectedNames = React.useMemo(
+    () => new Set(visibleSelectedModelNames),
+    [visibleSelectedModelNames],
+  );
 
   React.useEffect(() => {
-    setDiscoveredModelNames([]);
-  }, [endpoint, providerType]);
-
-  const discoveryMutation = useMutation({
-    mutationFn: async () => {
-      if (apiKeyRequired && !apiKey) {
-        throw new Error("An enabled ApiKey is required");
-      }
-
-      return (await apiPost("/api/providers/discover-models", {
-        body: {
-          providerType,
-          endpoint,
-          apiKey,
-        },
-      })) as unknown as ProviderModelDiscoveryResponse;
-    },
-    onSuccess: (result) => {
-      setDiscoveredModelNames((current) => [
-        ...current,
-        ...result.modelNames.filter((name) => !current.includes(name)),
-      ]);
-      toast.success(`Discovered ${result.modelNames.length} models`);
-    },
-    onError: (mutationError) => {
-      toast.error(`Model discovery failed: ${getApiErrorMessage(mutationError)}`);
-    },
-  });
+    if (!isLoading && !error && visibleSelectedModelNames.length !== selectedModelNames.length) {
+      onSelectedModelNamesChange(visibleSelectedModelNames);
+    }
+  }, [error, isLoading, onSelectedModelNamesChange, selectedModelNames, visibleSelectedModelNames]);
 
   const toggleModel = (modelName: string, checked: boolean) => {
     const nextNames = new Set(selectedNames);
@@ -101,10 +76,7 @@ export function ProviderModelsEditor({
   };
 
   const discoveryDisabled =
-    !discoverySupported ||
-    !endpoint.trim() ||
-    (apiKeyRequired && !apiKey) ||
-    discoveryMutation.isPending;
+    !discoverySupported || !endpoint.trim() || (apiKeyRequired && !hasApiKey) || isDiscoveryPending;
 
   return (
     <div className="space-y-4">
@@ -124,12 +96,10 @@ export function ProviderModelsEditor({
                 variant="outline"
                 size="sm"
                 disabled={discoveryDisabled}
-                onClick={() => discoveryMutation.mutate()}
+                onClick={fetchModels}
               >
-                <RefreshCw
-                  className={`mr-2 h-4 w-4 ${discoveryMutation.isPending ? "animate-spin" : ""}`}
-                />
-                {discoveryMutation.isPending ? "Fetching..." : "Fetch Models"}
+                <RefreshCw className={`mr-2 h-4 w-4 ${isDiscoveryPending ? "animate-spin" : ""}`} />
+                {isDiscoveryPending ? "Fetching..." : "Fetch Models"}
               </Button>
             </span>
           </TooltipTrigger>
@@ -145,7 +115,7 @@ export function ProviderModelsEditor({
           Model discovery is available only for OpenAI Chat Completions, OpenAI Responses, and
           Ollama.
         </p>
-      ) : apiKeyRequired && !apiKey ? (
+      ) : apiKeyRequired && !hasApiKey ? (
         <p className="text-xs text-muted-foreground">
           Add and enable an ApiKey in Auth Configs before fetching models.
         </p>
@@ -171,7 +141,7 @@ export function ProviderModelsEditor({
       ) : (
         <div className="overflow-hidden rounded-lg border">
           <div className="border-b bg-muted/30 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {selectedModelNames.length} of {modelOptions.length} selected
+            {visibleSelectedModelNames.length} of {modelOptions.length} selected
           </div>
           <div className="max-h-[calc(100vh-260px)] divide-y overflow-y-auto agw-scrollbar">
             {modelOptions.map((model, index) => {
@@ -191,6 +161,11 @@ export function ProviderModelsEditor({
                   {model.isNew ? (
                     <Badge variant="secondary" className="shrink-0">
                       New
+                    </Badge>
+                  ) : null}
+                  {model.contextWindowTokens !== undefined ? (
+                    <Badge variant="outline" className="shrink-0 font-normal tabular-nums">
+                      {contextWindowFormatter.format(model.contextWindowTokens)} token context
                     </Badge>
                   ) : null}
                 </label>

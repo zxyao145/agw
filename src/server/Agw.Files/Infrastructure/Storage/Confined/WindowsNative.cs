@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Agw.Shared.Exceptions;
@@ -43,6 +44,7 @@ internal static partial class WindowsNative
     public const int ERROR_ALREADY_EXISTS = 183;
 
     private const int FileDispositionInfoClass = 4;
+    private const int FileBasicInfoClass = 0;
 
     /// <summary>
     /// ntdll FILE_INFORMATION_CLASS 中的 FileRenameInformation。
@@ -98,6 +100,28 @@ internal static partial class WindowsNative
         public uint NumberOfLinks;
         public uint FileIndexHigh;
         public uint FileIndexLow;
+
+        public readonly long FileIndex => ((long)FileIndexHigh << 32) | FileIndexLow;
+        public readonly long Size => ((long)FileSizeHigh << 32) | FileSizeLow;
+        public readonly long CreationTime => ((long)CreationTimeHigh << 32) | CreationTimeLow;
+        public readonly long LastWriteTime => ((long)LastWriteTimeHigh << 32) | LastWriteTimeLow;
+        public readonly FileIdentity Identity => new(VolumeSerialNumber, FileIndex);
+        public readonly FileVersion Version =>
+            new(Identity, Size, DateTimeOffset.FromFileTime(LastWriteTime).ToUniversalTime());
+    }
+
+    /// <summary>
+    /// FILE_BASIC_INFO 的本机结构，用于读取文件句柄的 ChangeTime。
+    /// The native FILE_BASIC_INFO layout, used to read a file handle's ChangeTime.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileBasicInformation
+    {
+        public long CreationTime;
+        public long LastAccessTime;
+        public long LastWriteTime;
+        public long ChangeTime;
+        public uint FileAttributes;
     }
 
     [LibraryImport("kernel32.dll", EntryPoint = "GetFileInformationByHandle", SetLastError = true)]
@@ -105,6 +129,15 @@ internal static partial class WindowsNative
     private static partial bool GetFileInformationByHandle(
         SafeFileHandle file,
         out ByHandleFileInformation information
+    );
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetFileInformationByHandleEx", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetFileInformationByHandleEx(
+        SafeFileHandle file,
+        int fileInformationClass,
+        out FileBasicInformation information,
+        uint bufferSize
     );
 
     [LibraryImport(
@@ -192,21 +225,48 @@ internal static partial class WindowsNative
     /// Reads the identity (volume serial number and file index), size and modification time of the file behind the
     /// handle through GetFileInformationByHandle.
     /// </summary>
-    public static FileVersion GetFileVersion(SafeFileHandle handle)
+    public static FileVersion GetFileVersion(SafeFileHandle handle) => ReadFileInformation(handle).Version;
+
+    public static string GetReadRevision(SafeFileHandle handle)
+    {
+        var information = ReadFileInformation(handle);
+        var changeTime = ReadFileBasicInformation(handle).ChangeTime;
+        return string.Join(
+            ":",
+            information.Identity.Dev.ToString(CultureInfo.InvariantCulture),
+            information.Identity.Ino.ToString(CultureInfo.InvariantCulture),
+            information.Size.ToString(CultureInfo.InvariantCulture),
+            information.CreationTime.ToString(CultureInfo.InvariantCulture),
+            changeTime.ToString(CultureInfo.InvariantCulture),
+            information.LastWriteTime.ToString(CultureInfo.InvariantCulture)
+        );
+    }
+
+    private static FileBasicInformation ReadFileBasicInformation(SafeFileHandle handle)
+    {
+        if (
+            !GetFileInformationByHandleEx(
+                handle,
+                FileBasicInfoClass,
+                out var information,
+                (uint)Marshal.SizeOf<FileBasicInformation>()
+            )
+        )
+        {
+            throw CreateException(LastError, "GetFileInformationByHandleEx failed");
+        }
+
+        return information;
+    }
+
+    private static ByHandleFileInformation ReadFileInformation(SafeFileHandle handle)
     {
         if (!GetFileInformationByHandle(handle, out var information))
         {
             throw CreateException(LastError, "GetFileInformationByHandle failed");
         }
 
-        var fileIndex = ((long)information.FileIndexHigh << 32) | information.FileIndexLow;
-        var size = ((long)information.FileSizeHigh << 32) | information.FileSizeLow;
-        var lastWriteTime = ((long)information.LastWriteTimeHigh << 32) | information.LastWriteTimeLow;
-        return new FileVersion(
-            new FileIdentity(information.VolumeSerialNumber, fileIndex),
-            size,
-            DateTimeOffset.FromFileTime(lastWriteTime).ToUniversalTime()
-        );
+        return information;
     }
 
     /// <summary>
