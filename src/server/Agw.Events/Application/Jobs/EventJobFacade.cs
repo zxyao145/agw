@@ -4,7 +4,9 @@ using Agw.Auth.Contracts;
 using Agw.Events.Application.Persistence;
 using Agw.Events.Application.Sources;
 using Agw.Events.Contracts;
+using Agw.Events.Domain.Behaviors;
 using Agw.Events.Domain.Services;
+using Agw.Events.Domain.ValueObjects;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Events;
 using Agw.Shared.Data.Entities.Events;
@@ -49,37 +51,12 @@ public sealed class EventJobFacade : IEventJobFacade
     {
         var owner = UserInfoUtil.RequiredUserId;
         var jobId = Guid.CreateVersion7();
-        var sourceId = Guid.CreateVersion7();
-        var config = TimerConfig(jobId, definition);
+        var records = CreateRecords(jobId, owner, definition);
         await using var nameLease = await _applicationLock.AcquireAsync(
             EventSourceNames.LockKey(owner),
             cancellationToken
         );
-        await _nameService.EnsureAvailableAsync(EventSourceNames.ForJobTimer(definition.Name), null, cancellationToken);
-        var source = new EventSource
-        {
-            Id = sourceId,
-            CreateBy = owner,
-            Kind = EventSourceKind.Timer,
-            CeSource = EventSourceNames.CeSource(sourceId),
-            ConfigJson = config,
-            ManagedBy = EventManagedBy.Job,
-            ManagedKey = JobKey(jobId),
-            Version = 1,
-        };
-        var subscription = new EventSubscription
-        {
-            Id = Guid.CreateVersion7(),
-            CreateBy = owner,
-            ManagedBy = EventManagedBy.Job,
-            ManagedKey = JobKey(jobId),
-            SourceIdsJson = JsonSerializer.Serialize(new[] { sourceId }),
-            EventTypesJson = JsonSerializer.Serialize(new[] { FiredType }),
-            PermissionMode = (int)AgentExecutionPermissionMode.FullAccess,
-            Version = 1,
-        };
-        var records = new JobRecords(source, subscription);
-        ApplyDefinition(records, definition);
+        await _nameService.EnsureAvailableAsync(records.Source.Name, null, cancellationToken);
 
         var job = await WriteAsync(
             async token =>
@@ -87,11 +64,11 @@ public sealed class EventJobFacade : IEventJobFacade
                 if (!await _projectLock.TryLockAsync(definition.ProjectId, token))
                     throw new AgwException(ErrorCodes.ResourceNotFound);
 
-                _db.EventSources.Add(source);
-                _db.EventSubscriptions.Add(subscription);
-                if (source.Enabled)
+                _db.EventSources.Add(records.Source);
+                _db.EventSubscriptions.Add(records.Subscription);
+                if (records.Source.Enabled)
                 {
-                    await _timerSchedule.SyncAsync(source, source.Version, token);
+                    await _timerSchedule.SyncAsync(records.Source, records.Source.Version, token);
                 }
                 return await ReadJobAsync(records, token);
             },
@@ -123,11 +100,11 @@ public sealed class EventJobFacade : IEventJobFacade
                     source.Id,
                     token
                 );
-                var scheduleChanged = source.ConfigJson != config || source.Enabled != definition.Enabled;
-                source.ConfigJson = config;
-                ApplyDefinition(records, definition);
+                var previousConfigJson = source.ConfigJson;
+                var enabledChanged = source.Enabled != definition.Enabled;
+                ApplyDefinition(records, definition, config, previousConfigJson);
                 AdvanceVersions(records);
-                if (scheduleChanged)
+                if (enabledChanged || source.ConfigJson != previousConfigJson)
                 {
                     await _timerSchedule.SyncAsync(source, source.Version, token);
                 }
@@ -398,8 +375,7 @@ public sealed class EventJobFacade : IEventJobFacade
 
     private static EventJobDefinition ReadDefinition(JobRecords records)
     {
-        using var document = JsonDocument.Parse(records.Source.ConfigJson);
-        var timer = EventSourceConfigParser.ParseTimer(document.RootElement);
+        var timer = ReadTimer(records.Source.ConfigJson);
         return new EventJobDefinition
         {
             Name = records.Subscription.Name,
@@ -418,23 +394,16 @@ public sealed class EventJobFacade : IEventJobFacade
         };
     }
 
-    private static string TimerConfig(Guid jobId, EventJobDefinition definition)
+    private static EventTimerSourceConfig ReadTimer(string configJson)
+    {
+        using var document = JsonDocument.Parse(configJson);
+        return EventSourceConfigParser.ParseTimer(document.RootElement);
+    }
+
+    private static (string Json, EventTimerInterval? Interval) TimerConfig(Guid jobId, EventJobDefinition definition)
     {
         var schedule = definition.Schedule ?? throw new AgwException(ErrorCodes.InvalidParam);
-        var validName = EventSourceNames.IsValidJobName(definition.Name);
-        var validTarget = Enum.IsDefined(definition.TargetKind);
-        if (!validName)
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "Job name must use lowercase letters, digits, '-' and '.', "
-                    + "begin and end with a letter or digit, and contain no consecutive dots."
-            );
-        }
-        if (!validTarget || string.IsNullOrWhiteSpace(definition.Instructions))
-        {
-            throw new AgwException(ErrorCodes.InvalidParam);
-        }
+        EnsureValidJobDefinition(definition);
         var kind = schedule.Kind;
         const string timeZone = "UTC";
         var template = new { type = FiredType, subject = jobId.ToString("D") };
@@ -469,12 +438,73 @@ public sealed class EventJobFacade : IEventJobFacade
             ),
             _ => throw new AgwException(ErrorCodes.InvalidParam),
         };
-        _ = EventSourceConfigParser.ParseTimer(config);
-        return config.GetRawText();
+        var (_, interval) = EventSourceConfigParser.ParseTimerWithInterval(config);
+        return (config.GetRawText(), interval);
     }
 
-    private static void ApplyDefinition(JobRecords records, EventJobDefinition definition)
+    private static void EnsureValidJobDefinition(EventJobDefinition definition)
     {
+        var validName = EventSourceNames.IsValidJobName(definition.Name);
+        var validTarget = Enum.IsDefined(definition.TargetKind);
+        if (!validName)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "Job name must use lowercase letters, digits, '-' and '.', "
+                    + "begin and end with a letter or digit, and contain no consecutive dots."
+            );
+        }
+        if (!validTarget || string.IsNullOrWhiteSpace(definition.Instructions))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam);
+        }
+    }
+
+    private static JobRecords CreateRecords(Guid jobId, string owner, EventJobDefinition definition)
+    {
+        var sourceId = Guid.CreateVersion7();
+        var jobKey = JobKey(jobId);
+        var source = new EventSource
+        {
+            Id = sourceId,
+            CreateBy = owner,
+            Kind = EventSourceKind.Timer,
+            CeSource = EventSourceNames.CeSource(sourceId),
+            ManagedBy = EventManagedBy.Job,
+            ManagedKey = jobKey,
+            Version = 1,
+        };
+        var subscription = new EventSubscription
+        {
+            Id = Guid.CreateVersion7(),
+            CreateBy = owner,
+            ManagedBy = EventManagedBy.Job,
+            ManagedKey = jobKey,
+            SourceIdsJson = JsonSerializer.Serialize(new[] { sourceId }),
+            EventTypesJson = JsonSerializer.Serialize(new[] { FiredType }),
+            PermissionMode = (int)AgentExecutionPermissionMode.FullAccess,
+            Version = 1,
+        };
+        var records = new JobRecords(source, subscription);
+        ApplyDefinition(records, definition, TimerConfig(jobId, definition), previousConfigJson: null);
+        return records;
+    }
+
+    private static void ApplyDefinition(
+        JobRecords records,
+        EventJobDefinition definition,
+        (string Json, EventTimerInterval? Interval) config,
+        string? previousConfigJson
+    )
+    {
+        if (config.Json != previousConfigJson)
+        {
+            var previousInterval =
+                config.Interval is not null && previousConfigJson is not null
+                    ? ReadTimer(previousConfigJson).Interval
+                    : null;
+            new EventSourceBehavior(records.Source).ConfigureJobTimer(config.Json, config.Interval, previousInterval);
+        }
         records.Source.Name = EventSourceNames.ForJobTimer(definition.Name);
         records.Source.Enabled = definition.Enabled;
         records.Subscription.Name = definition.Name;

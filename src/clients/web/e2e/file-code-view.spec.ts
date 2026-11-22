@@ -3,13 +3,13 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mockChatApi, projectId } from "./chat-api";
 import { DIFF_MODIFIED, DIFF_ORIGINAL, mockFilesApi, SOURCE_TEXT } from "./files-api";
 import {
-  fetchFromStandaloneHost,
   fileProjectTest,
   GUIDE_FILE,
   NOTES_FILE,
   STAGED_FILE,
   WORKING_FILE,
 } from "./standalone-file-project";
+import { fetchFromStandaloneHost } from "./standalone-host";
 
 const SOURCE = '[data-code-view="source"]';
 const DIFF = '[data-code-view="diff"]';

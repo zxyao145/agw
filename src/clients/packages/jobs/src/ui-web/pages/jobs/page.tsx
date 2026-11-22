@@ -37,11 +37,14 @@ import { getApiErrorMessage } from "@agw/api";
 import { formatLocalDateTime } from "@agw/components";
 import { ButtonGroup } from "@agw/components";
 import {
+  formatSavedJobInterval,
   getDeliveryStateLabel,
   getNextRunState,
   getScheduleError,
   isCronValue,
   isPositiveIsoDuration,
+  JOB_INTERVAL_STEP_SECONDS,
+  normalizeJobIntervalInput,
   SCHEDULE_KIND_CRON,
   SCHEDULE_KIND_INTERVAL,
   SCHEDULE_KIND_ONCE,
@@ -66,6 +69,7 @@ type JobFormState = {
   name: string;
   instructions: string;
   schedule: JobSchedule;
+  intervalInput: string | undefined;
   enabled: boolean;
 };
 
@@ -81,7 +85,7 @@ type JobDialogProps = {
   form: JobFormState;
   setForm: React.Dispatch<React.SetStateAction<JobFormState>>;
   projects: ProjectDto[];
-  onSubmit: () => void;
+  onSubmit: (form: JobFormState) => void;
   isSubmitting: boolean;
 };
 
@@ -92,6 +96,7 @@ const jobUpdatePath = "/api/jobs/update";
 const jobEnablePath = "/api/jobs/enable";
 const jobDeletePath = "/api/jobs/delete";
 const DEFAULT_INTERVAL = "PT1M";
+const DEFAULT_INTERVAL_INPUT = formatSavedJobInterval(DEFAULT_INTERVAL);
 const DEFAULT_CRON = "*/1 * * * *";
 
 function createDefaultOnceAt(): string {
@@ -110,6 +115,7 @@ function createDefaultJobFormState(): JobFormState {
     name: "",
     instructions: "",
     schedule: createDefaultSchedule(),
+    intervalInput: undefined,
     enabled: true,
   };
 }
@@ -127,6 +133,7 @@ function createEditFormState(job: JobDto): JobFormState {
       interval: job.schedule.interval,
       cron: job.schedule.cron,
     },
+    intervalInput: undefined,
     enabled: job.enabled,
   };
 }
@@ -366,19 +373,19 @@ export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) 
     }
   };
 
-  const submitCreate = () => {
+  const submitCreate = (form: JobFormState) => {
     try {
-      createMutation.mutate(buildJobRequest(createForm));
+      createMutation.mutate(buildJobRequest(form));
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     }
   };
 
-  const submitEdit = () => {
+  const submitEdit = (form: JobFormState) => {
     if (!editingJob) return;
 
     try {
-      updateMutation.mutate({ ...buildJobRequest(editForm), id: editingJob.id });
+      updateMutation.mutate({ ...buildJobRequest(form), id: editingJob.id });
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     }
@@ -673,13 +680,33 @@ function JobDialog({
   const isOnceSchedule = form.schedule.kind === SCHEDULE_KIND_ONCE;
   const isIntervalSchedule = form.schedule.kind === SCHEDULE_KIND_INTERVAL;
   const isCronSchedule = form.schedule.kind === SCHEDULE_KIND_CRON;
-  const scheduleError = getScheduleError(form.schedule);
+  const { intervalInput } = form;
+  const storedIntervalInput = isIntervalSchedule
+    ? formatSavedJobInterval(form.schedule.interval)
+    : "";
+  const intervalInputChanged =
+    isIntervalSchedule && intervalInput !== undefined && intervalInput !== storedIntervalInput;
+  const normalizedInterval = intervalInputChanged ? normalizeJobIntervalInput(intervalInput) : null;
+  const submitSchedule =
+    intervalInputChanged && normalizedInterval?.value !== storedIntervalInput
+      ? { kind: SCHEDULE_KIND_INTERVAL, interval: normalizedInterval?.isoDuration }
+      : form.schedule;
+  const scheduleError = getScheduleError(submitSchedule);
   const targetError =
     form.targetKind === null || !form.agentId ? "Select an execution target." : null;
   const instructionsError = form.instructions.trim() ? null : "Instructions are required.";
   const nameError = getJobNameError(form.name.trim());
   const [isAdvanced, setIsAdvanced] = React.useState(false);
   const [showValidation, setShowValidation] = React.useState(false);
+
+  const applyIntervalAdjustment = () => {
+    if (!normalizedInterval?.adjusted) return;
+
+    setForm((current) => ({ ...current, intervalInput: normalizedInterval.value }));
+    toast.warning(
+      `总时长必须是 ${JOB_INTERVAL_STEP_SECONDS} 秒的整数倍，最短为 ${JOB_INTERVAL_STEP_SECONDS} 秒`,
+    );
+  };
 
   React.useEffect(() => {
     if (!open) {
@@ -813,6 +840,7 @@ function JobDialog({
                 setForm((current) => ({
                   ...current,
                   schedule: { kind },
+                  intervalInput: undefined,
                 }))
               }
             >
@@ -854,25 +882,28 @@ function JobDialog({
               <Input
                 id={`${mode}-schedule-value`}
                 value={
-                  isIntervalSchedule ? (form.schedule.interval ?? "") : (form.schedule.cron ?? "")
+                  isIntervalSchedule
+                    ? (intervalInput ?? storedIntervalInput)
+                    : (form.schedule.cron ?? "")
                 }
-                placeholder={isIntervalSchedule ? DEFAULT_INTERVAL : DEFAULT_CRON}
+                placeholder={isIntervalSchedule ? DEFAULT_INTERVAL_INPUT : DEFAULT_CRON}
                 aria-invalid={scheduleError !== null}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    schedule: isIntervalSchedule
-                      ? { kind: SCHEDULE_KIND_INTERVAL, interval: event.target.value }
-                      : { kind: SCHEDULE_KIND_CRON, cron: event.target.value },
-                  }))
-                }
+                onBlur={isIntervalSchedule ? applyIntervalAdjustment : undefined}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setForm((current) =>
+                    isIntervalSchedule
+                      ? { ...current, intervalInput: value }
+                      : { ...current, schedule: { kind: SCHEDULE_KIND_CRON, cron: value } },
+                  );
+                }}
               />
               {scheduleError ? (
                 <p className="text-xs text-destructive">{scheduleError}</p>
               ) : (
                 <p className="text-xs text-muted-foreground">
                   {isIntervalSchedule
-                    ? "Use a positive ISO 8601 duration such as PT1M."
+                    ? `Use HH:mm:ss. Minimum and increment are ${JOB_INTERVAL_STEP_SECONDS} seconds.`
                     : "Use a standard five-field cron expression such as */1 * * * *."}
                 </p>
               )}
@@ -978,7 +1009,8 @@ function JobDialog({
             type="button"
             onClick={() => {
               setShowValidation(true);
-              onSubmit();
+              applyIntervalAdjustment();
+              onSubmit({ ...form, schedule: submitSchedule });
             }}
             disabled={isSubmitting || scheduleError !== null || nameError !== null}
           >

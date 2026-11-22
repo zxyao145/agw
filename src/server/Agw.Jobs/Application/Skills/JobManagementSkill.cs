@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Agw.Events.Contracts;
 using Agw.Shared.Contracts.Events;
 using Microsoft.Agents.AI;
 
@@ -38,7 +39,8 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
             All schedules are evaluated in UTC.
 
             - Once: set kind to `Once` and `at` to an RFC 3339 timestamp, for example `2026-08-01T09:00:00Z`. A time that is not in the future runs once immediately.
-            - Interval: set kind to `Interval` and `interval` to a positive ISO 8601 duration, for example `PT15M`.
+            - Interval: set kind to `Interval` and `interval` to a positive ISO 8601 duration, for example `PT1M30S`.
+              Use a multiple of {EventJobSchedule.IntervalStepSeconds} seconds.
             - Cron: set kind to `Cron` and `cron` to a standard five-field cron expression, for example `0 9 * * 1-5`.
 
             targetKind values are `Agent` and `Agentflow`.
