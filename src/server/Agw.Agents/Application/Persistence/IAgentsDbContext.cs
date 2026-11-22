@@ -16,6 +16,8 @@ public interface IAgentsDbContext : IModuleDbContext
 
     DbSet<Agent> Agents { get; }
 
+    DbSet<AgentA2AEndpoint> AgentA2AEndpoints { get; }
+
     DbSet<AgentConnectionRelation> AgentConnectionRelations { get; }
 
     DbSet<AgentMcpServerRelation> AgentMcpToolServers { get; }

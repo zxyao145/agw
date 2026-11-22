@@ -24,4 +24,20 @@ public sealed class AgentExtraSettingsTests
             ErrorCodes.InvalidAgentExtraSettings.Code,
             Assert.Throws<AgwException>(() => AgentExtraSettings.Normalize(input)).Code
         );
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("{}")]
+    [InlineData(" { } ")]
+    public void OmitEmptyObject_MissingOrEmptyObject_ReturnsNull(string? extra) =>
+        Assert.Null(AgentExtraSettings.OmitEmptyObject(extra));
+
+    [Theory]
+    [InlineData("{\"model\":\"custom\"}")]
+    [InlineData("[]")]
+    [InlineData("not-json")]
+    public void OmitEmptyObject_CustomOrInvalidValue_PreservesInput(string extra) =>
+        Assert.Equal(extra, AgentExtraSettings.OmitEmptyObject(extra));
 }

@@ -399,6 +399,58 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.ToTable("agent", (string)null);
                 });
 
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentA2AEndpoint", b =>
+                {
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("agent_id");
+
+                    b.Property<string>("CardUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("card_url");
+
+                    b.Property<string>("Credentials")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasColumnName("credentials")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.Property<string>("Extra")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasColumnName("extra")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.Property<Guid>("InterfaceRevision")
+                        .HasColumnType("uuid")
+                        .HasColumnName("interface_revision");
+
+                    b.Property<string>("InterfaceUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("interface_url");
+
+                    b.Property<string>("ProtocolBinding")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("protocol_binding");
+
+                    b.Property<bool>("Streaming")
+                        .HasColumnType("boolean")
+                        .HasColumnName("streaming");
+
+                    b.HasKey("AgentId")
+                        .HasName("pk_agent_a2a_endpoint");
+
+                    b.ToTable("agent_a2a_endpoint", (string)null);
+                });
+
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentConnectionRelation", b =>
                 {
                     b.Property<Guid>("AgentId")
@@ -3731,6 +3783,18 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.Navigation("ModelProvider");
                 });
 
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentA2AEndpoint", b =>
+                {
+                    b.HasOne("Agw.Shared.Data.Entities.Agents.Agent", "Agent")
+                        .WithOne("A2AEndpoint")
+                        .HasForeignKey("Agw.Shared.Data.Entities.Agents.AgentA2AEndpoint", "AgentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_agent_a2a_endpoint_agent_agent_id");
+
+                    b.Navigation("Agent");
+                });
+
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentConnectionRelation", b =>
                 {
                     b.HasOne("Agw.Shared.Data.Entities.Agents.Agent", "Agent")
@@ -4017,6 +4081,8 @@ namespace Agw.Migrations.Postgres.Migrations
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.Agent", b =>
                 {
+                    b.Navigation("A2AEndpoint");
+
                     b.Navigation("AgentConnectionRelations");
 
                     b.Navigation("AgentMcpToolServers");

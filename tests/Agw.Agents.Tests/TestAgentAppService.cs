@@ -1,3 +1,4 @@
+using Agw.Agents.Application.A2A;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Domain.Services;
@@ -6,18 +7,24 @@ using Agw.Integrations.Contracts.References;
 using Agw.Providers.Contracts.References;
 using Agw.Shared.Coordination;
 using Agw.Skills.Contracts.References;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Agents.Tests;
 
 internal static class TestAgentAppService
 {
+    private static readonly ServiceProvider CardServices = A2A.A2AAgentCardClientTests.CreateServices();
+    internal static IA2AAgentCardClient CardClient => CardServices.GetRequiredService<IA2AAgentCardClient>();
+
     public static AgentAppService Create(
         IAgentsDbContext dbContext,
         IConnectionReferenceFacade connectionReferences,
         IModelProviderReferenceFacade modelProviderReferences,
         ISkillReferenceFacade skillReferences,
         IUserInfoService userInfoService,
-        IAgentDeletionCoordinator deletionCoordinator
+        IAgentDeletionCoordinator deletionCoordinator,
+        IA2AAgentCardClient? cardClient = null,
+        TimeProvider? timeProvider = null
     )
     {
         var definitions = new AgentDefinitionRepository(dbContext, userInfoService);
@@ -29,7 +36,9 @@ internal static class TestAgentAppService
             skillReferences,
             userInfoService,
             deletionCoordinator,
-            InMemoryApplicationLock.Shared
+            InMemoryApplicationLock.Shared,
+            cardClient ?? CardClient,
+            timeProvider ?? TimeProvider.System
         );
     }
 }

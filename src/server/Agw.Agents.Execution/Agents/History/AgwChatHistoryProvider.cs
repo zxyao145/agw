@@ -71,6 +71,7 @@ internal sealed class AgwChatHistoryProvider : ChatHistoryProvider
                 EngineKind.ClaudeCode => static () => new ClaudeMessageAdapter(),
                 EngineKind.Codex => static () => new CodexMessageAdapter(),
                 EngineKind.Pi => static () => new PiMessageAdapter(),
+                EngineKind.A2A => static () => new A2AMessageAdapter(),
                 _ => static () => new ModelMessageAdapter(),
             },
             tracksSteps: engine == EngineKind.Maf,

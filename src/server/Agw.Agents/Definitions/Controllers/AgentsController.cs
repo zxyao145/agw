@@ -1,5 +1,6 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
+using Agw.Agents.Definitions.Domain.Rules;
 using Agw.Agents.ExternalAgents;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
@@ -74,7 +75,7 @@ public class AgentsController : ControllerBase
     public IActionResult GetExternalOptions()
     {
         return ApiResult.Ok(
-            ExternalAgentDefaults
+            ExternalAgentRules
                 .SupportedKinds.Select(kind => new ExternalAgentOptionResponse(
                     kind,
                     ExternalAgentDefaults.GetDisplayName(kind),
@@ -111,9 +112,13 @@ public class AgentsController : ControllerBase
 
         var created = await _agentAppService.CreateAgentAsync(
             agent,
-            request.McpToolServerIds,
-            request.SkillIds,
-            request.ConnectionIds,
+            new AgentCreateCommand
+            {
+                McpToolServerIds = request.McpToolServerIds,
+                SkillIds = request.SkillIds,
+                ConnectionIds = request.ConnectionIds,
+                A2AEndpoint = request.A2AEndpoint?.ToInput(),
+            },
             cancellationToken
         );
         return created == null
@@ -134,6 +139,26 @@ public class AgentsController : ControllerBase
         return updated == null
             ? ErrorCodes.ResourceNotFound.ToApiResult()
             : ApiResult.Ok(AgentResponse.FromDomain(updated));
+    }
+
+    [HttpPost("a2a-card/preview")]
+    [ProducesApiResult(typeof(A2ACardPreviewResponse))]
+    public async Task<IActionResult> PreviewA2ACardAsync(
+        [FromBody] A2ACardPreviewRequest request,
+        CancellationToken cancellationToken = default
+    ) => ApiResult.Ok(await _agentAppService.PreviewA2ACardAsync(request, cancellationToken));
+
+    [HttpPost("a2a-card/refresh")]
+    [ProducesApiResult(typeof(AgentResponse))]
+    public async Task<IActionResult> RefreshA2ACardAsync(
+        [FromBody] A2ACardRefreshRequest request,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var agent = await _agentAppService.RefreshA2ACardAsync(request.AgentId, cancellationToken);
+        return agent is null
+            ? ErrorCodes.ResourceNotFound.ToApiResult()
+            : ApiResult.Ok(AgentResponse.FromDomain(agent));
     }
 
     [HttpPut("enabled")]

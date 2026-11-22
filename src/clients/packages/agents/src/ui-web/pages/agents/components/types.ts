@@ -1,4 +1,5 @@
-export type { AgentDto } from "../../../../types/agentflow";
+export type { A2AEndpointDto, AgentDto } from "../../../../types/agentflow";
+import type { components } from "@agw/api";
 import type { ToolValueObject } from "@agw/tools";
 
 export const AgentType = {
@@ -13,9 +14,13 @@ export const ExternalAgentKind = {
   ClaudeCode: 1,
   Codex: 2,
   Pi: 3,
+  A2A: 4,
 } as const;
 
 export type ExternalAgentKind = (typeof ExternalAgentKind)[keyof typeof ExternalAgentKind];
+
+export type A2AOriginCredentialsRequest = components["schemas"]["A2AOriginCredentialsRequest"];
+export type A2AEndpointRequest = components["schemas"]["A2AEndpointRequest"];
 
 export interface ExternalAgentOptionDto {
   kind: ExternalAgentKind;
@@ -41,6 +46,7 @@ export interface AgentCreateRequest {
   externalAgentKind: ExternalAgentKind;
   extra: string | null;
   responseSchema: string | null;
+  a2aEndpoint?: A2AEndpointRequest;
 }
 
 export interface SystemAgentUpdateRequest {
@@ -66,6 +72,7 @@ export interface ExternalAgentUpdateRequest {
   extra?: string | null;
   environmentVariables?: Record<string, string> | null;
   responseSchema?: string | null;
+  a2aEndpoint?: A2AEndpointRequest;
 }
 
 export type AgentUpdateRequest = SystemAgentUpdateRequest | ExternalAgentUpdateRequest;

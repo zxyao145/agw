@@ -10,8 +10,8 @@ using Xunit;
 namespace Agw.Host.Tests;
 
 /// <summary>
-/// <para>通用 schema 规则按 DTO 声明的可空性决定 required，Host 不需要知道任何模块 DTO 的字段。</para>
-/// <para>The generic schema rule derives required from DTO nullability; Host knows no module DTO fields.</para>
+/// <para>验证 OpenAPI schema 中的必填属性和可空类型。</para>
+/// <para>Verifies required properties and nullable values in the OpenAPI schema.</para>
 /// </summary>
 public sealed class OpenApiSchemaTransformerTests
 {
@@ -41,6 +41,29 @@ public sealed class OpenApiSchemaTransformerTests
     }
 
     [Fact]
+    public async Task A2AOriginCredentialsRequest_HeaderValues_AllowNull()
+    {
+        var schemas = await GenerateSchemasAsync();
+
+        var types = schemas
+            .GetProperty("A2AOriginCredentialsRequest")
+            .GetProperty("properties")
+            .GetProperty("headers")
+            .GetProperty("additionalProperties")
+            .GetProperty("type")
+            .EnumerateArray()
+            .Select(type => type.GetString())
+            .ToArray();
+        Assert.Contains("null", types);
+        Assert.Contains("string", types);
+        Assert.False(schemas.GetProperty("A2AEndpointRequest").TryGetProperty("required", out _));
+        Assert.Contains(
+            schemas.GetProperty("A2ACardPreviewRequest").GetProperty("required").EnumerateArray(),
+            property => property.GetString() == "cardUrl"
+        );
+    }
+
+    [Fact]
     public async Task AgentCreateRequest_RequiredFollowsDeclaredNullability()
     {
         var schemas = await GenerateSchemasAsync();
@@ -65,7 +88,11 @@ public sealed class OpenApiSchemaTransformerTests
         builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(AgentsController).Assembly);
         builder.Services.AddEndpointsApiExplorer();
-        builder.Services.AddOpenApi(options => options.AddSchemaTransformer<AgwOpenApiSchemaTransformer>());
+        builder.Services.AddOpenApi(options =>
+        {
+            options.AddSchemaTransformer<AgwOpenApiSchemaTransformer>();
+            options.AddSchemaTransformer<A2ACredentialsSchemaTransformer>();
+        });
         await using var app = builder.Build();
         app.MapControllers();
         app.MapPost("/notification-answer", (NotificationAnswerRequest request) => request);

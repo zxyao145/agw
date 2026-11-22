@@ -19,7 +19,8 @@ public sealed class ExternalProviderSessionBindings
         _logger = logger;
     }
 
-    internal static bool UsesProviderSessionBinding(Agent agent) => EngineKinds.Resolve(agent) is not EngineKind.Maf;
+    internal static bool UsesProviderSessionBinding(Agent agent) =>
+        EngineKinds.UsesProviderSessionBinding(EngineKinds.Resolve(agent));
 
     /// <summary>
     /// 读取绑定组当前生效的 provider session ID，作为新 Runtime 的持久化绑定快照；不使用 provider session 绑定的 Agent 返回 null。

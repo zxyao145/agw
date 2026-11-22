@@ -8,6 +8,8 @@ export interface BaseDto {
   updateTime?: string | null;
 }
 
+export type A2AEndpointDto = components["schemas"]["A2AEndpointDto"];
+
 export interface AgentDto extends BaseDto {
   id: string;
   displayName: string;
@@ -21,7 +23,8 @@ export interface AgentDto extends BaseDto {
   description: string;
   tools: ToolValueObject[];
   type: 0 | 1;
-  externalAgentKind: 0 | 1 | 2 | 3;
+  externalAgentKind: 0 | 1 | 2 | 3 | 4;
+  a2aEndpoint?: A2AEndpointDto | null;
   extra?: string | null;
   responseSchema?: string | null;
   resultFormat?: components["schemas"]["AgentResponse"]["resultFormat"];

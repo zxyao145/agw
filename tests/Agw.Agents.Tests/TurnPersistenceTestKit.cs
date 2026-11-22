@@ -504,7 +504,9 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
             skillReferences,
             currentUser,
             new AgentDeletionCoordinator(context, applicationLock),
-            applicationLock
+            applicationLock,
+            TestAgentAppService.CardClient,
+            TimeProvider.System
         );
     }
 

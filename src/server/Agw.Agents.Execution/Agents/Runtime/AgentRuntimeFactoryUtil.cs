@@ -1,3 +1,4 @@
+using Agw.Files.Abstracts;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
@@ -35,6 +36,22 @@ public static class AgentRuntimeFactoryUtil
             .ToList();
 
         return workspace;
+    }
+
+    internal static async Task ValidateWorkspaceAsync(
+        IProjectWorkspaceAccess workspaceAccess,
+        ProjectWorkspaceSnapshot workspace,
+        CancellationToken cancellationToken
+    )
+    {
+        await workspaceAccess
+            .ValidateAsync(
+                [workspace.Workspace, .. workspace.AdditionalDirectories.Select(static directory => directory.Path)],
+                creatingProjectId: null,
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
+        ProjectWorkspacePaths.EnsureAvailable(workspace);
     }
 
     public static IReadOnlyDictionary<string, string> MergeEnvironmentVariables(

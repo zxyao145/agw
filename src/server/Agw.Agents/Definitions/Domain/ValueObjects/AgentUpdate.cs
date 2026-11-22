@@ -1,3 +1,4 @@
+using Agw.Agents.Definitions.Domain.Rules;
 using Agw.Shared.Tooling;
 
 namespace Agw.Agents.Definitions.Domain.ValueObjects;
@@ -21,6 +22,7 @@ public enum AgentUpdateField
     EnableSummary,
     SummaryModelProviderId,
     ResponseSchema,
+    A2AEndpoint,
 }
 
 /// <summary>
@@ -52,4 +54,6 @@ public sealed record AgentUpdate
     public Guid? SummaryModelProviderId { get; init; }
 
     public string? ResponseSchema { get; init; }
+
+    public A2AEndpointInput? A2AEndpoint { get; init; }
 }

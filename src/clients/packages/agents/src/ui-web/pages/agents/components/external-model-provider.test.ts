@@ -52,6 +52,18 @@ test("clearing a selection is valid even while options are unavailable", () => {
   }
 });
 
+test("an unused model provider selection does not block an A2A endpoint", () => {
+  assert.equal(
+    getExternalModelProviderError(
+      ExternalAgentKind.A2A,
+      "previous-selection",
+      undefined,
+      undefined,
+    ),
+    null,
+  );
+});
+
 test("missing, loading, and incompatible selections are explicitly rejected", () => {
   assert.match(
     getExternalModelProviderError(ExternalAgentKind.Pi, "deleted", models, options)!,

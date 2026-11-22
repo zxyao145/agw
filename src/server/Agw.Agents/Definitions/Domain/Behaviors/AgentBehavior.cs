@@ -1,3 +1,4 @@
+using Agw.Agents.Definitions.Domain.Rules;
 using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Domain.Rules;
@@ -22,19 +23,28 @@ public sealed class AgentBehavior
 
     private readonly Agent _agent;
 
+    private bool UsesA2AEndpoint => ExternalAgentRules.UsesA2AEndpoint(_agent);
+
     public AgentBehavior(Agent agent)
     {
         ArgumentNullException.ThrowIfNull(agent);
         _agent = agent;
     }
 
-    public void PrepareForCreate()
+    public void PrepareForCreate(A2AEndpointInput? a2aEndpoint = null)
     {
         var agent = _agent;
 
         EnsureToolsAreValid(agent.Tools);
         EnsureResponseSchemaSupported(agent.ExternalAgentKind, agent.ResponseSchema);
         EnsureAgentKindIsValid(agent);
+        EnsureA2AEndpointInput(a2aEndpoint);
+        if (UsesA2AEndpoint)
+        {
+            EnsureA2ASettings(agent.ModelProviderId, agent.Extra, agent.EnvironmentVariables, agent.ResponseSchema);
+            agent.Extra = A2AEndpointRules.EmptyExtra;
+        }
+
         EnsureModelProviderIsPresentWhenRequired(agent);
         NormalizeEnvironmentVariables(agent);
         agent.Id = agent.Id == Guid.Empty ? Guid.CreateVersion7() : agent.Id;
@@ -48,6 +58,16 @@ public sealed class AgentBehavior
     public void EnsureUpdateAllowed(AgentUpdate update)
     {
         ArgumentNullException.ThrowIfNull(update);
+        if (update.SpecifiedFields.Contains(AgentUpdateField.A2AEndpoint))
+        {
+            EnsureA2AEndpointInput(update.A2AEndpoint);
+        }
+
+        if (UsesA2AEndpoint)
+        {
+            EnsureA2ASettings(update.ModelProviderId, update.Extra, update.EnvironmentVariables, update.ResponseSchema);
+        }
+
         if (_agent.Type == AgentType.External)
         {
             EnsureExternalUpdateAllowed(update);
@@ -81,6 +101,10 @@ public sealed class AgentBehavior
         if (existing.Type == AgentType.External)
         {
             ApplyExternalUpdate(existing, update);
+            if (UsesA2AEndpoint)
+            {
+                existing.Extra = A2AEndpointRules.EmptyExtra;
+            }
         }
         else
         {
@@ -98,6 +122,67 @@ public sealed class AgentBehavior
     /// <para>A System agent update replaces its MCP server, skill and connection bindings; an External agent update leaves bindings unchanged.</para>
     /// </summary>
     public bool UpdatesResourceBindings() => _agent.Type == AgentType.System;
+
+    public A2AEndpointInput? ResolveA2AEndpointInput(A2AEndpointInput? input) =>
+        input is { CardUrl: null } ? input with { CardUrl = _agent.A2AEndpoint?.CardUrl } : input;
+
+    public void EnsureA2AEndpointInput(A2AEndpointInput? input)
+    {
+        if (UsesA2AEndpoint != (input is not null))
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                UsesA2AEndpoint ? "A2A agents require an endpoint." : "Only A2A agents can specify an A2A endpoint."
+            );
+        }
+    }
+
+    public void SetA2AEndpoint(A2AEndpointSnapshot snapshot)
+    {
+        var changed = _agent.A2AEndpoint is not { } current || InterfaceChanged(current, snapshot.Interface);
+        var endpoint = _agent.A2AEndpoint ??= new AgentA2AEndpoint { AgentId = _agent.Id, Extra = snapshot.Extra };
+        endpoint.CardUrl = snapshot.CardUrl;
+        endpoint.Credentials = snapshot.Credentials;
+        endpoint.InterfaceUrl = snapshot.Interface.Url;
+        endpoint.ProtocolBinding = snapshot.Interface.ProtocolBinding;
+        if (changed)
+        {
+            endpoint.InterfaceRevision = Guid.CreateVersion7();
+        }
+        endpoint.Streaming = snapshot.Streaming;
+        endpoint.Extra = snapshot.Extra;
+    }
+
+    private static bool InterfaceChanged(AgentA2AEndpoint endpoint, A2ASelectedInterface selected)
+    {
+        var previous = new Uri(endpoint.InterfaceUrl);
+        var current = new Uri(selected.Url);
+        return endpoint.ProtocolBinding != selected.ProtocolBinding
+            || A2AEndpointRules.NormalizeOrigin(previous) != A2AEndpointRules.NormalizeOrigin(current)
+            || previous.PathAndQuery != current.PathAndQuery;
+    }
+
+    private static void EnsureA2ASettings(
+        Guid? modelProviderId,
+        string? extra,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        string? responseSchema
+    )
+    {
+        var hasExtraSettings = !string.IsNullOrWhiteSpace(extra) && extra != A2AEndpointRules.EmptyExtra;
+        var hasUnsupportedSettings =
+            modelProviderId is not null
+            || hasExtraSettings
+            || environmentVariables is { Count: > 0 }
+            || responseSchema is not null;
+        if (hasUnsupportedSettings)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "A2A agents do not support modelProviderId, extra settings, environmentVariables, or responseSchema."
+            );
+        }
+    }
 
     public void RetainVisibleRelations(IReadOnlySet<Guid> visibleSkillIds, IReadOnlySet<Guid> visibleConnectionIds)
     {
@@ -261,10 +346,7 @@ public sealed class AgentBehavior
             throw new AgwException(ErrorCodes.InvalidParam, "System agents cannot specify an external agent kind.");
         }
 
-        if (
-            agent.Type == AgentType.External
-            && agent.ExternalAgentKind is not EngineKind.ClaudeCode and not EngineKind.Codex and not EngineKind.Pi
-        )
+        if (agent.Type == AgentType.External && !ExternalAgentRules.SupportedKinds.Contains(agent.ExternalAgentKind))
         {
             throw new AgwException(ErrorCodes.InvalidParam, "External agents require a supported external agent kind.");
         }

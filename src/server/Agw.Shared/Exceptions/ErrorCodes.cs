@@ -918,6 +918,31 @@ public static class ErrorCodes
         "The Git remote operation failed.",
         HttpStatusCode.BadGateway
     );
+    public static readonly ErrorCode A2AAgentCardFetchFailed = new(
+        502_0008,
+        "Failed to fetch the A2A agent card.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode A2AAgentCardInvalid = new(
+        502_0009,
+        "The A2A agent card is invalid or declares no supported interface.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode A2ARemoteAgentRequestFailed = new(
+        502_0010,
+        "The remote A2A agent request failed.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode A2ARemoteAgentUnauthorized = new(
+        502_0011,
+        "The remote A2A agent rejected the configured credentials.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode A2ARemoteTaskFailed = new(
+        502_0012,
+        "The remote A2A task did not complete.",
+        HttpStatusCode.BadGateway
+    );
 
     public static readonly ErrorCode DurableExecutionUnavailable = new(
         503_0001,
@@ -928,5 +953,11 @@ public static class ErrorCodes
         503_0002,
         "Server initialization is incomplete or authentication state is unavailable.",
         HttpStatusCode.ServiceUnavailable
+    );
+
+    public static readonly ErrorCode A2ARemoteAgentTimeout = new(
+        504_0001,
+        "The remote A2A agent did not respond in time.",
+        HttpStatusCode.GatewayTimeout
     );
 }

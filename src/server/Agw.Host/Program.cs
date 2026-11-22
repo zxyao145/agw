@@ -222,12 +222,7 @@ public static class AgwHostApplication
                     options.InvalidModelStateResponseFactory = context =>
                         ApiResult.BadRequest(context.ModelState, code: ErrorCodes.InvalidParam.Code);
                 });
-                builder.Services.AddEndpointsApiExplorer();
-                builder.Services.AddOpenApi(options =>
-                {
-                    options.AddSchemaTransformer<AgwOpenApiSchemaTransformer>();
-                    options.AddDocumentTransformer<ExtensionOpenApiDocumentTransformer>();
-                });
+                ConfigureOpenApi(builder.Services);
             }
             builder.Services.AddApiResult();
             builder.Services.AddHttpClient();
@@ -532,6 +527,17 @@ public static class AgwHostApplication
         {
             Log.CloseAndFlush();
         }
+    }
+
+    private static void ConfigureOpenApi(IServiceCollection services)
+    {
+        services.AddEndpointsApiExplorer();
+        services.AddOpenApi(options =>
+        {
+            options.AddSchemaTransformer<AgwOpenApiSchemaTransformer>();
+            options.AddSchemaTransformer<A2ACredentialsSchemaTransformer>();
+            options.AddDocumentTransformer<ExtensionOpenApiDocumentTransformer>();
+        });
     }
 
     private static Logger CreateLogger(

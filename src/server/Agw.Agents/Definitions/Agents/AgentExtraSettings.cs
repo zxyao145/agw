@@ -25,4 +25,24 @@ public static class AgentExtraSettings
 
         throw new AgwException(ErrorCodes.InvalidAgentExtraSettings);
     }
+
+    public static string? OmitEmptyObject(string? extra)
+    {
+        if (string.IsNullOrWhiteSpace(extra))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(extra);
+            var root = document.RootElement;
+            var isEmpty = root.ValueKind == JsonValueKind.Object && !root.EnumerateObject().Any();
+            return isEmpty ? null : extra;
+        }
+        catch (JsonException)
+        {
+            return extra;
+        }
+    }
 }

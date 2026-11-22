@@ -1,3 +1,4 @@
+using Agw.Agents.Definitions.Domain.Rules;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 
@@ -21,9 +22,17 @@ internal static class EngineKinds
     /// </summary>
     public static EngineKind Resolve(AgentType type, EngineKind persistedKind) =>
         type == AgentType.System ? EngineKind.Maf
-        : persistedKind is EngineKind.ClaudeCode or EngineKind.Codex or EngineKind.Pi ? persistedKind
+        : ExternalAgentRules.SupportedKinds.Contains(persistedKind) ? persistedKind
         : throw new AgwException(
             ErrorCodes.UnsupportedAgentType,
             $"External Agent kind '{persistedKind}' is not supported."
         );
+
+    public static bool RequiresWorkspace(EngineKind? kind) => !ExternalAgentRules.UsesA2AEndpoint(kind);
+
+    public static bool UsesProviderSessionBinding(EngineKind kind) =>
+        kind is EngineKind.ClaudeCode or EngineKind.Codex or EngineKind.Pi;
+
+    public static bool UsesSdkSession(EngineKind kind) =>
+        kind == EngineKind.Maf || ExternalAgentRules.UsesA2AEndpoint(kind);
 }

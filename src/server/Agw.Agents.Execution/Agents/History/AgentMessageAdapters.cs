@@ -208,6 +208,11 @@ internal sealed class PiMessageAdapter : ModelMessageAdapter
     protected override bool IsExternalEngine => true;
 }
 
+internal sealed class A2AMessageAdapter : ModelMessageAdapter
+{
+    protected override bool IsExternalEngine => true;
+}
+
 /// <summary>
 /// Codex 的消息适配：按 item 划分消息边界，Turn 事件不进入历史。
 /// Message adapter of Codex: item IDs bound messages, and turn events stay out of history.

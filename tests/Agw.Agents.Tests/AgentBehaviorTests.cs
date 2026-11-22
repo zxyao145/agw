@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Agw.Agents.Definitions.Domain.Behaviors;
+using Agw.Agents.Definitions.Domain.Rules;
 using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
@@ -9,6 +11,139 @@ namespace Agw.Agents.Tests;
 public class AgentBehaviorTests
 {
     private static readonly DateTimeOffset UtcNow = new(2026, 7, 13, 9, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public void PrepareForCreate_A2AWithoutEndpoint_ThrowsInvalidParam()
+    {
+        var behavior = new AgentBehavior(new Agent { Type = AgentType.External, ExternalAgentKind = EngineKind.A2A });
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, Assert.Throws<AgwException>(() => behavior.PrepareForCreate()).Code);
+    }
+
+    [Fact]
+    public void PrepareForCreate_CodexWithA2AEndpoint_ThrowsInvalidParam()
+    {
+        var behavior = new AgentBehavior(new Agent { Type = AgentType.External, ExternalAgentKind = EngineKind.Codex });
+
+        Assert.Equal(
+            ErrorCodes.InvalidParam.Code,
+            Assert.Throws<AgwException>(() => behavior.PrepareForCreate(new("https://a.example/card", null))).Code
+        );
+    }
+
+    [Theory]
+    [InlineData(AgentUpdateField.ModelProviderId)]
+    [InlineData(AgentUpdateField.Extra)]
+    [InlineData(AgentUpdateField.EnvironmentVariables)]
+    [InlineData(AgentUpdateField.ResponseSchema)]
+    public void PrepareForCreate_A2AWithUnsupportedSetting_ThrowsInvalidParam(AgentUpdateField setting)
+    {
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            ExternalAgentKind = EngineKind.A2A,
+            ModelProviderId = setting == AgentUpdateField.ModelProviderId ? Guid.NewGuid() : null,
+            Extra = setting == AgentUpdateField.Extra ? """{"a":1}""" : null,
+            EnvironmentVariables =
+                setting == AgentUpdateField.EnvironmentVariables ? new() { ["ENV"] = "value" } : new(),
+            ResponseSchema = setting == AgentUpdateField.ResponseSchema ? "{}" : null,
+        };
+
+        var error = Assert.Throws<AgwException>(() =>
+            new AgentBehavior(agent).PrepareForCreate(new("https://a.example/card", null))
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    [InlineData("{}")]
+    public void PrepareForCreate_A2AWithEmptyExtra_StoresEmptyObject(string? extra)
+    {
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            ExternalAgentKind = EngineKind.A2A,
+            Extra = extra,
+        };
+
+        new AgentBehavior(agent).PrepareForCreate(new("https://a.example/card", null));
+
+        Assert.Equal("{}", agent.Extra);
+    }
+
+    [Fact]
+    public void EnsureUpdateAllowed_A2AWithExtra_ThrowsInvalidParam()
+    {
+        var behavior = new AgentBehavior(new Agent { Type = AgentType.External, ExternalAgentKind = EngineKind.A2A });
+        var update = new AgentUpdate
+        {
+            SpecifiedFields = new HashSet<AgentUpdateField> { AgentUpdateField.Extra },
+            Extra = """{"a":1}""",
+        };
+
+        Assert.Equal(
+            ErrorCodes.InvalidParam.Code,
+            Assert.Throws<AgwException>(() => behavior.EnsureUpdateAllowed(update)).Code
+        );
+    }
+
+    [Fact]
+    public void SetA2AEndpoint_ExistingEndpoint_ReplacesAllValues()
+    {
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            ExternalAgentKind = EngineKind.A2A,
+            Id = Guid.NewGuid(),
+        };
+        var behavior = new AgentBehavior(agent);
+        var original = new A2AEndpointSnapshot
+        {
+            CardUrl = "https://a.example/card",
+            Credentials = new Dictionary<string, string>
+            {
+                ["https://a.example:443"] = """{"Authorization":"value"}""",
+            },
+            Interface = new("https://a.example/agent", "JSONRPC"),
+            Streaming = false,
+            Extra = new AgentA2AEndpointExtra
+            {
+                Card = JsonSerializer.SerializeToElement(new { name = "old" }),
+                CardFetchedAt = UtcNow,
+            },
+        };
+        behavior.SetA2AEndpoint(original);
+        var previousRevision = Assert.IsType<AgentA2AEndpoint>(agent.A2AEndpoint).InterfaceRevision;
+        Assert.NotEqual(Guid.Empty, previousRevision);
+
+        var replacement = new A2AEndpointSnapshot
+        {
+            CardUrl = "https://b.example/card",
+            Credentials = [],
+            Interface = new("https://b.example/agent", "HTTP+JSON"),
+            Streaming = true,
+            Extra = new AgentA2AEndpointExtra
+            {
+                Card = JsonSerializer.SerializeToElement(new { name = "new" }),
+                CardFetchedAt = UtcNow.AddSeconds(1),
+            },
+        };
+        behavior.SetA2AEndpoint(replacement);
+
+        var endpoint = Assert.IsType<AgentA2AEndpoint>(agent.A2AEndpoint);
+        Assert.Equal(agent.Id, endpoint.AgentId);
+        Assert.Equal(replacement.CardUrl, endpoint.CardUrl);
+        Assert.Equal(replacement.Interface.Url, endpoint.InterfaceUrl);
+        Assert.Equal(replacement.Interface.ProtocolBinding, endpoint.ProtocolBinding);
+        Assert.NotEqual(previousRevision, endpoint.InterfaceRevision);
+        Assert.True(endpoint.Streaming);
+        Assert.Empty(endpoint.Credentials);
+        Assert.Equal("new", endpoint.Extra.Card.GetProperty("name").GetString());
+        Assert.Equal(replacement.Extra.CardFetchedAt, endpoint.Extra.CardFetchedAt);
+    }
 
     [Fact]
     public void PrepareForCreate_AssignsIdAndDefaultNameWithoutAuditStamping()

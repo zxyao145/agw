@@ -1,5 +1,6 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Contracts;
+using Agw.Agents.Definitions.Domain.Rules;
 using Agw.Auth.Contracts;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
@@ -18,16 +19,23 @@ public sealed class ExecutionPermissionService
     }
 
     public static ExecutionPermissionCapabilities ForAgent(Agent agent) =>
-        agent.Type == AgentType.External && agent.ExternalAgentKind is EngineKind.Codex or EngineKind.Pi
-            ? new(
+        agent switch
+        {
+            var definition when ExternalAgentRules.UsesA2AEndpoint(definition) => new(
+                [AgwPermissionMode.FullAccess],
+                SupportsNoTools: false,
+                "Remote A2A agents run their own tools; Agw permission modes do not apply."
+            ),
+            { Type: AgentType.External, ExternalAgentKind: EngineKind.Codex or EngineKind.Pi } => new(
                 [AgwPermissionMode.FullAccess],
                 SupportsNoTools: false,
                 $"The current {agent.ExternalAgentKind} SDK integration supports Full access only."
-            )
-            : new(
+            ),
+            _ => new(
                 [AgwPermissionMode.FullAccess, AgwPermissionMode.AlwaysAsk, AgwPermissionMode.AllowSameArguments],
                 SupportsNoTools: agent.Type == AgentType.System || agent.ExternalAgentKind == EngineKind.ClaudeCode
-            );
+            ),
+        };
 
     public static void Validate(Agent agent, AgwPermissionMode? mode) => Validate(ForAgent(agent), mode);
 

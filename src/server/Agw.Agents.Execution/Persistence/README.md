@@ -11,7 +11,7 @@
 | 数据 | 用途 | 主要实现 | 适用模式 |
 | --- | --- | --- | --- |
 | 聊天历史 | 展示历史、为模型提供上下文、保留工具调用和回复 | Projects 的 `ConversationHistoryStore` | 两者 |
-| Agent SDK Session | 保存 SDK 可序列化的会话状态，供后续构建 Agent 时恢复 | `AgentSessionStateStore` → `IAgentSessionStatePersistence` | 两者；当前 Store 跳过 External Agent |
+| Agent SDK Session | 保存 SDK 可序列化的会话状态，供后续构建 Agent 时恢复 | `AgentSessionStateStore` → `IAgentSessionStatePersistence` | 两者，适用于 Maf 和 A2A |
 | Agentflow 检查点 occurrence | 记录某一次检查点、图定义指纹及聊天历史截止序号，支持显式恢复分支 | `AgentflowCheckpointStore` → `IAgentflowCheckpointPersistence` | 两者，恢复条件不同 |
 | Durable execution 状态 | 决定执行能否领取、正在等待谁、从哪里恢复、是否已结束 | 本目录的 `DurableExecutionStore` | Distributed |
 | 执行事件流 | 按 cursor 回放流式输出，支持客户端重连 | `IExecutionEventStream` 的 PostgreSQL / Redis 实现 | Distributed |
@@ -39,7 +39,7 @@ InProcess 检查点恢复的限制由两处共同实现：
 
 因此，数据库中仍有 InProcess 检查点，并不表示服务重启后可以直接恢复它。原 Runtime 被释放后，该检查点会失去当前实现要求的恢复条件。
 
-Agent Session 的恢复也有边界：[`AgentSessionStateStore`](../Agents/Sessions/AgentSessionStateStore.cs) 读取可序列化状态，反序列化失败时记录警告并创建新 Session；External Agent 由各自 SDK 适配路径处理，不能据此推断所有外部 CLI 的内部执行状态都被该 Store 保存。
+[`AgentSessionStateStore`](../Agents/Sessions/AgentSessionStateStore.cs) 恢复 Maf 和 A2A 的 SDK session，反序列化失败时记录警告并创建新 session。A2A session 保存 interface revision 和远端 Context 与 Task 的状态，Agentflow 中的每个节点有独立的 session 范围。Claude Code、Codex 和 Pi 由各自的 provider session binding 处理。
 
 ## 2. 本目录与相关代码
 
@@ -445,7 +445,7 @@ Redis 是事件回放的可选实现，启用后仍需要 PostgreSQL 状态库�
 
 A2A 使用 [`IAgentExecutionFacade` / `IDurableAgentExecutionFacade`](../../Agw.Agents.Contracts/Execution/AgentExecutionContracts.cs) 接入；Events 投递通过 [`IBackgroundExecutionFacade`](../../Agw.Agents.Contracts/Execution/BackgroundExecutionContracts.cs) 提交后台执行。`BackgroundExecutionFacade` 使用 `AgentExecutionFacade` 受理 Turn，再通过 `IExecutionCoordinator` 启动执行；Distributed 模式使用 `DurableExecutionCoordinator`。外部模块通过各自的 Facade 查询结果和中断执行。
 
-Events 持有投递尝试状态和重试计划。`IBackgroundExecutionFacade` 登记后台 turn，执行完成后由 Events 更新投递和尝试记录；Jobs API 从这些记录生成运行历史。Job 订阅使用 Full access，并拒绝需要真实用户回答的交互；A2A 沿用执行请求的权限策略。当前以独立 Agent 为目标（`AgentRuntimeType.Agent`）的 Distributed 执行只支持 System Agent，External Agent 会返回不支持的分段失败。
+Events 持有投递尝试状态和重试计划。`IBackgroundExecutionFacade` 登记后台 turn，执行完成后由 Events 更新投递和尝试记录。Jobs API 从这些记录生成运行历史。Job 订阅使用 Full access，并拒绝需要用户回答的交互。对外 A2A 接口沿用执行请求的权限策略。Distributed 的独立 Agent 执行支持 Maf 和 A2A。A2A endpoint 的凭据保存在数据库的 endpoint 中，每段执行重建 Runtime 时按用户读取。
 
 修改本目录时，保留以下约束：
 

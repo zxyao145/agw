@@ -1,4 +1,4 @@
-using System.Text.Json;
+using Agw.Agents.Definitions.Domain.Rules;
 using Agw.Agents.ExternalAgents.Codex;
 using Agw.Providers.Contracts;
 using Agw.Shared.Exceptions;
@@ -11,9 +11,6 @@ namespace Agw.Agents.ExternalAgents;
 
 public static class ExternalAgentDefaults
 {
-    public static IReadOnlyList<EngineKind> SupportedKinds { get; } =
-    [EngineKind.ClaudeCode, EngineKind.Codex, EngineKind.Pi];
-
     public static IReadOnlyList<ProviderType> GetSupportedProviderTypes(EngineKind kind) =>
         kind switch
         {
@@ -40,6 +37,7 @@ public static class ExternalAgentDefaults
             EngineKind.ClaudeCode => "Claude Code",
             EngineKind.Codex => "OpenAI Codex",
             EngineKind.Pi => "Pi",
+            EngineKind.A2A => "A2A",
             _ => throw new AgwException(ErrorCodes.InvalidParam, $"External agent kind '{kind}' is not supported."),
         };
 
@@ -51,25 +49,7 @@ public static class ExternalAgentDefaults
             ),
             EngineKind.Codex => JsonUtil.Serialize(new CodexAgentSettings()),
             EngineKind.Pi => JsonUtil.Serialize(new PiAgentAIAgentOptions()),
+            EngineKind.A2A => A2AEndpointRules.EmptyExtra,
             _ => throw new AgwException(ErrorCodes.InvalidParam, $"External agent kind '{kind}' is not supported."),
         };
-
-    public static bool ShouldUseDefaultExtra(string? extra)
-    {
-        if (string.IsNullOrWhiteSpace(extra))
-        {
-            return true;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(extra);
-            return document.RootElement.ValueKind == JsonValueKind.Object
-                && !document.RootElement.EnumerateObject().Any();
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-    }
 }

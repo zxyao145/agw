@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 using Agw.Agents.Contracts.Execution;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Providers;
@@ -51,6 +52,9 @@ public class Agent : BaseEntity, IAggregateRoot
     public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
 
     public ModelProviderRelation? ModelProvider { get; set; }
+
+    [JsonIgnore]
+    public AgentA2AEndpoint? A2AEndpoint { get; set; }
 
     public ICollection<AgentSkillRelation> AgentSkillRelations { get; set; } = new List<AgentSkillRelation>();
 

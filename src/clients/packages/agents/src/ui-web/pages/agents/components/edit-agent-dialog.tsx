@@ -11,17 +11,26 @@ import {
   DialogTitle,
 } from "@agw/components";
 
-import { getAgentExtraSettingsError, normalizeAgentExtraSettings } from "./agent-extra-settings";
-import { getAgentResponseSchemaError, normalizeAgentResponseSchema } from "./agent-response-schema";
+import { normalizeAgentExtraSettings } from "./agent-extra-settings";
+import { normalizeAgentResponseSchema } from "./agent-response-schema";
+import { getAgentSettingsErrors } from "./agent-settings-errors";
 import {
-  getAgentEnvironmentVariablesError,
   normalizeAgentEnvironmentVariables,
   type AgentEnvironmentVariableEntry,
 } from "./agent-environment-variables";
 import { AgentFormFields } from "./agent-form-fields";
+import {
+  createA2AEndpointDraft,
+  getA2AEndpointError,
+  isA2AAgent,
+  toA2AEndpointRequest,
+  type A2AEndpointDraft,
+} from "./a2a-endpoint";
 import { getExternalModelProviderError } from "./external-model-provider";
 import type { ConnectionOption } from "./connection-selector";
+import { AgentType } from "./types";
 import type {
+  A2AEndpointDto,
   AgentDto,
   AgentUpdateRequest,
   ExternalAgentOptionDto,
@@ -36,6 +45,9 @@ interface EditAgentDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
   editingAgent: AgentDto | null;
+  a2aEndpointDraft: A2AEndpointDraft | null;
+  setA2AEndpointDraft: (draft: A2AEndpointDraft) => void;
+  onA2AEndpointRefreshed: (agentId: string, endpoint: A2AEndpointDto) => void;
   displayName: string;
   setDisplayName: (value: string) => void;
   name: string;
@@ -83,6 +95,9 @@ export function EditAgentDialog({
   open,
   setOpen,
   editingAgent,
+  a2aEndpointDraft,
+  setA2AEndpointDraft,
+  onA2AEndpointRefreshed,
   displayName,
   setDisplayName,
   name,
@@ -120,7 +135,11 @@ export function EditAgentDialog({
   toggleConnection,
   toggleMcpToolServer,
 }: EditAgentDialogProps) {
-  const isExternalAgent = editingAgent?.type === 1;
+  const isExternalAgent = editingAgent?.type === AgentType.External;
+  const isA2A = isA2AAgent(editingAgent?.type, editingAgent?.externalAgentKind);
+  const storedEndpoint = editingAgent?.a2aEndpoint;
+  const endpoint = a2aEndpointDraft ?? createA2AEndpointDraft(storedEndpoint);
+  const endpointError = isA2A ? getA2AEndpointError(endpoint) : null;
   const effectiveSummaryModelProviderId = isExternalAgent
     ? summaryModelProviderId
     : summaryModelProviderId || modelProviderId;
@@ -132,40 +151,50 @@ export function EditAgentDialog({
         externalAgentOptionsQuery.data,
       )
     : null;
-  const extraError = isExternalAgent ? getAgentExtraSettingsError(extra) : null;
-  const responseSchemaError = getAgentResponseSchemaError(responseSchema);
-  const environmentVariablesError = getAgentEnvironmentVariablesError(environmentVariables);
+  const { extraError, responseSchemaError, environmentVariablesError } = getAgentSettingsErrors({
+    isExternalAgent,
+    isA2A,
+    extra,
+    responseSchema,
+    environmentVariables,
+  });
 
   const handleUpdate = () => {
     if (!editingAgent) {
       return;
     }
 
-    const schema = normalizeAgentResponseSchema(responseSchema);
-    const body: AgentUpdateRequest = isExternalAgent
-      ? {
-          displayName,
-          description,
-          modelProviderId: modelProviderId || null,
-          extra: normalizeAgentExtraSettings(extra),
-          environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
-          responseSchema: schema,
-        }
-      : {
-          displayName,
-          description,
-          systemPrompt,
-          modelProviderId,
-          summaryModelProviderId: summaryModelProviderId || null,
-          enableSummary,
-          tools,
-          skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
-          mcpToolServerIds: selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
-          connectionIds: selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
-          extra: null,
-          environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
-          responseSchema: schema,
-        };
+    const metadata = { displayName, description };
+    let body: AgentUpdateRequest;
+    if (isA2A) {
+      body = a2aEndpointDraft
+        ? { ...metadata, a2aEndpoint: toA2AEndpointRequest(a2aEndpointDraft) }
+        : metadata;
+    } else {
+      const settings = {
+        ...metadata,
+        environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
+        responseSchema: normalizeAgentResponseSchema(responseSchema),
+      };
+      body = isExternalAgent
+        ? {
+            ...settings,
+            modelProviderId: modelProviderId || null,
+            extra: normalizeAgentExtraSettings(extra),
+          }
+        : {
+            ...settings,
+            systemPrompt,
+            modelProviderId,
+            summaryModelProviderId: summaryModelProviderId || null,
+            enableSummary,
+            tools,
+            skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
+            mcpToolServerIds: selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
+            connectionIds: selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
+            extra: null,
+          };
+    }
 
     updateAgentMutation.mutate({
       id: editingAgent.id,
@@ -222,6 +251,7 @@ export function EditAgentDialog({
                         !modelProviderId.trim() ||
                         (enableSummary && !effectiveSummaryModelProviderId))) ||
                     Boolean(modelProviderError) ||
+                    Boolean(endpointError) ||
                     Boolean(extraError) ||
                     Boolean(responseSchemaError) ||
                     Boolean(environmentVariablesError) ||
@@ -252,6 +282,17 @@ export function EditAgentDialog({
             setEnableSummary={setEnableSummary}
             agentType={editingAgent?.type ?? 0}
             externalAgentKind={editingAgent?.externalAgentKind ?? 0}
+            a2aEndpoint={{
+              value: endpoint,
+              onChange: setA2AEndpointDraft,
+              storedEndpoint,
+              agentId: editingAgent?.id,
+              dirty: a2aEndpointDraft !== null,
+              disabled: updateAgentMutation.isPending,
+              onRefresh: (refreshed) => {
+                if (editingAgent) onA2AEndpointRefreshed(editingAgent.id, refreshed);
+              },
+            }}
             externalAgentOptionsQuery={externalAgentOptionsQuery}
             extra={extra}
             setExtra={setExtra}

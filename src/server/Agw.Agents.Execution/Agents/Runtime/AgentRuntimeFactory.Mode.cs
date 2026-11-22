@@ -20,7 +20,7 @@ public partial class AgentRuntimeFactory
         if (runtime.SessionStateScope != null)
         {
             await _sessionStateStore.SaveAsync(
-                runtime.AgentType,
+                runtime.EngineKind,
                 runtime.SessionStateScope,
                 runtime.Agent,
                 runtime.Session,

@@ -286,6 +286,7 @@ public class EncryptedDataPersistenceTests
         Assert.Equal(
             new[]
             {
+                $"{typeof(AgentA2AEndpoint).FullName}.{nameof(AgentA2AEndpoint.Credentials)}",
                 $"{typeof(AgentflowCheckpointRecord).FullName}.{nameof(AgentflowCheckpointRecord.CheckpointJson)}",
                 $"{typeof(BackgroundExecution).FullName}.{nameof(BackgroundExecution.Error)}",
                 $"{typeof(BackgroundExecution).FullName}.{nameof(BackgroundExecution.ResultText)}",

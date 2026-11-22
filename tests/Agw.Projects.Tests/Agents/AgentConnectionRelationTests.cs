@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Agw.Agents.Application.A2A;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Domain.Services;
@@ -15,11 +16,18 @@ using Agw.Shared.Exceptions;
 using Agw.Skills.Application.Facades;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Agents.Tests;
 
 public class AgentConnectionRelationTests : IDisposable
 {
+    private static readonly ServiceProvider AgentServices = new ServiceCollection()
+        .AddLogging()
+        .AddAgents(new ConfigurationBuilder().Build())
+        .BuildServiceProvider();
+
     private readonly IDisposable _userScope = UserInfoUtil.Push(
         new ClaimsPrincipal(
             new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], authenticationType: "Test")
@@ -36,7 +44,7 @@ public class AgentConnectionRelationTests : IDisposable
         var agent = CreateAgent(Guid.CreateVersion7(), AgentType.System, scope.ModelProviderId);
 
         var created = await ExecuteAfterDefinitionLockReleasedAsync(
-            () => scope.Service.CreateAgentAsync(agent, null, null, null, cancellationToken),
+            () => scope.Service.CreateAgentAsync(agent, new(), cancellationToken),
             async () =>
             {
                 await using var assertContext = scope.CreateDbContext();
@@ -99,9 +107,16 @@ public class AgentConnectionRelationTests : IDisposable
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             scope.Service.CreateAgentAsync(
                 agent,
-                mcpToolServerIds: null,
-                skillIds: null,
-                connectionIds: [scope.FirstConnectionId, scope.FirstConnectionId, Guid.Empty, Guid.CreateVersion7()],
+                new()
+                {
+                    ConnectionIds =
+                    [
+                        scope.FirstConnectionId,
+                        scope.FirstConnectionId,
+                        Guid.Empty,
+                        Guid.CreateVersion7(),
+                    ],
+                },
                 cancellationToken: TestContext.Current.CancellationToken
             )
         );
@@ -419,7 +434,9 @@ public class AgentConnectionRelationTests : IDisposable
                     dbContext,
                     Agw.Shared.Coordination.InMemoryApplicationLock.Shared
                 ),
-                InMemoryApplicationLock.Shared
+                InMemoryApplicationLock.Shared,
+                AgentServices.GetRequiredService<IA2AAgentCardClient>(),
+                TimeProvider.System
             );
         }
     }

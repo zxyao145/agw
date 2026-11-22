@@ -14,4 +14,5 @@ public enum EngineKind
     ClaudeCode = 1,
     Codex = 2,
     Pi = 3,
+    A2A = 4,
 }

@@ -1,7 +1,11 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Domain.Rules;
 using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Providers.Contracts;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Tooling;
 
 namespace Agw.Agents.Definitions.Contracts;
@@ -23,7 +27,81 @@ public record AgentCreateRequest(
     EngineKind? ExternalAgentKind = null,
     string? Extra = null,
     string? ResponseSchema = null
-);
+)
+{
+    [JsonPropertyName("a2aEndpoint")]
+    public A2AEndpointRequest? A2AEndpoint { get; init; }
+}
+
+public sealed record A2AOriginCredentialsRequest(string Origin, Dictionary<string, string?> Headers)
+{
+    internal static IReadOnlyList<A2AOriginCredentialsInput>? ToInputs(
+        IReadOnlyList<A2AOriginCredentialsRequest>? credentials
+    ) =>
+        credentials
+            ?.Select(group =>
+                group is null
+                    ? throw new AgwException(
+                        ErrorCodes.InvalidParam,
+                        "Each A2A credential group must specify an origin and headers."
+                    )
+                    : new A2AOriginCredentialsInput(group.Origin, group.Headers)
+            )
+            .ToArray();
+}
+
+public sealed record A2AEndpointRequest(
+    string? CardUrl = null,
+    IReadOnlyList<A2AOriginCredentialsRequest>? Credentials = null
+)
+{
+    public A2AEndpointInput ToInput() => new(CardUrl, A2AOriginCredentialsRequest.ToInputs(Credentials));
+}
+
+public sealed record A2AOriginHeaderNamesDto(string Origin, IReadOnlyList<string> Names);
+
+public sealed record A2AEndpointDto
+{
+    public required string CardUrl { get; init; }
+    public required IReadOnlyList<A2AOriginHeaderNamesDto> CredentialHeaderNames { get; init; }
+    public required string InterfaceUrl { get; init; }
+    public required string ProtocolBinding { get; init; }
+    public required bool Streaming { get; init; }
+    public required AgentA2AEndpointExtra Extra { get; init; }
+
+    public static A2AEndpointDto FromDomain(AgentA2AEndpoint endpoint) =>
+        new()
+        {
+            CardUrl = endpoint.CardUrl,
+            CredentialHeaderNames = A2AEndpointCredentialsJson
+                .Deserialize(endpoint.Credentials)
+                .HeadersByOrigin.Select(group => new A2AOriginHeaderNamesDto(group.Key, [.. group.Value.Keys]))
+                .ToArray(),
+            InterfaceUrl = endpoint.InterfaceUrl,
+            ProtocolBinding = endpoint.ProtocolBinding,
+            Streaming = endpoint.Streaming,
+            Extra = endpoint.Extra,
+        };
+}
+
+public sealed record A2ACardPreviewRequest(
+    string CardUrl,
+    IReadOnlyList<A2AOriginCredentialsRequest>? Credentials = null,
+    Guid? AgentId = null
+)
+{
+    internal A2AEndpointInput ToInput() => new(CardUrl, A2AOriginCredentialsRequest.ToInputs(Credentials));
+}
+
+public sealed record A2ACardPreviewResponse
+{
+    public required JsonElement Card { get; init; }
+    public required string InterfaceUrl { get; init; }
+    public required string ProtocolBinding { get; init; }
+    public required bool Streaming { get; init; }
+}
+
+public sealed record A2ACardRefreshRequest(Guid AgentId);
 
 public sealed record ExternalAgentOptionResponse(
     EngineKind Kind,
@@ -35,9 +113,10 @@ public sealed record ExternalAgentOptionResponse(
 public sealed record AgentEnabledUpdateRequest(Guid AgentId, bool Enable);
 
 /// <summary>
-/// Updates an agent. External agents support partial updates for displayName, description,
-/// modelProviderId, extra, and environmentVariables only. When supplied for an External agent,
-/// displayName and description cannot be null.
+/// <para>External Agent 支持部分更新，提供 displayName 或 description 时必须给出字段值。</para>
+/// <para>A2A Agent 可更新 displayName、description 和 a2aEndpoint。</para>
+/// <para>External agents support partial updates with non-null displayName and description when supplied.</para>
+/// <para>A2A agents accept displayName, description, and a2aEndpoint.</para>
 /// </summary>
 public sealed class AgentUpdateRequest
 {
@@ -55,6 +134,7 @@ public sealed class AgentUpdateRequest
     private bool? _enableSummary;
     private Guid? _summaryModelProviderId;
     private string? _responseSchema;
+    private A2AEndpointRequest? _a2aEndpoint;
 
     public string? DisplayName
     {
@@ -186,6 +266,17 @@ public sealed class AgentUpdateRequest
         }
     }
 
+    [JsonPropertyName("a2aEndpoint")]
+    public A2AEndpointRequest? A2AEndpoint
+    {
+        get => _a2aEndpoint;
+        init
+        {
+            _a2aEndpoint = value;
+            _specifiedFields.Add(AgentUpdateField.A2AEndpoint);
+        }
+    }
+
     public AgentUpdateCommand ToCommand() =>
         new(
             DisplayName,
@@ -202,7 +293,10 @@ public sealed class AgentUpdateRequest
             SummaryModelProviderId,
             ResponseSchema,
             _specifiedFields
-        );
+        )
+        {
+            A2AEndpoint = A2AEndpoint?.ToInput(),
+        };
 }
 
 public sealed record AgentMcpToolServerRelationResponse(Guid AgentId, Guid McpToolServerId)
@@ -249,6 +343,9 @@ public sealed record AgentResponse(
     string? ResponseSchema = null
 )
 {
+    [JsonPropertyName("a2aEndpoint")]
+    public A2AEndpointDto? A2AEndpoint { get; init; }
+
     public static AgentResponse FromDomain(Agent agent) =>
         new(
             agent.Id,
@@ -274,7 +371,10 @@ public sealed record AgentResponse(
             agent.UpdateBy,
             AgentResponseSchema.GetResultFormat(agent.ResponseSchema),
             agent.ResponseSchema
-        );
+        )
+        {
+            A2AEndpoint = agent.A2AEndpoint is { } endpoint ? A2AEndpointDto.FromDomain(endpoint) : null,
+        };
 }
 
 /// <summary>

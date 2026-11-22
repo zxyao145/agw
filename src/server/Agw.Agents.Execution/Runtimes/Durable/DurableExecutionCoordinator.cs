@@ -6,6 +6,7 @@ using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Turns;
 using Agw.Agents.Execution.Agents.Composition;
+using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Turns;
 using Agw.Agents.Execution.Configuration;
@@ -25,7 +26,6 @@ using Agw.Auth.Contracts;
 using Agw.Files.Abstracts;
 using Agw.Projects.Contracts.History;
 using Agw.Shared.Contracts.Coordination;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
@@ -622,18 +622,16 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
         try
         {
             using var executionScope = scope.Push();
-            await services
-                .GetRequiredService<IProjectWorkspaceAccess>()
-                .ValidateAsync(
-                    [
-                        manifest.WorkspaceSnapshot!.Workspace,
-                        .. manifest.WorkspaceSnapshot.AdditionalDirectories.Select(static directory => directory.Path),
-                    ],
-                    creatingProjectId: null,
-                    cancellationToken: ownershipLost
-                )
-                .ConfigureAwait(false);
-            ProjectWorkspacePaths.EnsureAvailable(manifest.WorkspaceSnapshot);
+            if (EngineKinds.RequiresWorkspace(context.EngineKind))
+            {
+                await AgentRuntimeFactoryUtil
+                    .ValidateWorkspaceAsync(
+                        services.GetRequiredService<IProjectWorkspaceAccess>(),
+                        manifest.WorkspaceSnapshot!,
+                        ownershipLost
+                    )
+                    .ConfigureAwait(false);
+            }
             await turn.MarkRunningAsync(ownershipLost).ConfigureAwait(false);
             return manifest.AgentType switch
             {
@@ -711,11 +709,11 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                     ?? throw new AgwException(ErrorCodes.AgentExecutionFailed, "Agent could not be created.");
                 await using (runtime)
                 {
-                    if (runtime.AgentType == AgentType.External)
+                    if (EngineKinds.UsesProviderSessionBinding(runtime.EngineKind))
                     {
                         throw new AgwException(
                             ErrorCodes.AgentExecutionFailed,
-                            "Distributed execution currently supports System Agents only."
+                            "Distributed execution supports System Agents and A2A Agents."
                         );
                     }
 

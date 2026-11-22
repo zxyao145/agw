@@ -39,7 +39,7 @@ public class AgentAppServiceUpdateTests : IDisposable
 
         // Act
         var error = await Assert.ThrowsAsync<AgwException>(() =>
-            service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken)
+            service.CreateAgentAsync(agent, new(), TestContext.Current.CancellationToken)
         );
 
         // Assert
@@ -373,7 +373,7 @@ public class AgentAppServiceUpdateTests : IDisposable
         if (existingOwner == "tester")
         {
             var exception = await Assert.ThrowsAsync<AgwException>(() =>
-                service.CreateAgentAsync(copy, null, null, null, TestContext.Current.CancellationToken)
+                service.CreateAgentAsync(copy, new(), TestContext.Current.CancellationToken)
             );
             Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
             Assert.Equal("An agent with this name already exists. Choose a different name.", exception.Message);
@@ -384,7 +384,7 @@ public class AgentAppServiceUpdateTests : IDisposable
         }
         else
         {
-            var created = await service.CreateAgentAsync(copy, null, null, null, TestContext.Current.CancellationToken);
+            var created = await service.CreateAgentAsync(copy, new(), TestContext.Current.CancellationToken);
             Assert.NotNull(created);
             Assert.Equal(existing.Name, created.Name);
             Assert.NotEqual(existing.Id, created.Id);
@@ -429,7 +429,7 @@ public class AgentAppServiceUpdateTests : IDisposable
         agent.ModelProviderId = modelProviderId;
 
         var error = await Assert.ThrowsAsync<AgwException>(() =>
-            service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken)
+            service.CreateAgentAsync(agent, new(), TestContext.Current.CancellationToken)
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);

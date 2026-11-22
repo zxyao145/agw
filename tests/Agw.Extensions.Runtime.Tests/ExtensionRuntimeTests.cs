@@ -7,6 +7,8 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Agw.Agents;
+using Agw.Agents.Application.A2A;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Contracts.Messages;
@@ -2060,6 +2062,10 @@ public sealed class ExtensionRuntimeTests
         var modelProviderReferences = new ModelProviderReferenceFacade(dbContext, userInfo);
         var connectionReferences = new ConnectionReferenceFacade(dbContext, userInfo);
         var skillReferences = new SkillReferenceFacade(dbContext, userInfo);
+        using var agentServices = new ServiceCollection()
+            .AddLogging()
+            .AddAgents(new ConfigurationBuilder().Build())
+            .BuildServiceProvider();
         var agentAppService = new AgentAppService(
             dbContext,
             new AgentDefinitionDomainService(definitionRepository, modelProviderReferences),
@@ -2068,7 +2074,9 @@ public sealed class ExtensionRuntimeTests
             skillReferences,
             userInfo,
             new AgentDeletionCoordinator(dbContext, Agw.Shared.Coordination.InMemoryApplicationLock.Shared),
-            Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+            Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+            agentServices.GetRequiredService<IA2AAgentCardClient>(),
+            TimeProvider.System
         );
         var agent = await agentAppService.GetAgentForCurrentUserAsync(agentId);
         Assert.NotNull(agent);

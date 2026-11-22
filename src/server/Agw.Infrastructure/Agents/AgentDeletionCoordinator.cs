@@ -58,7 +58,18 @@ public sealed class AgentDeletionCoordinator : IAgentDeletionCoordinator
             throw new AgwException(ErrorCodes.AgentInUse);
         }
 
-        // The Agent owner remains authoritative when related catalogs or conversations are already missing.
+        await DeleteAgentRelationsAsync(agentId, ownerUserId, cancellationToken);
+        await _dbContext
+            .Agents.Where(agent => agent.Id == agentId && agent.CreateBy == ownerUserId)
+            .ExecuteDeleteAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    private async Task DeleteAgentRelationsAsync(Guid agentId, string ownerUserId, CancellationToken cancellationToken)
+    {
+        // 关联目录或对话缺失时，仍以 Agent 的所有者为准。
+        // The Agent owner remains authoritative when related catalogs or conversations are missing.
         var ownedAgents = _dbContext
             .Agents.Where(agent => agent.Id == agentId && agent.CreateBy == ownerUserId)
             .Select(agent => agent.Id);
@@ -83,9 +94,7 @@ public sealed class AgentDeletionCoordinator : IAgentDeletionCoordinator
             .Where(relation => relation.AgentId == agentId && ownedAgents.Contains(relation.AgentId))
             .ExecuteDeleteAsync(cancellationToken);
         await _dbContext
-            .Agents.Where(agent => agent.Id == agentId && agent.CreateBy == ownerUserId)
+            .AgentA2AEndpoints.Where(endpoint => endpoint.AgentId == agentId)
             .ExecuteDeleteAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return true;
     }
 }

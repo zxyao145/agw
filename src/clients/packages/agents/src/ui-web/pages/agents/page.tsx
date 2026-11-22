@@ -24,6 +24,8 @@ import {
   type SkillDto,
 } from "./components/types";
 import { getApiErrorMessage } from "@agw/api";
+import { createA2ACopyEndpointDraft, createAgentCopyRequest } from "../copy-requests";
+import { createA2AEndpointDraft, type A2AEndpointDraft } from "./components/a2a-endpoint";
 import type { ConnectionOption } from "./components/connection-selector";
 import {
   toAgentEnvironmentVariableEntries,
@@ -125,6 +127,8 @@ export default function AgentsPage() {
   const [externalAgentKind, setExternalAgentKind] = React.useState<ExternalAgentKindValue>(
     ExternalAgentKind.None,
   );
+  const [a2aEndpoint, setA2AEndpoint] = React.useState(createA2AEndpointDraft);
+  const [a2aCopySource, setA2ACopySource] = React.useState<AgentDto | null>(null);
   const [extra, setExtra] = React.useState("");
   const [responseSchema, setResponseSchema] = React.useState("");
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
@@ -138,6 +142,7 @@ export default function AgentsPage() {
   // Edit dialog state
   const [editOpen, setEditOpen] = React.useState(false);
   const [editingAgent, setEditingAgent] = React.useState<AgentDto | null>(null);
+  const [editA2AEndpoint, setEditA2AEndpoint] = React.useState<A2AEndpointDraft | null>(null);
   const [editDisplayName, setEditDisplayName] = React.useState("");
   const [editName, setEditName] = React.useState("");
   const [editDescription, setEditDescription] = React.useState("");
@@ -166,6 +171,27 @@ export default function AgentsPage() {
   const [executeOpen, setExecuteOpen] = React.useState(false);
   const [executingAgent, setExecutingAgent] = React.useState<AgentDto | null>(null);
 
+  const resetCreateForm = () => {
+    setDisplayName("");
+    setName("");
+    setDescription("");
+    setSystemPrompt("");
+    setModelProviderId("");
+    setSummaryModelProviderId("");
+    setEnableSummary(false);
+    setAgentType(AgentType.System);
+    setExternalAgentKind(ExternalAgentKind.None);
+    setA2AEndpoint(createA2AEndpointDraft());
+    setA2ACopySource(null);
+    setExtra("");
+    setResponseSchema("");
+    setSelectedSkillIds([]);
+    setSelectedConnectionIds([]);
+    setTools([]);
+    setSelectedMcpToolServerIds([]);
+    setEnvironmentVariables([]);
+  };
+
   const createAgentMutation = useMutation({
     mutationFn: async (body: AgentCreateRequest) => {
       return await apiPost("/api/agents", { body });
@@ -174,22 +200,7 @@ export default function AgentsPage() {
       toast.success("Agent created");
       setPageIndex(1);
       setCreateOpen(false);
-      setDisplayName("");
-      setName("");
-      setDescription("");
-      setSystemPrompt("");
-      setModelProviderId("");
-      setSummaryModelProviderId("");
-      setEnableSummary(false);
-      setAgentType(AgentType.System);
-      setExternalAgentKind(ExternalAgentKind.None);
-      setExtra("");
-      setResponseSchema("");
-      setSelectedSkillIds([]);
-      setSelectedConnectionIds([]);
-      setTools([]);
-      setSelectedMcpToolServerIds([]);
-      setEnvironmentVariables([]);
+      resetCreateForm();
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
     onError: (error) => {
@@ -221,6 +232,7 @@ export default function AgentsPage() {
       setPageIndex(1);
       setEditOpen(false);
       setEditingAgent(null);
+      setEditA2AEndpoint(null);
       setEditSummaryModelProviderId("");
       setEditEnableSummary(false);
       setEditSelectedSkillIds([]);
@@ -276,6 +288,7 @@ export default function AgentsPage() {
     }
 
     setEditingAgent(agent);
+    setEditA2AEndpoint(null);
     setEditDisplayName(agent.displayName);
     setEditName(agent.name);
     setEditDescription(agent.description);
@@ -298,7 +311,23 @@ export default function AgentsPage() {
   };
 
   const handleCopy = (agent: AgentDto) => {
-    if (copyAgentMutation.isPending) {
+    if (copyAgentMutation.isPending || createAgentMutation.isPending) {
+      return;
+    }
+
+    const endpoint = createA2ACopyEndpointDraft(agent);
+    if (endpoint) {
+      const copy = createAgentCopyRequest(agent);
+      createAgentMutation.reset();
+      resetCreateForm();
+      setDisplayName(copy.displayName);
+      setName(copy.name);
+      setDescription(copy.description);
+      setAgentType(AgentType.External);
+      setExternalAgentKind(ExternalAgentKind.A2A);
+      setA2AEndpoint(endpoint);
+      setA2ACopySource(agent);
+      setCreateOpen(true);
       return;
     }
 
@@ -310,6 +339,7 @@ export default function AgentsPage() {
     setAgentType(nextAgentType);
     if (nextAgentType === AgentType.System) {
       setExternalAgentKind(ExternalAgentKind.None);
+      setA2AEndpoint(createA2AEndpointDraft());
       setExtra("");
     }
   };
@@ -331,6 +361,7 @@ export default function AgentsPage() {
     const nextOption = externalAgentOptionsQuery.data?.find((option) => option.kind === nextKind);
     setExternalAgentKind(nextKind);
     setExtra(nextOption?.defaultExtra ?? "");
+    if (externalAgentKind === ExternalAgentKind.A2A) setA2AEndpoint(createA2AEndpointDraft());
     if (nextKind === ExternalAgentKind.Pi) {
       setResponseSchema("");
     }
@@ -421,7 +452,20 @@ export default function AgentsPage() {
 
           <CreateAgentDialog
             open={createOpen}
-            setOpen={setCreateOpen}
+            setOpen={(open) => {
+              if (!open) {
+                if (a2aCopySource) resetCreateForm();
+                else setA2AEndpoint(createA2AEndpointDraft());
+              }
+              setCreateOpen(open);
+            }}
+            a2aEndpoint={a2aEndpoint}
+            a2aInterfaceUrl={
+              a2aEndpoint.cardUrl === a2aCopySource?.a2aEndpoint?.cardUrl
+                ? a2aCopySource?.a2aEndpoint?.interfaceUrl
+                : undefined
+            }
+            setA2AEndpoint={setA2AEndpoint}
             displayName={displayName}
             setDisplayName={setDisplayName}
             name={name}
@@ -501,8 +545,19 @@ export default function AgentsPage() {
 
       <EditAgentDialog
         open={editOpen}
-        setOpen={setEditOpen}
+        setOpen={(open) => {
+          if (!open) setEditA2AEndpoint(null);
+          setEditOpen(open);
+        }}
         editingAgent={editingAgent}
+        a2aEndpointDraft={editA2AEndpoint}
+        setA2AEndpointDraft={setEditA2AEndpoint}
+        onA2AEndpointRefreshed={(id, endpoint) => {
+          setEditingAgent((current) =>
+            current?.id === id ? { ...current, a2aEndpoint: endpoint } : current,
+          );
+          void queryClient.invalidateQueries({ queryKey: ["agents"] });
+        }}
         displayName={editDisplayName}
         setDisplayName={setEditDisplayName}
         name={editName}
