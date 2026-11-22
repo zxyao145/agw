@@ -60,7 +60,8 @@ public class ProviderAppServiceTests
                     Description: null,
                     Endpoint: "https://example.test/v1",
                     AuthConfigs: null,
-                    ModelNames: [" existing-model ", "new-model", "new-model"]
+                    ModelNames: [" existing-model ", "new-model", "new-model"],
+                    OllamaContextWindows: new Dictionary<string, int> { ["new-model"] = 8192 }
                 ),
                 TestContext.Current.CancellationToken
             );
@@ -135,7 +136,12 @@ public class ProviderAppServiceTests
                         Description: "updated",
                         Endpoint: "http://ollama.test/ollama/",
                         AuthConfigs: [],
-                        ModelNames: ["qwen3:4b", "llama3.2:latest"]
+                        ModelNames: ["qwen3:4b", "llama3.2:latest"],
+                        OllamaContextWindows: new Dictionary<string, int>
+                        {
+                            ["qwen3:4b"] = 131_072,
+                            ["llama3.2:latest"] = 32_768,
+                        }
                     ),
                     TestContext.Current.CancellationToken
                 );
@@ -178,6 +184,45 @@ public class ProviderAppServiceTests
             .OrderBy(name => name)
             .ToListAsync(cancellationToken);
         Assert.Equal(["llama3.2:latest", "qwen3:4b"], relatedNames);
+        var coldModel = await verifyContext.Models.SingleAsync(model => model.Name == "qwen3:4b", cancellationToken);
+        Assert.Equal(AgwAiModel.DefaultMaxContextWindowTokens, coldModel.MaxContextWindowTokens);
+        Assert.Equal(AgwAiModel.DefaultMaxOutputTokens, coldModel.MaxOutputTokens);
+        var loadedModel = await verifyContext.Models.SingleAsync(
+            model => model.Name == "llama3.2:latest",
+            cancellationToken
+        );
+        Assert.Equal(32_768, loadedModel.MaxContextWindowTokens);
+        Assert.Equal(8192, loadedModel.MaxOutputTokens);
+    }
+
+    [Theory]
+    [InlineData(16_384, 4096)]
+    [InlineData(524_288, 64_000)]
+    public async Task CreateAsync_NewOllamaModel_UsesReportedWindow(int contextWindow, int expectedOutput)
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(token);
+        await using var context = new AgwDbContext(CreateOptions(connection));
+        await context.Database.EnsureCreatedAsync(token);
+
+        await CreateService(context)
+            .CreateAsync(
+                new ProviderCreateRequest(
+                    "Ollama",
+                    ProviderType.OllamaNative,
+                    null,
+                    "http://localhost:11434",
+                    [],
+                    ["loaded-model"],
+                    new Dictionary<string, int> { ["loaded-model"] = contextWindow }
+                ),
+                token
+            );
+
+        var model = await context.Models.AsNoTracking().SingleAsync(token);
+        Assert.Equal(contextWindow, model.MaxContextWindowTokens);
+        Assert.Equal(expectedOutput, model.MaxOutputTokens);
     }
 
     [Fact]

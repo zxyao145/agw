@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using Agw.Files.Abstracts.Dtos;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
@@ -108,6 +111,84 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
             ? await fileSystem.ReadLinesAsync(path, startLine, endLine, cancellationToken).ConfigureAwait(false)
             : null;
     }
+
+    internal async Task<ProjectAgentFileReadPage?> ReadPageAsync(
+        string path,
+        ProjectAgentFileReadOptions options,
+        FileReadContinuation? continuation,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
+        await using var stream = await OpenReadPageStreamAsync(fileSystem, path, continuation, cancellationToken)
+            .ConfigureAwait(false);
+        if (stream is null)
+        {
+            return null;
+        }
+
+        ValidateLineRange(options.StartLine, options.EndLine);
+        var fileRevision = fileSystem.GetOpenedFileRevision(stream);
+        if (continuation is { } cursor)
+        {
+            var revision = CreateReadRevision(path, fileRevision, options, cursor);
+            ValidateContinuation(cursor, revision, stream.Length);
+        }
+
+        using var reader = ProjectAgentFileReadPager.OpenReader(stream, continuation?.CodePage);
+        var position = continuation ?? FileReadContinuation.Start(reader.CurrentEncoding);
+        var page = await ProjectAgentFileReadPager
+            .ReadPageAsync(reader, options, position, cancellationToken)
+            .ConfigureAwait(false);
+        if (fileSystem.GetOpenedFileRevision(stream) != fileRevision)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, $"File '{path}' changed during the read.");
+        }
+        if (page.Continuation is not { } next)
+        {
+            return page;
+        }
+
+        var nextRevision = CreateReadRevision(path, fileRevision, options, next);
+        return page with { Continuation = next with { Revision = nextRevision } };
+    }
+
+    private static async Task<Stream?> OpenReadPageStreamAsync(
+        IAgwFileSystem fileSystem,
+        string path,
+        FileReadContinuation? continuation,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            return await fileSystem.OpenReadAsync(path, cancellationToken).ConfigureAwait(false);
+        }
+        catch (AgwException exception) when (IsMissingReadFile(exception))
+        {
+            return continuation is null ? null : throw InvalidFileReadContinuation();
+        }
+    }
+
+    private static bool IsMissingReadFile(AgwException exception) =>
+        exception.Code == ErrorCodes.FileNotFound.Code || exception.Code == ErrorCodes.FilePathRequired.Code;
+
+    private static void ValidateContinuation(FileReadContinuation cursor, string revision, long fileLength)
+    {
+        if (
+            !string.Equals(cursor.Revision, revision, StringComparison.Ordinal)
+            || cursor.CharacterOffset < 1
+            || cursor.ByteOffset < 1
+            || cursor.ByteOffset >= fileLength
+            || cursor.LineNumber < 1
+        )
+        {
+            throw InvalidFileReadContinuation();
+        }
+    }
+
+    private static AgwException InvalidFileReadContinuation() =>
+        new(ErrorCodes.InvalidParam, "Invalid file read continuation.");
 
     public override async Task<bool> DeleteAsync(string path, CancellationToken cancellationToken = default)
     {
@@ -398,6 +479,52 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
         }
 
         return true;
+    }
+
+    private static void ValidateLineRange(int startLine, int? endLine)
+    {
+        if (startLine < 1)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, $"startLine must be a positive integer, got {startLine}.");
+        }
+
+        if (endLine is < 1)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, $"endLine must be a positive integer, got {endLine}.");
+        }
+
+        if (endLine < startLine)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                $"endLine ({endLine}) must not be less than startLine ({startLine})."
+            );
+        }
+    }
+
+    private string CreateReadRevision(
+        string path,
+        string fileRevision,
+        ProjectAgentFileReadOptions options,
+        FileReadContinuation position
+    )
+    {
+        var revisionSource = string.Join(
+            "\0",
+            _projectId.ToString("N"),
+            _directoryId?.ToString("N") ?? string.Empty,
+            path,
+            fileRevision,
+            position.CodePage.ToString(CultureInfo.InvariantCulture),
+            options.StartLine.ToString(CultureInfo.InvariantCulture),
+            options.EndLine?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+            options.NumberedLines ? "numbered" : "content",
+            position.ByteOffset.ToString(CultureInfo.InvariantCulture),
+            position.CharacterOffset.ToString(CultureInfo.InvariantCulture),
+            position.LineNumber.ToString(CultureInfo.InvariantCulture),
+            position.LineHasContent ? "partial" : "boundary"
+        );
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(revisionSource)));
     }
 
     private static string TruncateSearchLine(string line, int maxCharacters)

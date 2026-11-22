@@ -1,9 +1,12 @@
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
+using System.Text.Json.Serialization.Metadata;
 using Agw.Providers.Contracts.References;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.AI;
 using OllamaSharp;
 using OllamaSharp.Models;
+using OllamaSharp.Models.Chat;
 
 namespace Agw.Agents.Execution.Agents.Runtime;
 
@@ -53,7 +56,7 @@ public sealed class OllamaChatClientFactory
         }
 
         return new ChatClientBuilder(new CancellableOllamaApiClient(httpClient, model.Name))
-            .Use(innerClient => new HttpClientOwningChatClient(innerClient, httpClient))
+            .Use(innerClient => new OllamaChatClientAdapter(innerClient, httpClient))
             .ConfigureOptions(options =>
             {
                 // SDK 将 MaxOutputTokens 映射为 num_predict，其中包含 thinking 和回答。
@@ -76,7 +79,30 @@ public sealed class OllamaChatClientFactory
     private sealed class CancellableOllamaApiClient : OllamaApiClient
     {
         public CancellableOllamaApiClient(HttpClient client, string defaultModel)
-            : base(client, defaultModel) { }
+            : base(client, defaultModel)
+        {
+            var typeInfoResolver = IncomingJsonSerializerOptions.TypeInfoResolver ?? new DefaultJsonTypeInfoResolver();
+            IncomingJsonSerializerOptions.TypeInfoResolver = typeInfoResolver.WithAddedModifier(AddCachedInputTokens);
+        }
+
+        private static void AddCachedInputTokens(JsonTypeInfo typeInfo)
+        {
+            if (typeInfo.Type != typeof(ChatDoneResponseStream))
+            {
+                return;
+            }
+
+            typeInfo.CreateObject = static () => new OllamaChatDoneResponseStream();
+            var cachedInputTokens = typeInfo.CreateJsonPropertyInfo(typeof(int?), "prompt_eval_cached_count");
+            cachedInputTokens.Set = (response, value) =>
+            {
+                if (response is OllamaChatDoneResponseStream chatResponse)
+                {
+                    chatResponse.CachedInputTokenCount = (int?)value;
+                }
+            };
+            typeInfo.Properties.Add(cachedInputTokens);
+        }
 
         protected override async Task<HttpResponseMessage> SendToOllamaAsync(
             HttpRequestMessage requestMessage,
@@ -124,14 +150,56 @@ public sealed class OllamaChatClientFactory
     /// <para>释放 SDK ChatClient 后释放其使用的 HttpClient。</para>
     /// <para>Disposes the HttpClient after the SDK chat client that uses it.</para>
     /// </summary>
-    private sealed class HttpClientOwningChatClient : DelegatingChatClient
+    private sealed class OllamaChatClientAdapter : DelegatingChatClient
     {
         private readonly HttpClient _httpClient;
 
-        public HttpClientOwningChatClient(IChatClient innerClient, HttpClient httpClient)
+        public OllamaChatClientAdapter(IChatClient innerClient, HttpClient httpClient)
             : base(innerClient)
         {
             _httpClient = httpClient;
+        }
+
+        public override async Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default
+        )
+        {
+            var response = await base.GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
+            if (
+                GetCachedInputTokenCount(response.RawRepresentation) is int cachedInputTokenCount
+                && response.Usage is { } usage
+            )
+            {
+                usage.CachedInputTokenCount = cachedInputTokenCount;
+            }
+
+            return response;
+        }
+
+        public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
+        {
+            await foreach (
+                var update in base.GetStreamingResponseAsync(messages, options, cancellationToken)
+                    .WithCancellation(cancellationToken)
+                    .ConfigureAwait(false)
+            )
+            {
+                if (GetCachedInputTokenCount(update.RawRepresentation) is int cachedInputTokenCount)
+                {
+                    foreach (var usage in update.Contents.OfType<UsageContent>())
+                    {
+                        usage.Details.CachedInputTokenCount = cachedInputTokenCount;
+                    }
+                }
+
+                yield return update;
+            }
         }
 
         protected override void Dispose(bool disposing)
@@ -142,5 +210,13 @@ public sealed class OllamaChatClientFactory
                 _httpClient.Dispose();
             }
         }
+    }
+
+    private static int? GetCachedInputTokenCount(object? rawResponse) =>
+        rawResponse is OllamaChatDoneResponseStream chatResponse ? chatResponse.CachedInputTokenCount : null;
+
+    private sealed class OllamaChatDoneResponseStream : ChatDoneResponseStream
+    {
+        public int? CachedInputTokenCount { get; set; }
     }
 }

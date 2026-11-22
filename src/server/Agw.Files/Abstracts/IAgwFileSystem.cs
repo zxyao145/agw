@@ -1,4 +1,5 @@
 using Agw.Files.Abstracts.Dtos;
+using Agw.Files.Infrastructure.Storage.Confined;
 
 namespace Agw.Files.Abstracts;
 
@@ -64,6 +65,13 @@ public interface IAgwFileSystem
     /// the caller disposes it. Throws <c>FileNotFound</c> when the file does not exist.
     /// </summary>
     Task<Stream> OpenReadAsync(string path, CancellationToken ct);
+
+    /// <summary>
+    /// 使用 <see cref="OpenReadAsync"/> 打开的同一个文件获取版本标识。返回其他流类型的文件系统应提供自己的实现。
+    /// Gets the revision from the file handle opened by <see cref="OpenReadAsync"/>. File systems that return streams
+    /// other than <see cref="FileStream"/> supply their own implementation.
+    /// </summary>
+    string GetOpenedFileRevision(Stream stream) => FileReadRevision.Get(stream);
 
     /// <summary>
     /// 把 <paramref name="content"/> 从当前位置起的全部内容写入指定文件。目标已存在且 <paramref name="overwrite"/> 为 false

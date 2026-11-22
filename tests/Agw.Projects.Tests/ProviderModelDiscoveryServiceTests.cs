@@ -7,6 +7,9 @@ using Agw.Providers.Contracts.Manager;
 using Agw.Providers.Infrastructure;
 using Agw.Shared.Exceptions;
 using Agw.Testing;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Projects.Tests;
 
@@ -177,7 +180,10 @@ public class ProviderModelDiscoveryServiceTests
     public async Task DiscoverAsync_OllamaInvalidEndpoint_ThrowsBeforeCreatingClient(string endpoint)
     {
         using var httpClientFactory = new RecordingHttpClientFactory();
-        var service = new ProviderModelDiscoveryService(httpClientFactory);
+        var service = new ProviderModelDiscoveryService(
+            httpClientFactory,
+            NullLogger<ProviderModelDiscoveryService>.Instance
+        );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             service.DiscoverAsync(
@@ -188,6 +194,49 @@ public class ProviderModelDiscoveryServiceTests
 
         Assert.Equal(ErrorCodes.InvalidUrl.Code, exception.Code);
         Assert.Empty(httpClientFactory.Clients);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DiscoverAsync_OllamaModelList_ReportsAvailableContextWindows(bool supportsRunningModels)
+    {
+        var token = TestContext.Current.CancellationToken;
+        var builder = WebApplication.CreateSlimBuilder();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        await using var server = builder.Build();
+        server.MapGet(
+            "/ollama/api/tags",
+            () => new { models = new[] { new { name = "loaded" }, new { name = "cold" } } }
+        );
+        if (supportsRunningModels)
+        {
+            server.MapGet(
+                "/ollama/api/ps",
+                () => new { models = new[] { new { name = "loaded", context_length = 8192 } } }
+            );
+        }
+        await server.StartAsync(token);
+
+        using var clients = new RecordingHttpClientFactory();
+        var discovery = new ProviderModelDiscoveryService(clients, NullLogger<ProviderModelDiscoveryService>.Instance);
+        var result = await discovery.DiscoverAsync(
+            new ProviderModelDiscoveryRequest(ProviderType.OllamaNative, $"{server.Urls.Single()}/ollama"),
+            token
+        );
+
+        Assert.Equal(["loaded", "cold"], result.ModelNames);
+        if (supportsRunningModels)
+        {
+            Assert.Equal(
+                new KeyValuePair<string, int>("loaded", 8192),
+                Assert.Single(Assert.IsAssignableFrom<IReadOnlyDictionary<string, int>>(result.OllamaContextWindows))
+            );
+        }
+        else
+        {
+            Assert.Null(result.OllamaContextWindows);
+        }
     }
 
     [Theory]
@@ -208,7 +257,10 @@ public class ProviderModelDiscoveryServiceTests
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
         listener.Stop();
         using var httpClientFactory = new RecordingHttpClientFactory();
-        var service = new ProviderModelDiscoveryService(httpClientFactory);
+        var service = new ProviderModelDiscoveryService(
+            httpClientFactory,
+            NullLogger<ProviderModelDiscoveryService>.Instance
+        );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             service.DiscoverAsync(
@@ -232,7 +284,10 @@ public class ProviderModelDiscoveryServiceTests
 
     private static ProviderModelDiscoveryService CreateService(Func<HttpRequestMessage, HttpResponseMessage> handler)
     {
-        return new ProviderModelDiscoveryService(new StubHttpClientFactory(new StubHttpMessageHandler(handler)));
+        return new ProviderModelDiscoveryService(
+            new StubHttpClientFactory(new StubHttpMessageHandler(handler)),
+            NullLogger<ProviderModelDiscoveryService>.Instance
+        );
     }
 
     private sealed class StubHttpClientFactory : IHttpClientFactory

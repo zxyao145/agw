@@ -53,3 +53,74 @@ test("model discovery requires an ApiKey only for OpenAI provider types", async 
   assert.equal(isProviderModelDiscoveryApiKeyRequired("OpenAIResponses"), true);
   assert.equal(isProviderModelDiscoveryApiKeyRequired("OllamaNative"), false);
 });
+
+test("mergeProviderModelOptions shows measured Ollama context windows", async () => {
+  const { mergeProviderModelOptions } = await import("./provider-models" + ".ts");
+  const result = mergeProviderModelOptions(
+    [{ id: "model-1", name: "existing-model" }],
+    ["existing-model", "new-model"],
+    { "existing-model": 16_384, "new-model": 32_768 },
+  );
+
+  assert.deepEqual(result, [
+    { id: "model-1", name: "existing-model", isNew: false, contextWindowTokens: 16_384 },
+    { id: null, name: "new-model", isNew: true, contextWindowTokens: 32_768 },
+  ]);
+});
+
+test("selected Ollama measurements include only selected new models", async () => {
+  const { getSelectedOllamaContextWindows } = await import("./provider-models" + ".ts");
+  const result = getSelectedOllamaContextWindows(
+    "OllamaNative",
+    ["new-model", "existing-model", "unmeasured-model"],
+    [{ id: "model-1", name: "existing-model" }],
+    { "new-model": 32_768, "existing-model": 16_384, "unselected-model": 8_192 },
+  );
+
+  assert.deepEqual(result, { "new-model": 32_768 });
+});
+
+test("selected measurements are omitted for non-Ollama providers and empty results", async () => {
+  const { getSelectedOllamaContextWindows } = await import("./provider-models" + ".ts");
+  assert.equal(
+    getSelectedOllamaContextWindows("OpenAIResponses", ["new-model"], [], { "new-model": 32_768 }),
+    undefined,
+  );
+  assert.equal(getSelectedOllamaContextWindows("OllamaNative", ["new-model"], [], {}), undefined);
+  assert.equal(
+    getSelectedOllamaContextWindows("OllamaNative", ["new-model"], undefined, {
+      "new-model": 32_768,
+    }),
+    undefined,
+  );
+});
+
+test("discovery refresh keeps model names and uses the latest window measurements", async () => {
+  const { getSelectedOllamaContextWindows, mergeProviderModelDiscoveryResults } = await import(
+    "./provider-models" + ".ts"
+  );
+  const result = mergeProviderModelDiscoveryResults(
+    {
+      modelNames: ["previous-model", "existing-model"],
+      ollamaContextWindows: { "previous-model": 16_384, "existing-model": 8_192 },
+    },
+    {
+      modelNames: ["new-model", "previous-model"],
+      ollamaContextWindows: { "new-model": 32_768 },
+    },
+  );
+
+  assert.deepEqual(result, {
+    modelNames: ["previous-model", "existing-model", "new-model"],
+    ollamaContextWindows: { "new-model": 32_768 },
+  });
+  assert.deepEqual(
+    getSelectedOllamaContextWindows(
+      "OllamaNative",
+      ["previous-model", "new-model", "existing-model", "unmeasured-model"],
+      [{ id: "model-1", name: "existing-model" }],
+      result.ollamaContextWindows ?? {},
+    ),
+    { "new-model": 32_768 },
+  );
+});
