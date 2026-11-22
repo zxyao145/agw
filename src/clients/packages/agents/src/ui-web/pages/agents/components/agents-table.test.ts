@@ -132,6 +132,12 @@ test("empty description and instructions fall back to a dash", () => {
   assert.equal(screen.queryByText("You review code."), null);
 });
 
+test("an A2A agent row names its kind", () => {
+  renderTable({ agentsQuery: queryOf({ items: [agent({ type: 1, externalAgentKind: 4 })] }) });
+
+  assert.ok(screen.getByText("External · A2A"));
+});
+
 test("instructions are truncated in the cell and shown in full on hover", async () => {
   renderTable({ agentsQuery: queryOf({ items: [agent({ systemPrompt: "Review every diff." })] }) });
   const trigger = screen.getByText("Review every diff.");

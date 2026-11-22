@@ -108,7 +108,7 @@ public sealed class AgentTurnExecutor
             if (runtime.SessionStateScope != null && _sessionStateStore != null)
             {
                 await _sessionStateStore.SaveAsync(
-                    runtime.AgentType,
+                    runtime.EngineKind,
                     runtime.SessionStateScope,
                     runtime.Agent,
                     runtime.Session,

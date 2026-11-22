@@ -284,9 +284,7 @@ public class DefinitionPaginationTests
                 Name = "",
                 DisplayName = "before",
             },
-            [],
-            [],
-            []
+            new()
         );
 
         // Assert
@@ -353,9 +351,7 @@ public class DefinitionPaginationTests
                 Name = "codex-reviewer",
                 DisplayName = "Codex Reviewer",
             },
-            null,
-            null,
-            null
+            new()
         );
         var coder = await service.CreateAgentAsync(
             new Agent
@@ -366,9 +362,7 @@ public class DefinitionPaginationTests
                 DisplayName = "Codex Coder",
                 Extra = "{}",
             },
-            null,
-            null,
-            null
+            new()
         );
 
         Assert.NotNull(reviewer);
@@ -444,9 +438,12 @@ public class DefinitionPaginationTests
                 Type = AgentType.System,
                 ModelProviderId = modelProvider.Id,
             },
-            [servers[0].Id],
-            [skills[0].Id],
-            [connections[0].Id]
+            new()
+            {
+                McpToolServerIds = [servers[0].Id],
+                SkillIds = [skills[0].Id],
+                ConnectionIds = [connections[0].Id],
+            }
         );
         Assert.NotNull(agent);
         var originalMcp = await context.AgentMcpToolServers.SingleAsync(cancellationToken);

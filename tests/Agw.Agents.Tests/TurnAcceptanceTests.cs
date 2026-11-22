@@ -513,7 +513,9 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
                 skillReferences,
                 currentUser,
                 new AgentDeletionCoordinator(context, kit.Locks),
-                kit.Locks
+                kit.Locks,
+                TestAgentAppService.CardClient,
+                kit.Clock
             );
             IExtensionCapabilityCatalog capabilityCatalog =
                 kit.Services.GetRequiredService<IExtensionCapabilityCatalog>();

@@ -1,3 +1,4 @@
+using Agw.Agents.Definitions.Domain.Rules;
 using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Shared.Tooling;
 
@@ -53,6 +54,7 @@ public sealed class AgentUpdateCommand
     public bool? EnableSummary { get; }
     public Guid? SummaryModelProviderId { get; }
     public string? ResponseSchema { get; }
+    public A2AEndpointInput? A2AEndpoint { get; init; }
 
     public IReadOnlySet<AgentUpdateField> SpecifiedFields => _specifiedFields;
 

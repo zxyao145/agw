@@ -23,6 +23,8 @@ import { Textarea } from "@agw/components";
 import { ToolsPanel, type ToolLiteInfo, type ToolValueObject } from "@agw/tools";
 
 import { getAgentExtraSettingsError } from "./agent-extra-settings";
+import { isA2AAgent } from "./a2a-endpoint";
+import { A2AEndpointFields, type A2AEndpointFieldsProps } from "./a2a-endpoint-fields";
 import {
   AGENT_RESPONSE_SCHEMA_EXAMPLE,
   getAgentResponseSchemaError,
@@ -79,6 +81,7 @@ interface AgentFormFieldsProps {
   toggleSkill: (skillId: string) => void;
   selectedMcpToolServerIds: string[];
   toggleMcpToolServer: (mcpToolServerId: string) => void;
+  a2aEndpoint?: A2AEndpointFieldsProps;
   idPrefix?: string;
 }
 
@@ -131,17 +134,20 @@ export function AgentFormFields({
   toggleSkill,
   selectedMcpToolServerIds,
   toggleMcpToolServer,
+  a2aEndpoint,
   idPrefix = "",
 }: AgentFormFieldsProps) {
   const isExternalAgent = agentType === AgentType.External;
+  const isA2A = isA2AAgent(agentType, externalAgentKind);
+  const showsLocalSettings = !isA2A;
   const effectiveSummaryModelProviderId = isExternalAgent
     ? summaryModelProviderId
     : summaryModelProviderId || modelProviderId;
-  const canEditExtra = isExternalAgent;
+  const canEditExtra = isExternalAgent && showsLocalSettings;
   const extraError = canEditExtra ? getAgentExtraSettingsError(extra) : null;
   const responseSchemaError = getAgentResponseSchemaError(responseSchema);
-  // pi 暂时不支持 ResponseSchema
-  const supportsResponseSchema = !(isExternalAgent && externalAgentKind === ExternalAgentKind.Pi);
+  const supportsResponseSchema =
+    showsLocalSettings && !(isExternalAgent && externalAgentKind === ExternalAgentKind.Pi);
   const usesStructuredResult = supportsResponseSchema && responseSchema.trim().length > 0;
   const modelProviderOptions = React.useMemo<SearchableSelectOption[]>(
     () =>
@@ -171,15 +177,13 @@ export function AgentFormFields({
   );
   const handleExternalAgentKindChange = (value: string) => {
     const nextKind = Number(value) as ExternalAgentKindValue;
-    if (
-      modelProviderId &&
-      getExternalModelProviderError(
-        nextKind,
-        modelProviderId,
-        modelProvidersQuery.data,
-        externalAgentOptionsQuery.data,
-      )
-    ) {
+    const selectionError = getExternalModelProviderError(
+      nextKind,
+      modelProviderId,
+      modelProvidersQuery.data,
+      externalAgentOptionsQuery.data,
+    );
+    if (modelProviderId && (nextKind === ExternalAgentKind.A2A || selectionError)) {
       setModelProviderId("");
       toast.info(
         "Model provider selection cleared because it is incompatible with this external agent.",
@@ -307,53 +311,55 @@ export function AgentFormFields({
             </div>
           ) : null}
 
-          <div className="grid gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor={`${idPrefix}modelProviderId`}>
-                Model Provider
-                {isExternalAgent ? (
-                  <span className="ml-2 text-xs text-muted-foreground">(Optional)</span>
+          {showsLocalSettings && (
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor={`${idPrefix}modelProviderId`}>
+                  Model Provider
+                  {isExternalAgent ? (
+                    <span className="ml-2 text-xs text-muted-foreground">(Optional)</span>
+                  ) : null}
+                </Label>
+                {isExternalAgent && modelProviderId ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto shrink-0 px-2 py-1"
+                    aria-label="Clear model provider selection"
+                    onClick={() => setModelProviderId("")}
+                  >
+                    Clear selection
+                  </Button>
                 ) : null}
-              </Label>
-              {isExternalAgent && modelProviderId ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto shrink-0 px-2 py-1"
-                  aria-label="Clear model provider selection"
-                  onClick={() => setModelProviderId("")}
-                >
-                  Clear selection
-                </Button>
+              </div>
+              <SearchableSelect
+                id={`${idPrefix}modelProviderId`}
+                ariaLabel="Model Provider"
+                value={modelProviderId}
+                onValueChange={setModelProviderId}
+                options={isExternalAgent ? compatibleModelProviderOptions : modelProviderOptions}
+                placeholder={
+                  isExternalAgent
+                    ? "Optional: Select a model provider..."
+                    : "Select a model provider..."
+                }
+                searchPlaceholder="Search model providers..."
+                isLoading={modelProvidersQuery.isLoading}
+                clearable={isExternalAgent}
+              />
+              {modelProviderError ? (
+                <p role="alert" className="text-xs text-destructive">
+                  {modelProviderError}
+                </p>
+              ) : null}
+              {isExternalAgent && !modelProviderId ? (
+                <p className="text-xs text-muted-foreground">
+                  Uses Extra Settings or the external agent's default model configuration.
+                </p>
               ) : null}
             </div>
-            <SearchableSelect
-              id={`${idPrefix}modelProviderId`}
-              ariaLabel="Model Provider"
-              value={modelProviderId}
-              onValueChange={setModelProviderId}
-              options={isExternalAgent ? compatibleModelProviderOptions : modelProviderOptions}
-              placeholder={
-                isExternalAgent
-                  ? "Optional: Select a model provider..."
-                  : "Select a model provider..."
-              }
-              searchPlaceholder="Search model providers..."
-              isLoading={modelProvidersQuery.isLoading}
-              clearable={isExternalAgent}
-            />
-            {modelProviderError ? (
-              <p role="alert" className="text-xs text-destructive">
-                {modelProviderError}
-              </p>
-            ) : null}
-            {isExternalAgent && !modelProviderId ? (
-              <p className="text-xs text-muted-foreground">
-                Uses Extra Settings or the external agent's default model configuration.
-              </p>
-            ) : null}
-          </div>
+          )}
 
           {!isExternalAgent ? (
             <>
@@ -411,28 +417,49 @@ export function AgentFormFields({
       </div>
 
       <div className="min-h-0 overflow-hidden bg-background">
-        <Tabs defaultValue="system-prompt" className="flex h-full min-h-0 flex-col">
+        <Tabs
+          key={isA2A ? "a2a" : "agent"}
+          defaultValue={isA2A ? "a2a-endpoint" : "system-prompt"}
+          className="flex h-full min-h-0 flex-col"
+        >
           <div className="shrink-0 overflow-x-auto agw-scrollbar border-b px-6 py-3">
             <TabsList className="h-auto w-max">
+              {isA2A ? <TabsTrigger value="a2a-endpoint">A2A Endpoint</TabsTrigger> : null}
               <TabsTrigger value="system-prompt">Instructions</TabsTrigger>
               <TabsTrigger value="tools">Tools</TabsTrigger>
               <TabsTrigger value="skills">Skills</TabsTrigger>
               <TabsTrigger value="mcp-tool-servers">MCP Tool Server</TabsTrigger>
               <TabsTrigger value="connections">Integrations</TabsTrigger>
-              <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
-              <TabsTrigger value="response-schema" disabled={!supportsResponseSchema}>
-                Response Schema
-              </TabsTrigger>
-              <TabsTrigger value="extra-settings" disabled={!canEditExtra}>
-                Extra Settings
-              </TabsTrigger>
+              {showsLocalSettings && (
+                <>
+                  <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
+                  <TabsTrigger value="response-schema" disabled={!supportsResponseSchema}>
+                    Response Schema
+                  </TabsTrigger>
+                  <TabsTrigger value="extra-settings" disabled={!canEditExtra}>
+                    Extra Settings
+                  </TabsTrigger>
+                </>
+              )}
             </TabsList>
-            <p className="mt-2 max-w-4xl text-xs text-muted-foreground">
-              Agw recommends configuring Skills, Tools, MCP Tool Servers, Integrations, and
-              Environment Variables in the Project. When the agent runs, it merges the
-              configurations from both the agent and the project.
-            </p>
+            {showsLocalSettings && (
+              <p className="mt-2 max-w-4xl text-xs text-muted-foreground">
+                Agw recommends configuring Skills, Tools, MCP Tool Servers, Integrations, and
+                Environment Variables in the Project. When the agent runs, it merges the
+                configurations from both the agent and the project.
+              </p>
+            )}
           </div>
+
+          {isA2A && a2aEndpoint ? (
+            <TabsContent
+              value="a2a-endpoint"
+              forceMount
+              className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6 data-[state=inactive]:hidden"
+            >
+              <A2AEndpointFields {...a2aEndpoint} />
+            </TabsContent>
+          ) : null}
 
           <TabsContent
             value="system-prompt"
@@ -575,46 +602,50 @@ export function AgentFormFields({
             />
           </TabsContent>
 
-          <TabsContent
-            value="environment-variables"
-            className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
-          >
-            <EnvironmentVariablesPanel
-              entries={environmentVariables}
-              setEntries={setEnvironmentVariables}
-              idPrefix={idPrefix}
-              ownerLabel="agent"
-            />
-          </TabsContent>
+          {showsLocalSettings && (
+            <>
+              <TabsContent
+                value="environment-variables"
+                className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
+              >
+                <EnvironmentVariablesPanel
+                  entries={environmentVariables}
+                  setEntries={setEnvironmentVariables}
+                  idPrefix={idPrefix}
+                  ownerLabel="agent"
+                />
+              </TabsContent>
 
-          <TabsContent
-            value="extra-settings"
-            className="m-0 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto agw-scrollbar p-6"
-          >
-            <div>
-              <h3 className="font-medium">Extra Settings</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {canEditExtra
-                  ? "Configure the JSON options for this external agent."
-                  : "Extra Settings are available for external agents."}
-              </p>
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col gap-2">
-              <Label htmlFor={`${idPrefix}extra`}>JSON object</Label>
-              <Textarea
-                id={`${idPrefix}extra`}
-                value={extra}
-                onChange={(event) => setExtra(event.target.value)}
-                placeholder="{}"
-                readOnly={!canEditExtra}
-                aria-invalid={Boolean(extraError)}
-                className={`min-h-80 flex-1 resize-none font-mono ${
-                  canEditExtra ? "" : "bg-muted/50"
-                }`}
-              />
-              {extraError ? <p className="text-xs text-destructive">{extraError}</p> : null}
-            </div>
-          </TabsContent>
+              <TabsContent
+                value="extra-settings"
+                className="m-0 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto agw-scrollbar p-6"
+              >
+                <div>
+                  <h3 className="font-medium">Extra Settings</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {canEditExtra
+                      ? "Configure the JSON options for this external agent."
+                      : "Extra Settings are available for external agents."}
+                  </p>
+                </div>
+                <div className="flex min-h-0 flex-1 flex-col gap-2">
+                  <Label htmlFor={`${idPrefix}extra`}>JSON object</Label>
+                  <Textarea
+                    id={`${idPrefix}extra`}
+                    value={extra}
+                    onChange={(event) => setExtra(event.target.value)}
+                    placeholder="{}"
+                    readOnly={!canEditExtra}
+                    aria-invalid={Boolean(extraError)}
+                    className={`min-h-80 flex-1 resize-none font-mono ${
+                      canEditExtra ? "" : "bg-muted/50"
+                    }`}
+                  />
+                  {extraError ? <p className="text-xs text-destructive">{extraError}</p> : null}
+                </div>
+              </TabsContent>
+            </>
+          )}
         </Tabs>
       </div>
     </div>

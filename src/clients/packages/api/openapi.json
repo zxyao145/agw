@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:39827/"
+      "url": "http://127.0.0.1:35468/"
     }
   ],
   "paths": {
@@ -2142,6 +2142,104 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResultOfExternalAgentOptionResponse[]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/a2a-card/preview": {
+      "post": {
+        "tags": [
+          "Agents"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/A2ACardPreviewRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/A2ACardPreviewRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/A2ACardPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfA2ACardPreviewResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfA2ACardPreviewResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfA2ACardPreviewResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/a2a-card/refresh": {
+      "post": {
+        "tags": [
+          "Agents"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/A2ACardRefreshRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/A2ACardRefreshRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/A2ACardRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAgentResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAgentResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAgentResponse"
                 }
               }
             }
@@ -9368,6 +9466,161 @@
   },
   "components": {
     "schemas": {
+      "A2ACardPreviewRequest": {
+        "required": [
+          "cardUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "cardUrl": {
+            "type": "string"
+          },
+          "credentials": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/A2AOriginCredentialsRequest"
+            }
+          },
+          "agentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "A2ACardPreviewResponse": {
+        "required": [
+          "card",
+          "interfaceUrl",
+          "protocolBinding",
+          "streaming"
+        ],
+        "type": "object",
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "interfaceUrl": {
+            "type": "string"
+          },
+          "protocolBinding": {
+            "type": "string"
+          },
+          "streaming": {
+            "type": "boolean"
+          }
+        }
+      },
+      "A2ACardRefreshRequest": {
+        "required": [
+          "agentId"
+        ],
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "A2AEndpointDto": {
+        "required": [
+          "cardUrl",
+          "credentialHeaderNames",
+          "interfaceUrl",
+          "protocolBinding",
+          "streaming",
+          "extra"
+        ],
+        "type": "object",
+        "properties": {
+          "cardUrl": {
+            "type": "string"
+          },
+          "credentialHeaderNames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/A2AOriginHeaderNamesDto"
+            }
+          },
+          "interfaceUrl": {
+            "type": "string"
+          },
+          "protocolBinding": {
+            "type": "string"
+          },
+          "streaming": {
+            "type": "boolean"
+          },
+          "extra": {
+            "$ref": "#/components/schemas/AgentA2AEndpointExtra"
+          }
+        }
+      },
+      "A2AEndpointRequest": {
+        "type": "object",
+        "properties": {
+          "cardUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "credentials": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/A2AOriginCredentialsRequest"
+            }
+          }
+        }
+      },
+      "A2AOriginCredentialsRequest": {
+        "required": [
+          "origin",
+          "headers"
+        ],
+        "type": "object",
+        "properties": {
+          "origin": {
+            "type": "string"
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          }
+        }
+      },
+      "A2AOriginHeaderNamesDto": {
+        "required": [
+          "origin",
+          "names"
+        ],
+        "type": "object",
+        "properties": {
+          "origin": {
+            "type": "string"
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "Agent": {
         "required": [
           "id",
@@ -9503,6 +9756,22 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "AgentA2AEndpointExtra": {
+        "required": [
+          "card",
+          "cardFetchedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "cardFetchedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -9659,6 +9928,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "a2aEndpoint": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/A2AEndpointRequest"
+              }
             ]
           }
         }
@@ -10509,6 +10788,16 @@
               "null",
               "string"
             ]
+          },
+          "a2aEndpoint": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/A2AEndpointDto"
+              }
+            ]
           }
         }
       },
@@ -10714,9 +11003,19 @@
               "null",
               "string"
             ]
+          },
+          "a2aEndpoint": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/A2AEndpointRequest"
+              }
+            ]
           }
         },
-        "description": "Updates an agent. External agents support partial updates for displayName, description,\nmodelProviderId, extra, and environmentVariables only. When supplied for an External agent,\ndisplayName and description cannot be null."
+        "description": "External Agent 支持部分更新，提供 displayName 或 description 时必须给出字段值。\nA2A Agent 可更新 displayName、description 和 a2aEndpoint。\nExternal agents support partial updates with non-null displayName and description when supplied.\nA2A agents accept displayName, description, and a2aEndpoint."
       },
       "AgwAiModel": {
         "required": [
@@ -11160,6 +11459,38 @@
         ],
         "type": "object",
         "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfA2ACardPreviewResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/A2ACardPreviewResponse"
+              }
+            ]
+          },
           "code": {
             "type": "integer",
             "format": "int32"
@@ -21172,6 +21503,9 @@
     },
     {
       "name": "Agents"
+    },
+    {
+      "name": "ExecutionInput"
     },
     {
       "name": "ExecutionPermissions"

@@ -1,7 +1,9 @@
 using System.Text.Json;
+using Agw.Agents.Application.A2A;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Agents.ExternalAgents;
+using Agw.Agents.Execution.Agents.ExternalAgents.A2A;
 using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
 using Agw.Agents.Execution.Agents.ExternalAgents.Codex;
 using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
@@ -10,6 +12,7 @@ using Agw.Agents.Execution.Agents.Middleware.Approval;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Steering;
 using Agw.Agents.ExternalAgents;
+using Agw.Agents.ExternalAgents.A2A;
 using Agw.Auth.Contracts;
 using Agw.Files.Abstracts;
 using Agw.Shared.Data.Entities.Agents;
@@ -23,6 +26,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OpenAI.CodexSdk.AppServer;
 using OpenAI.CodexSdk.AppServer.MAF;
 using PiAgentSdk;
@@ -58,16 +62,19 @@ public partial class AgentRuntimeFactory
             );
         }
 
+        if (engineKind == EngineKind.A2A)
+        {
+            return await CreateA2AAgentAsync(request, isBackground, cancellationToken).ConfigureAwait(false);
+        }
+
         var workspace = AgentRuntimeFactoryUtil.ApplyWorkspaceSnapshot(project);
-        await _services
-            .GetRequiredService<IProjectWorkspaceAccess>()
-            .ValidateAsync(
-                [workspace.Workspace, .. workspace.AdditionalDirectories.Select(static directory => directory.Path)],
-                creatingProjectId: null,
-                cancellationToken: cancellationToken
+        await AgentRuntimeFactoryUtil
+            .ValidateWorkspaceAsync(
+                _services.GetRequiredService<IProjectWorkspaceAccess>(),
+                workspace,
+                cancellationToken
             )
             .ConfigureAwait(false);
-        ProjectWorkspacePaths.EnsureAvailable(workspace);
 
         var modelConfiguration = await _agentAppService
             .GetExternalModelRuntimeConfigurationAsync(request.Agent.ExternalAgentKind, request.Agent.ModelProviderId)
@@ -175,6 +182,39 @@ public partial class AgentRuntimeFactory
             }
 
             await DisposeResourceWithoutThrowingAsync(capabilities).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async Task<AIAgent?> CreateA2AAgentAsync(
+        CreateAiAgentRequest request,
+        bool isBackground,
+        CancellationToken cancellationToken
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var agent = request.Agent;
+        ExecutionPermissionService.Validate(agent, request.PermissionMode);
+        var remote = A2ARemoteAgent.Create(
+            agent,
+            _services.GetRequiredService<IA2ARemoteHttpClientFactory>(),
+            _services.GetRequiredService<IOptions<A2ARemoteAgentOptions>>().Value,
+            _timeProvider,
+            _loggerFactory.CreateLogger<A2ARemoteAgent>()
+        );
+        try
+        {
+            var decorated = DecorateExternalAgent(
+                remote,
+                CreateHistoryProvider(EngineKind.A2A, structuredResult: false),
+                isBackground,
+                createMemoryContextAsync: null
+            );
+            return new ResourceOwningAIAgent(decorated, remote);
+        }
+        catch
+        {
+            await remote.DisposeAsync();
             throw;
         }
     }

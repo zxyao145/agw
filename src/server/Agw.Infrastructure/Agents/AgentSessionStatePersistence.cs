@@ -140,7 +140,7 @@ public sealed class AgentSessionStatePersistence : IAgentSessionStatePersistence
         return true;
     }
 
-    public async Task<AgentType?> GetAgentTypeAsync(
+    public async Task<AgentSessionEngine?> GetAgentEngineAsync(
         Guid agentId,
         string ownerUserId,
         CancellationToken cancellationToken = default
@@ -148,7 +148,7 @@ public sealed class AgentSessionStatePersistence : IAgentSessionStatePersistence
         await _dbContext
             .Agents.AsNoTracking()
             .Where(agent => agent.Id == agentId && agent.CreateBy == ownerUserId)
-            .Select(agent => (AgentType?)agent.Type)
+            .Select(agent => new AgentSessionEngine(agent.Type, agent.ExternalAgentKind))
             .SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 }

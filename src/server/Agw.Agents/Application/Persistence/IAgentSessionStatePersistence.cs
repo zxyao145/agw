@@ -2,6 +2,8 @@ using Agw.Shared.Data.Entities.Agents;
 
 namespace Agw.Agents.Application.Persistence;
 
+public sealed record AgentSessionEngine(AgentType Type, EngineKind ExternalAgentKind);
+
 public interface IAgentSessionStatePersistence
 {
     Task<Guid?> ResolveProjectConversationIdAsync(
@@ -34,5 +36,9 @@ public interface IAgentSessionStatePersistence
         int expectedGeneration = 0
     );
 
-    Task<AgentType?> GetAgentTypeAsync(Guid agentId, string ownerUserId, CancellationToken cancellationToken = default);
+    Task<AgentSessionEngine?> GetAgentEngineAsync(
+        Guid agentId,
+        string ownerUserId,
+        CancellationToken cancellationToken = default
+    );
 }

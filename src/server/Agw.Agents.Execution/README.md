@@ -251,15 +251,15 @@ Definition Agent 的 Skill provider 明确把 Skill 内容与 Project Workspace 
 
 `RuntimeFactory` 负责把已解析好的 execution/turn 输入对应到具体 runtime，并将 runtime 输出接入统一的 `TurnPipeline`。task 与 workspace 的解析由 `ExecutionConnectionContext` 统一完成。Agent runtime 只有在 project、context、generation 和 Agent definition 版本仍兼容时才会复用；settings 或 target 变化会先释放旧 runtime。
 
-External Agent 通过持久化的 `Agent.ExternalAgentKind` 选择 Claude Code、Codex 或 Pi，`Agent.Name` 只是用户定义的稳定标识，不参与运行时分派。同一种外部实现可以有多个独立定义。三种 SDK 配置统一从 `Agent.Extra` 解析；创建时为空或空 JSON 对象会保存该实现的默认配置，运行时仍保留同样的兜底行为。`Project.ExtraSetting` 不参与外部 Agent 配置，也不作为回退来源。工作目录继续由 `Project.Workspace` 提供，环境变量按 Agent、Project、本次执行的顺序合并。Pi 的显式扩展和历史持久化超时分别配置在 `Agent.Extra` 的 `sessionOptions.extensions` 和 `historyPersistenceTimeout` 中。
+External Agent 通过 `Agent.ExternalAgentKind` 选择 Claude Code、Codex、Pi 或 A2A。同一 Engine 可以有多个独立定义，每个定义有稳定的 `Agent.Name`。Claude Code、Codex 和 Pi 从 `Agent.Extra` 解析 SDK 配置，创建时为空或空 JSON 对象会保存该 Engine 的默认配置，运行时也沿用对应的默认值。工作目录由 `Project.Workspace` 提供，环境变量按 Agent、Project、本次执行的顺序合并。Pi 的显式扩展和历史持久化超时分别配置在 `Agent.Extra` 的 `sessionOptions.extensions` 和 `historyPersistenceTimeout` 中。
 
 Codex 的 `Agent.Extra` 保留 `codexOptions`、`threadOptions` 和 `turnOptions` 字段，由 `CodexAgentSettings` 解析并转换为 app-server 请求。已有工具环境配置映射到 `shell_environment_policy.set`；模型 Endpoint 和凭据通过当前 thread 的 provider 配置传递。`CODEX_HOME` 需要在运行 Agw 的主机配置；在 Extra 或执行环境中提供该字段会返回 `InvalidParam`。`skipGitRepoCheck=false` 和 app-server 不支持的 `onFailure` 审批配置也会明确失败。
 
 ### Project 目录快照
 
-每轮执行入口捕获主目录、附加目录和配置指纹，保存在 `RuntimeTurnContext.WorkspaceSnapshot`，并通过 `ProjectWorkspaceContext` 传到 Agent、Agentflow、工具和后台子执行。目录设置保存后文件面板立即刷新，本轮不变，下一轮按新指纹重建 runtime；conversation ID、provider session ID 与持久化历史沿用原值。InProcess runtime 创建前记录快照目录的物理身份，目录被移走后重新创建时下一轮同样重建 runtime，外部 Agent 进程随之绑定到当前目录；persistent shell 在每次调用前核对被绑定目录，身份改变时重新创建执行器与 Docker 挂载。
+每轮执行入口捕获主目录、附加目录和配置指纹，保存在 `RuntimeTurnContext.WorkspaceSnapshot`，并通过 `ProjectWorkspaceContext` 传到 Agent、Agentflow、工具和后台子执行。目录设置保存后文件面板立即刷新，本轮不变，下一轮按新指纹重建 runtime；conversation ID、provider session ID 与持久化历史沿用原值。InProcess 在创建使用工作目录的 runtime 前记录目录的物理身份，目录被移走后重新创建时下一轮同样重建 runtime，外部 Agent 进程随之绑定到当前目录；persistent shell 在每次调用前核对被绑定目录，身份改变时重新创建执行器与 Docker 挂载。
 
-Durable manifest 保存同一快照，重复注册相同 turnId、恢复 segment 和人工交互续跑均复用它。旧清单缺少快照时在 execution lease 内补齐单主目录配置并持久化，不把新增附加目录带入旧执行。每轮和每个 segment 执行前按快照创建缺失的主目录与附加目录；目录无法创建时报告该目录错误，不切回主目录。
+Durable manifest 保存同一快照，重复注册相同 turnId、恢复 segment 和人工交互续跑均复用它。旧清单缺少快照时在 execution lease 内补齐单主目录配置并持久化，不把新增附加目录带入旧执行。依赖工作目录的 Turn 和 segment 在执行前按快照创建缺失的目录，无法创建时报告对应的目录错误。
 
 Claude Code 的 `AddDirectories` 和 Codex 的 `ThreadOptions.AdditionalDirectories` 合并项目附加目录与 SDK 显式配置，再按规范化路径去重。Pi 通过每轮上下文获取目录清单；三种 Agent 的默认 cwd 均保持主目录。`file_access_*` 的可选 `directoryId` 绑定本轮目录，聊天文件引用在没有附加目录时使用 `@<relativePath>`，配置附加目录后使用 `@<absolutePath>`，含空格时为路径加双引号；调用相对路径文件工具时，Agent 将完整路径转换为对应目录的 `directoryId` 和相对路径，主目录省略 `directoryId`。Docker Shell 把附加目录挂载到 `/project-directories/{id}`，默认 cwd 为 `/workspace`。目录关联沿用现有权限模式，不增加逐目录授权或 OS 沙箱。
 
@@ -429,14 +429,14 @@ sequenceDiagram
 4. `contextId` 继续用于 Agent session、provider session、trace、usage 和 checkpoint。客户端不再发送它；A2A 和 Events 后台执行 Facade 通过受理流程创建或定位对话，并校验 `contextId` 与对话一致。
 5. target 改变时释放旧 runtime；同一 Agent target 在每个新 turn 开始前查询当前用户的 definition 更新时间，只有项目、context、generation 和 definition 版本均匹配才复用。definition 版本包含 `background-agents` Tool Block 所允许的子 Agent definition，子 Agent 修改后父 runtime 同样重建。definition 修改后整体重建 runtime，使模型、provider、凭证、环境变量及 Extra 同步更新；保留 conversation 和外部 provider session 绑定，沿用恢复流程。当前运行或等待人工响应的 turn 不受影响，SignalR 连接无需断开。重建失败时清除已释放的 runtime 引用，后续请求可重试。
 6. Context 从当前 connection 状态创建 `ExecutionStartRequest`；`InProcessExecutionStarter` 结合绑定的用户、message sink 和回调生成 `RuntimeTurnContext`，再调用 RuntimeFactory。
-7. `RuntimeFactory` 确保 workspace 存在，并创建 `AgentRuntime` 或 `AgentflowRuntime`。
+7. `RuntimeFactory` 为依赖本地目录的执行检查 workspace，并创建 `AgentRuntime` 或 `AgentflowRuntime`。
 8. `RuntimeBase.StartTurn` 先注册 `ActiveTurn`，再启动实际执行，避免 turn 已运行但尚未对 interrupt 可见的竞态。
 9. 后台任务进入 `RuntimeTurnContextAccessor` 作用域，并把输出交给 `TurnPipeline`。
 10. turn 结束后，runtime 清理 `ActiveTurn`；runtime 本身仍由连接内的 `InProcessExecutionStarter` 持有，供下一轮复用。
 
-Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK session state。External Agent 通过 project conversation 作用域内的 provider session binding 恢复原生会话。Codex 使用 app-server 的 `thread/start` 或 `thread/resume`。首次观察到模型内容时，Agw 在交付响应前保存 thread ID；后续 Runtime 使用该 ID 恢复 `CodexAppServerAgentSession`。Claude Code 首次运行使用 `SessionId + IsResume=false`，从 `subtype=init` 消息确认实际 `session_id` 后保存，后续以 `Resume=<session_id> + IsResume=true` 恢复。
+Agent 执行结束时，`AgentTurnExecutor` 在 `finally` 中保存 Maf 和 A2A 的 SDK session state。Claude Code、Codex 和 Pi 通过 project conversation 作用域内的 provider session binding 恢复原生会话。Codex 使用 app-server 的 `thread/start` 或 `thread/resume`。首次观察到模型内容时，Agw 在交付响应前保存 thread ID，后续 Runtime 使用该 ID 恢复 `CodexAppServerAgentSession`。Claude Code 首次运行使用 `SessionId + IsResume=false`，从 `subtype=init` 消息确认实际 `session_id` 后保存，后续以 `Resume=<session_id> + IsResume=true` 恢复。
 
-Claude Code、Codex 和 Pi 的外层历史记录统一使用 `HistoryRecordingAgent`。原始输入在注入记忆上下文前暂存；流式增量通过 Engine 适配器归并到 `HistoryRecording`，再由 Projects 的 `ConversationHistoryStore` 按 `ConversationHistory` 配置缓冲和提交。运行完成、取消、异常或消费方提前释放时完成本次记录。External Agent 返回的 System/User 展示消息标记为 `modelHistoryExcluded`，可在 UI 历史中显示，模型上下文与跨目标 handoff 会过滤这些消息。
+External Agent 的外层历史记录统一使用 `HistoryRecordingAgent`。原始输入在注入上下文前暂存，流式增量通过 Engine 适配器归并到 `HistoryRecording`，再由 Projects 的 `ConversationHistoryStore` 按 `ConversationHistory` 配置缓冲和提交。运行完成、取消、异常或消费方提前释放时完成本次记录。External Agent 返回的 System/User 展示消息标记为 `modelHistoryExcluded`，可在 UI 历史中显示，模型上下文与跨目标 handoff 会过滤这些消息。
 
 Codex 的标准 `imageGeneration` 和 `imageView` 完成事件由 SDK 转换为持有图片字节的 `DataContent`。历史保存这些字节及 thread、turn、item、内容索引和 `imageSource`，实时输出与历史读取均通过 `AgwDataContent` 提供 data URI。相同路径的不同查看事件分别保存当时读取的内容；文件后续变化不会修改已经保存的图片。历史中只有文件路径的旧记录仍按其原有内容读取。
 
@@ -449,6 +449,12 @@ Claude Code、Codex 和 Pi 的 `ModelProviderId` 均为可选。选择后，运�
 Claude Code 的 `settings.json.env` 会覆盖继承的进程环境。因此绑定模型时，Agw 通过运行期专用的 `--settings` 文件覆盖模型地址与认证变量，保留其他设置。该文件仅当前操作系统用户可读写，在执行实例释放时删除；命令行仅传文件路径。未绑定模型时不创建该覆盖文件。
 
 Pi 通过显式加载随应用发布的 `agw-model-provider.mjs` 注册进程内供应商；模型参数和凭据通过独立进程环境传递。保持宿主配置目录、用户会话目录以及 `--no-extensions`，不会改写宿主 `models.json` 或 `auth.json`。
+
+### A2A Agent
+
+`EngineKind.A2A` 从 `AgentA2AEndpoint` 读取 Agent Card 快照和选定的 JSON-RPC 或 HTTP+JSON interface。Card 和 interface 请求各自使用目标 origin 的凭据。Agw 根据 Card 能力接收流式响应或轮询 Task，并在 SDK session 中保存 `InterfaceRevision`、`ContextId`、`TaskId` 与 `TaskState`。Interface 地址或 binding 变化时，下轮建立新的远端会话。
+
+A2A Agent 支持 `FullAccess` 权限模式，向远端发送文本、图片和文件内容。远端需要输入时，本轮返回状态消息，用户的下一条消息继续同一个 Task。用户中断时，Agw 会向已知的活动 Task 发送取消请求。
 
 ### 在执行目标之间交接 Conversation
 
@@ -765,7 +771,7 @@ Execution__Distributed__EventStream__Redis__ConnectionString=<redis-connection-s
 5. 配置足够的 graceful termination 时间，并让有副作用的 Tool 实现业务幂等。
 6. 制定 PostgreSQL execution/stream 记录的清理策略；选择 Redis 时配置 Stream TTL。清理消息只影响中间回放，不会丢失 execution 状态、checkpoint 或 pending request。
 
-当前 durable standalone Agent 明确拒绝 External Agent。System Agent 与 Agentflow 支持持久 HITL；动态 Agent/Agentflow 定义在等待期间被修改，可能与旧 checkpoint 不兼容，上线策略应禁止修改活动执行所依赖的定义，或后续引入可验证的定义版本。
+Distributed 支持 System Agent（Maf）与 A2A Agent。每次 A2A Turn 在一个 segment 内完成，Worker 故障导致 segment 重试时会再次发送输入。System Agent 与 Agentflow 支持持久 HITL，等待期间需要保持活动执行依赖的定义与已保存 checkpoint 兼容。
 
 ### 断开连接
 

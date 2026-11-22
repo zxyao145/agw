@@ -34,10 +34,10 @@
 
 | 目标 | InProcess 交互式执行 | Durable 执行 |
 | --- | --- | --- |
-| Agent | `RuntimeFactory` 创建或复用 `AgentRuntime`，注册一个 `ActiveTurn` | `DurableAgentSegmentRunner` 每段重建 Agent Runtime，通过保存的 SDK session 与人工回答继续执行 |
+| Agent | `RuntimeFactory` 创建或复用 `AgentRuntime`，注册一个 `ActiveTurn` | `DurableAgentSegmentRunner` 每段重建 Maf 或 A2A Runtime，恢复对应的 SDK session |
 | Agentflow | `RuntimeFactory` 创建或复用 `AgentflowRuntime`，由 RuntimeService 调用 InProcess Runner | `AgentflowRuntimeService` 构建 Workflow，由 Durable Runner 从 checkpoint 开始或恢复一个分段 |
 
-`AgentRuntimeType.Agent` 与 Agent 定义中的 `AgentType.System` / `External` 也不是同一维度。当前 `DurableAgentSegmentRunner` 只支持 System Agent；它会明确拒绝 External Agent。
+`DurableAgentSegmentRunner` 按 `EngineKind` 判断支持范围。Maf 可从保存的人工回答恢复，A2A 在一个 segment 内处理远端状态和输出。每段重建 A2A Runtime 时从数据库读取 endpoint 与凭据。
 
 ### 1.2 为什么保留共享的 Runtimes 目录
 

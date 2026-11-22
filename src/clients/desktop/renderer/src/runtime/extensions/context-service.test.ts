@@ -5,6 +5,7 @@ import { apiGet, configureApiRuntime } from "@agw/api";
 import { startApiServer } from "@agw/test-harness";
 import type { HostContext } from "@agw/extension-sdk";
 import { ContextService, connectionKeyOf, filterContextForPermissions } from "./context-service";
+import { toContextTarget } from "./extension-bridge-broker";
 
 const app: HostContext["app"] = { version: "0.5.0", platform: "darwin", architecture: "arm64" };
 const workspace = {
@@ -28,6 +29,23 @@ function selection(projectId: string) {
     },
   };
 }
+
+test("the context target identifies an A2A agent", () => {
+  const context = new ContextService(app, workspace);
+  const identity = { profileId: "remote-1", baseUrl: "https://office.example.test", token: null };
+  context.setConnection(identity, server);
+  context.setSelection(connectionKeyOf(identity), {
+    ...selection("project-1"),
+    target: toContextTarget("agent", {
+      id: "agent-1",
+      name: "external",
+      type: 1,
+      externalAgentKind: 4,
+    }),
+  });
+
+  assert.equal(context.snapshot().target?.externalAgentKind, "a2a");
+});
 
 test("changing any part of the connection identity clears the selection with a single notification", () => {
   for (const change of [

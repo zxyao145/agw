@@ -2,6 +2,7 @@ using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Turns;
 using Agw.Agents.Execution.Agents.Composition;
+using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Turns;
 using Agw.Agents.Execution.Configuration;
@@ -17,7 +18,6 @@ using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Utils;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Agents.Execution.Runtimes.InProcess;
@@ -130,17 +130,12 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
             new TurnRecord(_scopeFactory, request.TurnId, request.InputMessageId, writeGuard: null)
         );
         using var executionScope = scope.Push();
-        await _workspaceAccess
-            .ValidateAsync(
-                [
-                    request.WorkspaceSnapshot.Workspace,
-                    .. request.WorkspaceSnapshot.AdditionalDirectories.Select(static directory => directory.Path),
-                ],
-                creatingProjectId: null,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        ProjectWorkspacePaths.EnsureAvailable(request.WorkspaceSnapshot);
+        if (EngineKinds.RequiresWorkspace(context.EngineKind))
+        {
+            await AgentRuntimeFactoryUtil
+                .ValidateWorkspaceAsync(_workspaceAccess, request.WorkspaceSnapshot, cancellationToken)
+                .ConfigureAwait(false);
+        }
         // 先取得对话执行锁再判断复用：归档 provider session 与复用检查按执行锁排序，归档后的 Turn 一定重建 Runtime。
         // The conversation execution lock is taken before the reuse check: archiving a provider session and the reuse check are ordered by it, so a turn after an archive always rebuilds the Runtime.
         var lease =
@@ -373,10 +368,12 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         CancellationToken cancellationToken
     )
     {
-        var workspaceDirectories = DirectoryIdentitySnapshot.Capture([
-            request.WorkspaceSnapshot.Workspace,
-            .. request.WorkspaceSnapshot.AdditionalDirectories.Select(static directory => directory.Path),
-        ]);
+        var workspaceDirectories = EngineKinds.RequiresWorkspace(ExecutionScope.Current?.Context.EngineKind)
+            ? DirectoryIdentitySnapshot.Capture([
+                request.WorkspaceSnapshot.Workspace,
+                .. request.WorkspaceSnapshot.AdditionalDirectories.Select(static directory => directory.Path),
+            ])
+            : DirectoryIdentitySnapshot.Capture([]);
         IAsyncDisposable? runtime = request.Target.AgentType switch
         {
             AgentRuntimeType.Agent => await _agentRuntimes.CreateRuntimeAsync(
@@ -530,6 +527,11 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
 
     private async Task EnsureWorkspaceAsync(ExecutionScope scope, CancellationToken cancellationToken)
     {
+        if (!EngineKinds.RequiresWorkspace(scope.Context.EngineKind))
+        {
+            return;
+        }
+
         var fs =
             await _fileSystemResolver.ResolveSnapshotAsync(
                 scope.ProjectId,

@@ -8,7 +8,11 @@ import {
   type AgentflowDetailDto,
   type AgentflowDto,
 } from "../../types/agentflow";
-import { createAgentCopyRequest, createAgentflowCopyRequest } from "./copy-requests";
+import {
+  createA2ACopyEndpointDraft,
+  createAgentCopyRequest,
+  createAgentflowCopyRequest,
+} from "./copy-requests";
 
 const sourceAgent = {
   id: "agent-1",
@@ -134,6 +138,46 @@ test("createAgentCopyRequest drops the Response Schema for Pi agents", () => {
     responseSchema: schema,
   });
   assert.equal(piCopy.responseSchema, null);
+});
+
+test("an A2A copy prefills each origin and header name for new values", () => {
+  const cardUrl = "https://card.example/.well-known/agent-card.json";
+  const cardOrigin = "https://card.example:443";
+  const interfaceOrigin = "https://agent.example:443";
+  const agent: AgentDto = {
+    ...sourceAgent,
+    type: 1,
+    externalAgentKind: 4,
+    a2aEndpoint: {
+      cardUrl,
+      interfaceUrl: "https://agent.example/run",
+      protocolBinding: "HTTP+JSON",
+      streaming: false,
+      extra: { card: {}, cardFetchedAt: "2026-11-21T00:00:00Z" },
+      credentialHeaderNames: [
+        { origin: cardOrigin, names: ["Authorization"] },
+        { origin: interfaceOrigin, names: ["X-Tenant", "Authorization"] },
+      ],
+    },
+  };
+
+  assert.deepEqual(createA2ACopyEndpointDraft(agent), {
+    cardUrl,
+    groups: [
+      {
+        origin: cardOrigin,
+        rows: [{ origin: cardOrigin, name: "Authorization", value: "", saved: false }],
+      },
+      {
+        origin: interfaceOrigin,
+        rows: [
+          { origin: interfaceOrigin, name: "X-Tenant", value: "", saved: false },
+          { origin: interfaceOrigin, name: "Authorization", value: "", saved: false },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(createAgentCopyRequest(agent).environmentVariables, {});
 });
 
 test("createAgentCopyRequest keeps generated names within the database length limit", () => {

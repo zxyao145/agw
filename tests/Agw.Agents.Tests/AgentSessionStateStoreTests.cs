@@ -2,7 +2,9 @@ using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Execution.Agents.ExternalAgents.Codex;
 using Agw.Agents.Execution.Agents.Sessions;
+using Agw.Agents.Tests.A2A;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agents;
@@ -14,6 +16,8 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using OpenAI.CodexSdk.AppServer;
+using OpenAI.CodexSdk.AppServer.MAF;
 
 namespace Agw.Agents.Tests;
 
@@ -24,7 +28,7 @@ public class AgentSessionStateStoreTests
     {
         var cache = new ThrowingHybridCache();
         var store = new AgentSessionStateStore(cache, NullLogger<AgentSessionStateStore>.Instance);
-        var agent = new Agent { Type = AgentType.External };
+        var agent = new Agent { Type = AgentType.External, ExternalAgentKind = EngineKind.Codex };
         var aiAgent = new TestAIAgent();
 
         var session = await store.GetOrCreateAsync(
@@ -158,7 +162,7 @@ public class AgentSessionStateStoreTests
         var session = await aiAgent.CreateSessionAsync(TestContext.Current.CancellationToken);
         var sessionScope = CreateScope();
 
-        await store.SaveAsync(AgentType.System, sessionScope, aiAgent, session, TestContext.Current.CancellationToken);
+        await store.SaveAsync(EngineKind.Maf, sessionScope, aiAgent, session, TestContext.Current.CancellationToken);
 
         var serialized = await cache.GetOrCreateAsync<string>(
             sessionScope.CacheKey,
@@ -166,6 +170,50 @@ public class AgentSessionStateStoreTests
             cancellationToken: TestContext.Current.CancellationToken
         );
         Assert.Equal("{\"id\":\"created\"}", serialized);
+    }
+
+    [Fact]
+    public async Task SaveAsync_CodexEngine_SkipsPersistence()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var user = A2ARemoteAgentHarness.EnterUser();
+        await using var server = await A2ARemoteAgentStreamingTests.StartAsync(ScriptedAgentHandler.Echo());
+        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        var agentId = Guid.CreateVersion7();
+        await harness.QueryAsync(db =>
+        {
+            db.Agents.Add(
+                new Agent
+                {
+                    Id = agentId,
+                    Name = "codex-session",
+                    Type = AgentType.External,
+                    ExternalAgentKind = EngineKind.Codex,
+                }
+            );
+            return db.SaveChangesAsync(cancellationToken);
+        });
+        await using var client = await CodexAppServerClient.StartAsync(
+            new CodexAppServerClientOptions { ExecutablePath = CodexAppServerFixture.ExecutablePath() },
+            cancellationToken
+        );
+        var agent = new CodexProviderSessionTrackingAgent(client, new CodexAppServerAIAgentOptions(), null, false);
+        var session = await agent.CreateSessionAsync(cancellationToken);
+        var store = harness.Services.GetRequiredService<AgentSessionStateStore>();
+        var scope = new AgentSessionStateScope(
+            harness.ConversationId,
+            harness.ProjectId,
+            A2ARemoteAgentHarness.ContextId,
+            agentId
+        );
+
+        await store.SaveAsync(EngineKind.Codex, scope, agent, session, cancellationToken);
+
+        Assert.False(
+            await harness.QueryAsync(db =>
+                db.AgentSessionStates.AnyAsync(state => state.AgentId == agentId, cancellationToken)
+            )
+        );
     }
 
     [Fact]
@@ -298,20 +346,14 @@ public class AgentSessionStateStoreTests
             "flow-a:concurrent"
         );
 
-        await store.SaveAsync(
-            AgentType.System,
-            standaloneScope,
-            aiAgent,
-            session,
-            TestContext.Current.CancellationToken
-        );
-        await store.SaveAsync(AgentType.System, nodeScope, aiAgent, session, TestContext.Current.CancellationToken);
+        await store.SaveAsync(EngineKind.Maf, standaloneScope, aiAgent, session, TestContext.Current.CancellationToken);
+        await store.SaveAsync(EngineKind.Maf, nodeScope, aiAgent, session, TestContext.Current.CancellationToken);
         await Task.WhenAll(
             Enumerable
                 .Range(0, 12)
                 .Select(_ =>
                     store.SaveAsync(
-                        AgentType.System,
+                        EngineKind.Maf,
                         concurrentScope,
                         aiAgent,
                         session,
@@ -385,7 +427,7 @@ public class AgentSessionStateStoreTests
 
         // Act
         await store.SaveAsync(
-            AgentType.System,
+            EngineKind.Maf,
             new AgentSessionStateScope(projectConversationId, projectId, "context-1", agentId),
             aiAgent,
             session,

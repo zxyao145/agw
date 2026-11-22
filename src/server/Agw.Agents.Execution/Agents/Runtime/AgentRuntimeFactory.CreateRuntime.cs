@@ -1,4 +1,5 @@
 using Agw.Agents.Execution.Agents.Contracts;
+using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Runtimes;
@@ -48,6 +49,7 @@ public partial class AgentRuntimeFactory
             return null;
         }
 
+        var engineKind = EngineKinds.Resolve(agent);
         var configurationVersion = await _configuration.ReadAsync(agentId, task.ProjectId, cancellationToken);
         Guid projectId = task.ProjectId;
         var resolvedContextId = ContextIdUtil.ResolveContextId(task.ContextId);
@@ -66,19 +68,11 @@ public partial class AgentRuntimeFactory
             settings.Resume
         );
 
-        var workspace = ExecutionContextSlot.GetWorkspaceSnapshot(projectId);
-        var fs =
-            workspace == null
-                ? await _fileSystemResolver.ResolveAsync(projectId, cancellationToken)
-                : await _fileSystemResolver.ResolveSnapshotAsync(projectId, workspace, null, cancellationToken);
-        if (fs == null)
+        var workspaceReady =
+            !EngineKinds.RequiresWorkspace(engineKind) || await EnsureWorkspaceAsync(projectId, cancellationToken);
+        if (!workspaceReady)
         {
             return null;
-        }
-        var rootStat = await fs.StatAsync("", cancellationToken);
-        if (rootStat == null)
-        {
-            await fs.CreateDirectoryAsync("", cancellationToken);
         }
 
         var aiAgent = await CreateAiAgentAsync(
@@ -132,7 +126,8 @@ public partial class AgentRuntimeFactory
                 useStructuredResult: !string.IsNullOrWhiteSpace(agent.ResponseSchema),
                 summaryModelProviderId: summaryModelProviderId,
                 summaryService: _summaryService,
-                conversationHistoryWriter: _conversationHistoryWriter
+                conversationHistoryWriter: _conversationHistoryWriter,
+                engineKind: engineKind
             )
             {
                 ConfigurationVersion =
@@ -147,6 +142,23 @@ public partial class AgentRuntimeFactory
             await DisposeAgentWithoutThrowingAsync(aiAgent).ConfigureAwait(false);
             throw;
         }
+    }
+
+    private async Task<bool> EnsureWorkspaceAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var workspace = ExecutionContextSlot.GetWorkspaceSnapshot(projectId);
+        var fs = workspace is null
+            ? await _fileSystemResolver.ResolveAsync(projectId, cancellationToken)
+            : await _fileSystemResolver.ResolveSnapshotAsync(projectId, workspace, null, cancellationToken);
+        if (fs is null)
+        {
+            return false;
+        }
+        if (await fs.StatAsync("", cancellationToken) is null)
+        {
+            await fs.CreateDirectoryAsync("", cancellationToken);
+        }
+        return true;
     }
 
     /// <summary>

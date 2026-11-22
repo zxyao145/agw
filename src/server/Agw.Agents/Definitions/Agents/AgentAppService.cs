@@ -1,5 +1,8 @@
+using Agw.Agents.Application.A2A;
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Domain.Behaviors;
+using Agw.Agents.Definitions.Domain.Rules;
 using Agw.Agents.Definitions.Domain.Services;
 using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Agents.ExternalAgents;
@@ -31,6 +34,8 @@ public class AgentAppService
     private readonly ISkillReferenceFacade _skillReferences;
     private readonly IUserInfoService _userInfoService;
     private readonly IApplicationLock _applicationLock;
+    private readonly IA2AAgentCardClient _cardClient;
+    private readonly TimeProvider _timeProvider;
 
     public AgentAppService(
         IAgentsDbContext dbContext,
@@ -40,7 +45,9 @@ public class AgentAppService
         ISkillReferenceFacade skillReferences,
         IUserInfoService userInfoService,
         IAgentDeletionCoordinator deletionCoordinator,
-        IApplicationLock applicationLock
+        IApplicationLock applicationLock,
+        IA2AAgentCardClient cardClient,
+        TimeProvider timeProvider
     )
     {
         _dbContext = dbContext;
@@ -51,6 +58,8 @@ public class AgentAppService
         _userInfoService = userInfoService;
         _deletionCoordinator = deletionCoordinator;
         _applicationLock = applicationLock;
+        _cardClient = cardClient;
+        _timeProvider = timeProvider;
     }
 
     public async Task<IReadOnlyList<Agent>> ListAgentsAsync()
@@ -181,9 +190,7 @@ public class AgentAppService
 
     public async Task<Agent?> CreateAgentAsync(
         Agent agent,
-        IEnumerable<Guid>? mcpToolServerIds,
-        IEnumerable<Guid>? skillIds,
-        IEnumerable<Guid>? connectionIds,
+        AgentCreateCommand command,
         CancellationToken cancellationToken = default
     )
     {
@@ -194,11 +201,45 @@ public class AgentAppService
             cancellationToken
         );
         cancellationToken = mutationCancellation.Token;
-        if (!await _definitionDomainService.AreModelProvidersVisibleAsync(agent, cancellationToken))
+        var usesRemoteEndpoint = ExternalAgentRules.UsesA2AEndpoint(agent);
+        var providersVisible =
+            usesRemoteEndpoint
+            || await _definitionDomainService.AreModelProvidersVisibleAsync(agent, cancellationToken);
+        if (!providersVisible)
         {
             return null;
         }
+        await PrepareCreateSettingsAsync(agent, usesRemoteEndpoint, cancellationToken);
+        var behavior = new AgentBehavior(agent);
+        behavior.PrepareForCreate(command.A2AEndpoint);
+        await _definitionDomainService.EnsureNameAvailableAsync(agent);
+        if (command.A2AEndpoint is { } input)
+        {
+            behavior.SetA2AEndpoint(await FetchEndpointAsync(input, null, cancellationToken));
+        }
+        else if (agent.Type == AgentType.External && AgentExtraSettings.OmitEmptyObject(agent.Extra) is null)
+        {
+            agent.Extra = ExternalAgentDefaults.GetDefaultExtra(agent.ExternalAgentKind);
+        }
+        await _dbContext.Agents.AddAsync(agent, cancellationToken);
+        await SyncAgentMcpToolServerRelationsAsync(agent.Id, command.McpToolServerIds);
+        await SyncAgentSkillRelationsAsync(agent.Id, command.SkillIds);
+        await SyncAgentConnectionRelationsAsync(agent.Id, command.ConnectionIds);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return agent;
+    }
 
+    private async Task PrepareCreateSettingsAsync(
+        Agent agent,
+        bool usesRemoteEndpoint,
+        CancellationToken cancellationToken
+    )
+    {
+        if (usesRemoteEndpoint)
+        {
+            agent.Extra = AgentExtraSettings.OmitEmptyObject(agent.Extra);
+            return;
+        }
         if (agent.Type == AgentType.External)
         {
             await _definitionDomainService.EnsureExternalModelProviderSupportedAsync(
@@ -209,18 +250,6 @@ public class AgentAppService
             agent.Extra = AgentExtraSettings.Normalize(agent.Extra);
         }
         agent.ResponseSchema = AgentResponseSchema.Normalize(agent.ResponseSchema);
-        new AgentBehavior(agent).PrepareForCreate();
-        await _definitionDomainService.EnsureNameAvailableAsync(agent);
-        if (agent.Type == AgentType.External && ExternalAgentDefaults.ShouldUseDefaultExtra(agent.Extra))
-        {
-            agent.Extra = ExternalAgentDefaults.GetDefaultExtra(agent.ExternalAgentKind);
-        }
-        await _dbContext.Agents.AddAsync(agent, cancellationToken);
-        await SyncAgentMcpToolServerRelationsAsync(agent.Id, mcpToolServerIds);
-        await SyncAgentSkillRelationsAsync(agent.Id, skillIds);
-        await SyncAgentConnectionRelationsAsync(agent.Id, connectionIds);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return agent;
     }
 
     public async Task<Agent?> UpdateAgentAsync(
@@ -238,52 +267,155 @@ public class AgentAppService
         );
         cancellationToken = mutationCancellation.Token;
 
-        var existing = await _dbContext.Agents.SingleOrDefaultAsync(
-            agent => agent.Id == id && agent.CreateBy == user,
-            cancellationToken
-        );
+        var existing = await _dbContext
+            .Agents.Include(agent => agent.A2AEndpoint)
+            .SingleOrDefaultAsync(agent => agent.Id == id && agent.CreateBy == user, cancellationToken);
         if (existing == null)
         {
             return null;
         }
 
-        var update = CreateUpdate(command);
+        var update = CreateUpdate(command, existing);
         var behavior = new AgentBehavior(existing);
         behavior.EnsureUpdateAllowed(update);
-        if (existing.Type == AgentType.External)
+        if (!await CanUpdateModelProviderAsync(existing, behavior, update, cancellationToken))
         {
-            var modelProviderId = behavior.ResolveModelProviderId(update);
-            if (!await _definitionDomainService.IsModelProviderVisibleAsync(modelProviderId, cancellationToken))
-            {
-                return null;
-            }
-            await _definitionDomainService.EnsureExternalModelProviderSupportedAsync(
-                existing.ExternalAgentKind,
-                modelProviderId,
-                cancellationToken
-            );
+            return null;
         }
 
+        var endpoint = behavior.ResolveA2AEndpointInput(update.A2AEndpoint) is { } input
+            ? await FetchEndpointAsync(input, existing.A2AEndpoint, cancellationToken)
+            : null;
         behavior.ApplyUpdate(update);
         if (!await _definitionDomainService.AreModelProvidersVisibleAsync(existing, cancellationToken))
         {
             return null;
         }
 
+        if (endpoint is not null)
+        {
+            behavior.SetA2AEndpoint(endpoint);
+        }
+
         // Preserve audit stamping even when only bindings change or the update is a no-op.
         _dbContext.Agents.Entry(existing).Property(agent => agent.DisplayName).IsModified = true;
         if (behavior.UpdatesResourceBindings())
         {
-            await SyncAgentMcpToolServerRelationsAsync(existing.Id, command.McpToolServerIds);
-            await SyncAgentSkillRelationsAsync(existing.Id, command.SkillIds);
-            if (command.IsSpecified(AgentUpdateField.ConnectionIds))
-            {
-                await SyncAgentConnectionRelationsAsync(existing.Id, command.ConnectionIds);
-            }
+            await SyncUpdatedResourceBindingsAsync(existing.Id, command);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return existing;
+    }
+
+    private async Task<bool> CanUpdateModelProviderAsync(
+        Agent agent,
+        AgentBehavior behavior,
+        AgentUpdate update,
+        CancellationToken cancellationToken
+    )
+    {
+        if (agent.Type != AgentType.External)
+        {
+            return true;
+        }
+        var modelProviderId = behavior.ResolveModelProviderId(update);
+        if (!await _definitionDomainService.IsModelProviderVisibleAsync(modelProviderId, cancellationToken))
+        {
+            return false;
+        }
+        await _definitionDomainService.EnsureExternalModelProviderSupportedAsync(
+            agent.ExternalAgentKind,
+            modelProviderId,
+            cancellationToken
+        );
+        return true;
+    }
+
+    private async Task SyncUpdatedResourceBindingsAsync(Guid agentId, AgentUpdateCommand command)
+    {
+        await SyncAgentMcpToolServerRelationsAsync(agentId, command.McpToolServerIds);
+        await SyncAgentSkillRelationsAsync(agentId, command.SkillIds);
+        if (command.IsSpecified(AgentUpdateField.ConnectionIds))
+        {
+            await SyncAgentConnectionRelationsAsync(agentId, command.ConnectionIds);
+        }
+    }
+
+    public async Task<A2ACardPreviewResponse> PreviewA2ACardAsync(
+        A2ACardPreviewRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        AgentA2AEndpoint? existing = null;
+        if (request.AgentId is { } agentId)
+        {
+            var agent = await QueryA2AAgent(agentId, _userInfoService.RequiredUserId)
+                .AsNoTracking()
+                .SingleOrDefaultAsync(cancellationToken);
+            existing = agent?.A2AEndpoint ?? throw new AgwException(ErrorCodes.ResourceNotFound);
+        }
+
+        var endpoint = await FetchEndpointAsync(request.ToInput(), existing, cancellationToken);
+        return new A2ACardPreviewResponse
+        {
+            Card = endpoint.Extra.Card,
+            InterfaceUrl = endpoint.Interface.Url,
+            ProtocolBinding = endpoint.Interface.ProtocolBinding,
+            Streaming = endpoint.Streaming,
+        };
+    }
+
+    public async Task<Agent?> RefreshA2ACardAsync(Guid agentId, CancellationToken cancellationToken)
+    {
+        var owner = _userInfoService.RequiredUserId;
+        await using var mutation = await AgentDefinitionLock.AcquireScopeAsync(
+            _applicationLock,
+            owner,
+            cancellationToken
+        );
+        cancellationToken = mutation.Token;
+        var agent = await QueryA2AAgent(agentId, owner).SingleOrDefaultAsync(cancellationToken);
+        if (agent?.A2AEndpoint is not { } existing)
+        {
+            return null;
+        }
+
+        var snapshot = await FetchEndpointAsync(new(existing.CardUrl, null), existing, cancellationToken);
+        new AgentBehavior(agent).SetA2AEndpoint(snapshot);
+        _dbContext.Agents.Entry(agent).Property(value => value.DisplayName).IsModified = true;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return agent;
+    }
+
+    private IQueryable<Agent> QueryA2AAgent(Guid id, string owner) =>
+        _dbContext
+            .Agents.Include(agent => agent.A2AEndpoint)
+            .Where(agent =>
+                agent.Id == id
+                && agent.CreateBy == owner
+                && agent.Type == AgentType.External
+                && agent.ExternalAgentKind == EngineKind.A2A
+            );
+
+    private async Task<A2AEndpointSnapshot> FetchEndpointAsync(
+        A2AEndpointInput input,
+        AgentA2AEndpoint? existing,
+        CancellationToken cancellationToken
+    )
+    {
+        var url = A2AEndpointRules.ValidateCardUrl(input.CardUrl);
+        var stored = existing is null ? null : A2AEndpointCredentialsJson.Deserialize(existing.Credentials);
+        var credentials = A2AEndpointRules.ResolveCredentials(stored, input.Credentials);
+        var card = await _cardClient.FetchAsync(url, credentials, cancellationToken);
+        return new A2AEndpointSnapshot
+        {
+            CardUrl = input.CardUrl!,
+            Credentials = A2AEndpointCredentialsJson.Serialize(credentials),
+            Interface = card.Interface,
+            Streaming = card.Streaming,
+            Extra = new AgentA2AEndpointExtra { Card = card.Card, CardFetchedAt = _timeProvider.GetUtcNow() },
+        };
     }
 
     public async Task<Agent?> UpdateAgentEnabledAsync(
@@ -293,10 +425,9 @@ public class AgentAppService
     )
     {
         var ownerUserId = _userInfoService.RequiredUserId;
-        var existing = await _dbContext.Agents.FirstOrDefaultAsync(
-            agent => agent.Id == id && agent.CreateBy == ownerUserId,
-            cancellationToken
-        );
+        var existing = await _dbContext
+            .Agents.Include(agent => agent.A2AEndpoint)
+            .FirstOrDefaultAsync(agent => agent.Id == id && agent.CreateBy == ownerUserId, cancellationToken);
         if (existing == null)
         {
             return null;
@@ -310,10 +441,21 @@ public class AgentAppService
     public Task<bool> DeleteAgentAsync(Guid id, CancellationToken cancellationToken = default) =>
         _deletionCoordinator.DeleteAsync(id, _userInfoService.RequiredUserId, cancellationToken);
 
-    // 归一化已指定取值中的 JSON 后交给 AgentBehavior，由它按 Agent 类型校验并决定哪些字段写入实体。
-    // Normalize the JSON in the specified values and hand them to AgentBehavior, which validates them per agent type and decides which fields reach the entity.
-    private static AgentUpdate CreateUpdate(AgentUpdateCommand command) =>
-        new()
+    // 归一化请求中的 JSON，再由 AgentBehavior 校验并决定写入实体的字段。
+    // Normalize request JSON before AgentBehavior validates the update and decides which fields to persist.
+    private static AgentUpdate CreateUpdate(AgentUpdateCommand command, Agent agent)
+    {
+        var usesRemoteEndpoint = ExternalAgentRules.UsesA2AEndpoint(agent);
+        var extra = command.Extra;
+        if (usesRemoteEndpoint)
+        {
+            extra = AgentExtraSettings.OmitEmptyObject(extra);
+        }
+        else if (command.IsSpecified(AgentUpdateField.Extra))
+        {
+            extra = AgentExtraSettings.Normalize(extra);
+        }
+        return new()
         {
             SpecifiedFields = command.SpecifiedFields,
             DisplayName = command.DisplayName,
@@ -321,16 +463,17 @@ public class AgentAppService
             SystemPrompt = command.SystemPrompt,
             ModelProviderId = command.ModelProviderId,
             Tools = command.Tools,
-            Extra = command.IsSpecified(AgentUpdateField.Extra)
-                ? AgentExtraSettings.Normalize(command.Extra)
-                : command.Extra,
+            Extra = extra,
             EnvironmentVariables = command.EnvironmentVariables,
             EnableSummary = command.EnableSummary,
             SummaryModelProviderId = command.SummaryModelProviderId,
-            ResponseSchema = command.IsSpecified(AgentUpdateField.ResponseSchema)
-                ? AgentResponseSchema.Normalize(command.ResponseSchema)
-                : command.ResponseSchema,
+            ResponseSchema =
+                !usesRemoteEndpoint && command.IsSpecified(AgentUpdateField.ResponseSchema)
+                    ? AgentResponseSchema.Normalize(command.ResponseSchema)
+                    : command.ResponseSchema,
+            A2AEndpoint = command.A2AEndpoint,
         };
+    }
 
     private async Task SyncAgentMcpToolServerRelationsAsync(Guid agentId, IEnumerable<Guid>? mcpToolServerIds)
     {
@@ -381,6 +524,7 @@ public class AgentAppService
             )
             .Include(agent => agent.AgentSkillRelations)
             .Include(agent => agent.AgentConnectionRelations)
+            .Include(agent => agent.A2AEndpoint)
             .Where(agent => agent.CreateBy == ownerUserId);
         return query.AsNoTracking().AsSplitQuery();
     }

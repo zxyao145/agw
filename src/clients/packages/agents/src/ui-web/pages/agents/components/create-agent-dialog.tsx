@@ -1,3 +1,4 @@
+import type { Dispatch, SetStateAction } from "react";
 import { UseMutationResult, UseQueryResult } from "@agw/components/query";
 
 import { applyDialogOpenChange } from "@agw/integrations";
@@ -13,18 +14,24 @@ import {
 } from "@agw/components";
 
 import { AgentFormFields } from "./agent-form-fields";
-import { getExternalModelProviderError } from "./external-model-provider";
-import { getAgentExtraSettingsError, normalizeAgentExtraSettings } from "./agent-extra-settings";
-import { getAgentResponseSchemaError, normalizeAgentResponseSchema } from "./agent-response-schema";
 import {
-  getAgentEnvironmentVariablesError,
+  getA2ACreateSettings,
+  getA2AEndpointError,
+  isA2AAgent,
+  toA2AEndpointRequest,
+  type A2AEndpointDraft,
+} from "./a2a-endpoint";
+import { getExternalModelProviderError } from "./external-model-provider";
+import { normalizeAgentExtraSettings } from "./agent-extra-settings";
+import { normalizeAgentResponseSchema } from "./agent-response-schema";
+import { getAgentSettingsErrors } from "./agent-settings-errors";
+import {
   normalizeAgentEnvironmentVariables,
   type AgentEnvironmentVariableEntry,
 } from "./agent-environment-variables";
 import type { ConnectionOption } from "./connection-selector";
+import { AgentType, type ExternalAgentKind } from "./types";
 import type {
-  AgentType,
-  ExternalAgentKind,
   ExternalAgentOptionDto,
   AgentCreateRequest,
   McpToolServerDto,
@@ -38,11 +45,11 @@ interface CreateAgentDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
   displayName: string;
-  setDisplayName: (value: string) => void;
+  setDisplayName: Dispatch<SetStateAction<string>>;
   name: string;
   setName: (value: string) => void;
   description: string;
-  setDescription: (value: string) => void;
+  setDescription: Dispatch<SetStateAction<string>>;
   systemPrompt: string;
   setSystemPrompt: (value: string) => void;
   modelProviderId: string;
@@ -55,6 +62,9 @@ interface CreateAgentDialogProps {
   setAgentType: (value: AgentType) => void;
   externalAgentKind: ExternalAgentKind;
   setExternalAgentKind: (value: ExternalAgentKind) => void;
+  a2aEndpoint: A2AEndpointDraft;
+  a2aInterfaceUrl?: string;
+  setA2AEndpoint: (draft: A2AEndpointDraft) => void;
   externalAgentOptionsQuery: UseQueryResult<ExternalAgentOptionDto[], Error>;
   extra: string;
   setExtra: (value: string) => void;
@@ -100,6 +110,9 @@ export function CreateAgentDialog({
   setAgentType,
   externalAgentKind,
   setExternalAgentKind,
+  a2aEndpoint,
+  a2aInterfaceUrl,
+  setA2AEndpoint,
   externalAgentOptionsQuery,
   extra,
   setExtra,
@@ -123,7 +136,9 @@ export function CreateAgentDialog({
   toggleConnection,
   toggleMcpToolServer,
 }: CreateAgentDialogProps) {
-  const isExternalAgent = agentType === 1;
+  const isExternalAgent = agentType === AgentType.External;
+  const isA2A = isA2AAgent(agentType, externalAgentKind);
+  const endpointError = isA2A ? getA2AEndpointError(a2aEndpoint) : null;
   const modelProviderError = isExternalAgent
     ? getExternalModelProviderError(
         externalAgentKind,
@@ -132,49 +147,51 @@ export function CreateAgentDialog({
         externalAgentOptionsQuery.data,
       )
     : null;
-  const extraError = isExternalAgent ? getAgentExtraSettingsError(extra) : null;
-  const responseSchemaError = getAgentResponseSchemaError(responseSchema);
-  const environmentVariablesError = getAgentEnvironmentVariablesError(environmentVariables);
+  const { extraError, responseSchemaError, environmentVariablesError } = getAgentSettingsErrors({
+    isExternalAgent,
+    isA2A,
+    extra,
+    responseSchema,
+    environmentVariables,
+  });
 
   const handleCreate = () => {
-    const environment = normalizeAgentEnvironmentVariables(environmentVariables);
-    const schema = normalizeAgentResponseSchema(responseSchema);
+    const settings = isA2A
+      ? { ...getA2ACreateSettings(), a2aEndpoint: toA2AEndpointRequest(a2aEndpoint) }
+      : {
+          modelProviderId: modelProviderId || null,
+          environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
+          extra: isExternalAgent ? normalizeAgentExtraSettings(extra) : null,
+          responseSchema: normalizeAgentResponseSchema(responseSchema),
+        };
+    const common = {
+      displayName,
+      name: name.trim(),
+      description,
+      type: agentType,
+      externalAgentKind,
+      ...settings,
+    };
     const body: AgentCreateRequest = isExternalAgent
       ? {
-          displayName,
-          name: name.trim(),
-          description,
+          ...common,
           systemPrompt: "",
-          modelProviderId: modelProviderId || null,
           summaryModelProviderId: null,
           enableSummary: false,
           tools: [],
           skillIds: null,
           mcpToolServerIds: null,
           connectionIds: null,
-          environmentVariables: environment,
-          type: agentType,
-          externalAgentKind,
-          extra: normalizeAgentExtraSettings(extra),
-          responseSchema: schema,
         }
       : {
-          displayName,
-          name: name.trim(),
-          description,
+          ...common,
           systemPrompt,
-          modelProviderId: modelProviderId || null,
           summaryModelProviderId: summaryModelProviderId || null,
           enableSummary,
           tools,
           skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
           mcpToolServerIds: selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
           connectionIds: selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
-          environmentVariables: environment,
-          type: agentType,
-          externalAgentKind,
-          extra: null,
-          responseSchema: schema,
         };
     createAgentMutation.mutate(body);
   };
@@ -228,6 +245,7 @@ export function CreateAgentDialog({
                   disabled={
                     (!isExternalAgent && (!displayName.trim() || !modelProviderId.trim())) ||
                     (isExternalAgent && externalAgentKind === 0) ||
+                    Boolean(endpointError) ||
                     Boolean(modelProviderError) ||
                     Boolean(extraError) ||
                     Boolean(responseSchemaError) ||
@@ -261,6 +279,16 @@ export function CreateAgentDialog({
             setAgentType={setAgentType}
             externalAgentKind={externalAgentKind}
             setExternalAgentKind={setExternalAgentKind}
+            a2aEndpoint={{
+              value: a2aEndpoint,
+              interfaceUrl: a2aInterfaceUrl,
+              onChange: setA2AEndpoint,
+              disabled: createAgentMutation.isPending,
+              onPreview: (cardName, cardDescription) => {
+                setDisplayName((current) => (current.trim() ? current : cardName));
+                setDescription((current) => (current.trim() ? current : cardDescription));
+              },
+            }}
             externalAgentOptionsQuery={externalAgentOptionsQuery}
             extra={extra}
             setExtra={setExtra}

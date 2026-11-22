@@ -105,6 +105,7 @@ function Harness({
       toggleSkill: () => {},
       selectedMcpToolServerIds: [],
       toggleMcpToolServer: () => {},
+      a2aEndpoint: { value: { cardUrl: "", groups: [] }, onChange: () => {} },
     }),
   );
 }
@@ -213,6 +214,34 @@ test("a Pi agent cannot configure a response schema", () => {
   assert.equal(
     screen.getByRole("tab", { name: "Response Schema" }).hasAttribute("disabled"),
     false,
+  );
+});
+
+test("an A2A agent opens the endpoint tab and keeps its read-only capabilities", () => {
+  renderForm({
+    agentType: AgentType.External,
+    externalAgentKind: ExternalAgentKind.A2A,
+    initial: { ...initialState, systemPrompt: "Remote instructions" },
+  });
+
+  const cardUrlInput = screen.getByLabelText("Agent Card URL");
+  assert.equal(
+    screen.getByRole("tab", { name: "A2A Endpoint" }).getAttribute("aria-selected"),
+    "true",
+  );
+  assert.equal(screen.queryByRole("combobox", { name: "Model Provider" }), null);
+  for (const name of ["Extra Settings", "Environment Variables", "Response Schema"]) {
+    assert.equal(screen.queryByRole("tab", { name }), null);
+  }
+  for (const name of ["Instructions", "Tools", "Skills", "MCP Tool Server", "Integrations"]) {
+    assert.ok(screen.getByRole("tab", { name }));
+  }
+  openTab("Instructions");
+  assert.ok(screen.getByDisplayValue("Remote instructions").hasAttribute("readonly"));
+  openTab("A2A Endpoint");
+  assert.ok(
+    screen.getByLabelText("Agent Card URL") === cardUrlInput,
+    "The endpoint panel stays mounted",
   );
 });
 

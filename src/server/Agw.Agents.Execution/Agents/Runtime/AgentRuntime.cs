@@ -22,6 +22,7 @@ public sealed class AgentRuntime : IAsyncDisposable
     public CancellationToken CancellationToken => _cancellationTokenSource.Token;
     public AgentSessionStateScope? SessionStateScope { get; }
     public AgentType AgentType { get; }
+    public EngineKind EngineKind { get; }
 
     internal bool EnableSummary { get; }
     internal bool UseStructuredResult { get; }
@@ -59,7 +60,8 @@ public sealed class AgentRuntime : IAsyncDisposable
         Guid? summaryModelProviderId = null,
         IAgentTurnSummaryService? summaryService = null,
         IConversationHistoryWriter? conversationHistoryWriter = null,
-        bool useStructuredResult = false
+        bool useStructuredResult = false,
+        EngineKind engineKind = EngineKind.Maf
     )
     {
         Agent = agent ?? throw new AgwException(ErrorCodes.InvalidParam, "agent cannot be null.");
@@ -68,6 +70,7 @@ public sealed class AgentRuntime : IAsyncDisposable
         _contextId = contextId;
         SessionStateScope = sessionStateScope;
         AgentType = agentType;
+        EngineKind = engineKind;
         _logger = logger ?? throw new AgwException(ErrorCodes.InvalidParam, "logger cannot be null.");
         EnableSummary = enableSummary;
         UseStructuredResult = useStructuredResult;

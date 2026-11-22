@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Agents.Execution.Context;
 using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
@@ -54,7 +55,8 @@ public sealed class AgentSessionStateStore
         CancellationToken cancellationToken
     )
     {
-        return await GetOrCreateAsync(agent.Type, aiAgent, sessionScope, cancellationToken).ConfigureAwait(false);
+        var engineKind = EngineKinds.Resolve(agent);
+        return await GetOrCreateAsync(engineKind, aiAgent, sessionScope, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<AgentSession> GetOrCreateForNodeAsync(
@@ -63,24 +65,21 @@ public sealed class AgentSessionStateStore
         CancellationToken cancellationToken
     )
     {
-        var agentType = await GetAgentTypeAsync(sessionScope.AgentId, cancellationToken).ConfigureAwait(false);
-        return await GetOrCreateAsync(agentType, aiAgent, sessionScope, cancellationToken).ConfigureAwait(false);
+        var engineKind = await GetEngineKindAsync(sessionScope.AgentId, cancellationToken).ConfigureAwait(false);
+        return await GetOrCreateAsync(engineKind, aiAgent, sessionScope, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<AgentSession> GetOrCreateAsync(
-        AgentType? agentType,
+        EngineKind? engineKind,
         AIAgent aiAgent,
         AgentSessionStateScope sessionScope,
         CancellationToken cancellationToken
     )
     {
-        if (agentType is null or AgentType.External)
-        {
-            return await aiAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        var serialized = await ReadAsync(sessionScope, cancellationToken).ConfigureAwait(false);
-
+        var serialized =
+            engineKind is { } kind && EngineKinds.UsesSdkSession(kind)
+                ? await ReadAsync(sessionScope, cancellationToken).ConfigureAwait(false)
+                : null;
         if (string.IsNullOrWhiteSpace(serialized))
         {
             return await aiAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
@@ -108,14 +107,14 @@ public sealed class AgentSessionStateStore
     }
 
     public async Task SaveAsync(
-        AgentType agentType,
+        EngineKind engineKind,
         AgentSessionStateScope sessionScope,
         AIAgent aiAgent,
         AgentSession session,
         CancellationToken cancellationToken
     )
     {
-        if (agentType == AgentType.External)
+        if (!EngineKinds.UsesSdkSession(engineKind))
         {
             return;
         }
@@ -201,10 +200,10 @@ public sealed class AgentSessionStateStore
         CancellationToken cancellationToken
     )
     {
-        var agentType = await GetAgentTypeAsync(sessionScope.AgentId, cancellationToken).ConfigureAwait(false);
-        if (agentType.HasValue)
+        var engineKind = await GetEngineKindAsync(sessionScope.AgentId, cancellationToken).ConfigureAwait(false);
+        if (engineKind is { } kind)
         {
-            await SaveAsync(agentType.Value, sessionScope, aiAgent, session, cancellationToken).ConfigureAwait(false);
+            await SaveAsync(kind, sessionScope, aiAgent, session, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -314,7 +313,7 @@ public sealed class AgentSessionStateStore
             .ConfigureAwait(false);
     }
 
-    private async Task<AgentType?> GetAgentTypeAsync(Guid agentId, CancellationToken cancellationToken)
+    private async Task<EngineKind?> GetEngineKindAsync(Guid agentId, CancellationToken cancellationToken)
     {
         if (!UserInfoUtil.IsContextActive)
         {
@@ -324,11 +323,14 @@ public sealed class AgentSessionStateStore
         var ownerUserId = UserInfoUtil.RequiredUserId;
         if (_serviceScopeFactory == null)
         {
-            return AgentType.System;
+            return EngineKind.Maf;
         }
 
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var persistence = scope.ServiceProvider.GetRequiredService<IAgentSessionStatePersistence>();
-        return await persistence.GetAgentTypeAsync(agentId, ownerUserId, cancellationToken).ConfigureAwait(false);
+        var engine = await persistence
+            .GetAgentEngineAsync(agentId, ownerUserId, cancellationToken)
+            .ConfigureAwait(false);
+        return engine is null ? null : EngineKinds.Resolve(engine.Type, engine.ExternalAgentKind);
     }
 }

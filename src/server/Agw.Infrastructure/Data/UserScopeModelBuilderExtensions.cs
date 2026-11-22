@@ -85,12 +85,7 @@ internal static partial class UserScopeModelBuilderExtensions
                         && relation.Model!.CreateBy == context.CurrentUserId
                         && relation.Provider!.CreateBy == context.CurrentUserId
             );
-        modelBuilder
-            .Entity<Agent>()
-            .HasQueryFilter(
-                UserScopeQueryFilterNames.UserScope,
-                agent => context.UserScopeBypass || context.UserScopeIsActive && agent.CreateBy == context.CurrentUserId
-            );
+        ApplyAgentScopeFilters(modelBuilder, context);
         modelBuilder
             .Entity<Agentflow>()
             .HasQueryFilter(
@@ -413,6 +408,24 @@ internal static partial class UserScopeModelBuilderExtensions
                         && context
                             .Set<DurableExecutionRecord>()
                             .Any(execution => execution.Id == steer.TurnId && execution.UserId == context.CurrentUserId)
+            );
+    }
+
+    private static void ApplyAgentScopeFilters(ModelBuilder modelBuilder, AgwDbContext context)
+    {
+        modelBuilder
+            .Entity<Agent>()
+            .HasQueryFilter(
+                UserScopeQueryFilterNames.UserScope,
+                agent => context.UserScopeBypass || context.UserScopeIsActive && agent.CreateBy == context.CurrentUserId
+            );
+        modelBuilder
+            .Entity<AgentA2AEndpoint>()
+            .HasQueryFilter(
+                UserScopeQueryFilterNames.UserScope,
+                endpoint =>
+                    context.UserScopeBypass
+                    || context.UserScopeIsActive && endpoint.Agent!.CreateBy == context.CurrentUserId
             );
     }
 

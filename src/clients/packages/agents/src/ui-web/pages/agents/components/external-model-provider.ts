@@ -1,4 +1,4 @@
-import type { ExternalAgentKind, ExternalAgentOptionDto, ModelProviderDto } from "./types";
+import { ExternalAgentKind, type ExternalAgentOptionDto, type ModelProviderDto } from "./types";
 
 export function getExternalModelProviderError(
   kind: ExternalAgentKind,
@@ -6,7 +6,7 @@ export function getExternalModelProviderError(
   modelProviders: ModelProviderDto[] | undefined,
   externalOptions: ExternalAgentOptionDto[] | undefined,
 ): string | null {
-  if (!modelProviderId) return null;
+  if (!modelProviderId || kind === ExternalAgentKind.A2A) return null;
   if (!modelProviders || !externalOptions) return "Loading model provider compatibility...";
   const modelProvider = modelProviders.find((provider) => provider.id === modelProviderId);
   const option = externalOptions.find((option) => option.kind === kind);

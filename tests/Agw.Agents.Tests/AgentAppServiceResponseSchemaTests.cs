@@ -33,7 +33,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
         var agent = CreateSystemAgent(modelProviderId);
         agent.ResponseSchema = $"  {Schema}  ";
 
-        var created = await service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken);
+        var created = await service.CreateAgentAsync(agent, new(), TestContext.Current.CancellationToken);
 
         Assert.NotNull(created);
         Assert.Equal(Schema, created.ResponseSchema);
@@ -47,7 +47,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
         var agent = CreateSystemAgent(modelProviderId);
         agent.ResponseSchema = "   ";
 
-        var created = await service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken);
+        var created = await service.CreateAgentAsync(agent, new(), TestContext.Current.CancellationToken);
 
         Assert.NotNull(created);
         Assert.Null(created.ResponseSchema);
@@ -68,7 +68,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
             ErrorCodes.InvalidParam.Code,
             (
                 await Assert.ThrowsAsync<AgwException>(() =>
-                    service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken)
+                    service.CreateAgentAsync(agent, new(), TestContext.Current.CancellationToken)
                 )
             ).Code
         );
@@ -81,7 +81,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
         var agent = CreateExternalAgent();
         agent.ResponseSchema = Schema;
 
-        var created = await service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken);
+        var created = await service.CreateAgentAsync(agent, new(), TestContext.Current.CancellationToken);
 
         Assert.NotNull(created);
         Assert.Equal(Schema, created.ResponseSchema);
@@ -207,7 +207,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
             ErrorCodes.InvalidParam.Code,
             (
                 await Assert.ThrowsAsync<AgwException>(() =>
-                    service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken)
+                    service.CreateAgentAsync(agent, new(), TestContext.Current.CancellationToken)
                 )
             ).Code
         );

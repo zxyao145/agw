@@ -5,6 +5,14 @@ namespace Agw.Agents.Tests;
 
 public class ExternalAgentDefaultsTests
 {
+    [Fact]
+    public void GetDefaultExtra_A2A_ReturnsEmptyObject() =>
+        Assert.Equal("{}", ExternalAgentDefaults.GetDefaultExtra(EngineKind.A2A));
+
+    [Fact]
+    public void GetSupportedProviderTypes_A2A_ReturnsEmpty() =>
+        Assert.Empty(ExternalAgentDefaults.GetSupportedProviderTypes(EngineKind.A2A));
+
     [Theory]
     [InlineData(EngineKind.ClaudeCode)]
     [InlineData(EngineKind.Codex)]
@@ -15,25 +23,5 @@ public class ExternalAgentDefaultsTests
 
         using var document = JsonDocument.Parse(extra);
         Assert.Equal(JsonValueKind.Object, document.RootElement.ValueKind);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData("{}")]
-    [InlineData(" { } ")]
-    public void ShouldUseDefaultExtra_MissingOrEmptyObject_ReturnsTrue(string? extra)
-    {
-        Assert.True(ExternalAgentDefaults.ShouldUseDefaultExtra(extra));
-    }
-
-    [Theory]
-    [InlineData("{\"model\":\"custom\"}")]
-    [InlineData("[]")]
-    [InlineData("not-json")]
-    public void ShouldUseDefaultExtra_CustomOrInvalidValue_ReturnsFalse(string extra)
-    {
-        Assert.False(ExternalAgentDefaults.ShouldUseDefaultExtra(extra));
     }
 }

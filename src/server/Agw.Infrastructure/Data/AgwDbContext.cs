@@ -88,6 +88,7 @@ public partial class AgwDbContext
     public DbSet<ModelProviderRelation> ModelProviders => Set<ModelProviderRelation>();
 
     public DbSet<Agent> Agents => Set<Agent>();
+    public DbSet<AgentA2AEndpoint> AgentA2AEndpoints => Set<AgentA2AEndpoint>();
     public DbSet<AgentConnectionRelation> AgentConnectionRelations => Set<AgentConnectionRelation>();
     public DbSet<AgentSessionStateEntry> AgentSessionStates => Set<AgentSessionStateEntry>();
 

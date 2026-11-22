@@ -845,6 +845,7 @@ public sealed partial class BackendArchitectureTests
     )
     {
         ["Agent"] = "Agw.Agents",
+        ["AgentA2AEndpoint"] = "Agw.Agents",
         ["BackgroundExecution"] = "Agw.Agents",
         ["EventSource"] = "Agw.Events",
         ["EventSourceItem"] = "Agw.Events",
