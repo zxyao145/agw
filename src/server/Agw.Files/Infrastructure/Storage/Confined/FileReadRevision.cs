@@ -1,4 +1,5 @@
 using System.Globalization;
+using Agw.Shared.Exceptions;
 using Microsoft.Win32.SafeHandles;
 
 namespace Agw.Files.Infrastructure.Storage.Confined;
@@ -9,7 +10,7 @@ internal static class FileReadRevision
     {
         if (stream is not FileStream fileStream)
         {
-            throw new ArgumentException("The opened file stream must be a FileStream.", nameof(stream));
+            throw new AgwException(ErrorCodes.InvalidParam, "The opened file stream must be a FileStream.");
         }
 
         var handle = fileStream.SafeFileHandle;
