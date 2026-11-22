@@ -95,7 +95,8 @@ public sealed class AgwToolPermissionTests
             new Dictionary<string, AgwToolMetadata>
             {
                 [declared.Name] = new("tool-block:test", AgwToolPermission.ReadOnly),
-            }
+            },
+            requireAllMembers: true
         );
 
         // Act
@@ -127,7 +128,8 @@ public sealed class AgwToolPermissionTests
             new Dictionary<string, AgwToolMetadata>
             {
                 [declared.Name] = new("tool-block:test", AgwToolPermission.ReadOnly),
-            }
+            },
+            requireAllMembers: true
         );
 
         // Act
@@ -153,7 +155,8 @@ public sealed class AgwToolPermissionTests
             new Dictionary<string, AgwToolMetadata>
             {
                 [first.Name] = new("tool-block:test", AgwToolPermission.ReadOnly),
-            }
+            },
+            requireAllMembers: true
         );
 
         // Act
@@ -166,6 +169,51 @@ public sealed class AgwToolPermissionTests
 
         // Assert
         Assert.Contains("produced more than once", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("second", null)]
+    [InlineData("first", "produced more than once")]
+    [InlineData(null, "did not produce its declared members: second")]
+    public async Task InvokingAsync_StaticAndDynamicProviders_ValidatesMembersAcrossPhases(
+        string? dynamicName,
+        string? expectedError
+    )
+    {
+        var readMetadata = new AgwToolMetadata("tool-block:mixed", AgwToolPermission.ReadOnly);
+        var writeMetadata = new AgwToolMetadata("tool-block:mixed", AgwToolPermission.Write);
+        var metadata = new Dictionary<string, AgwToolMetadata> { ["first"] = readMetadata, ["second"] = writeMetadata };
+        var first = AIFunctionFactory.Create(() => "first", "first");
+        IReadOnlyList<AIContextProvider> dynamicProviders =
+            dynamicName == null
+                ? []
+                : [new ToolProducingProvider(AIFunctionFactory.Create(() => "dynamic", dynamicName))];
+        var staticPhase = new AgwToolMetadataContextProvider(
+            [new ToolProducingProvider(first)],
+            metadata,
+            requireAllMembers: false
+        );
+        var dynamicPhase = new AgwToolMetadataContextProvider(dynamicProviders, metadata, requireAllMembers: true);
+        var agent = new TestAgent();
+        var ct = TestContext.Current.CancellationToken;
+        var context = await staticPhase.InvokingAsync(new AIContextProvider.InvokingContext(agent, null, new()), ct);
+        Assert.Equal(readMetadata, AgwToolMetadataBinding.GetMetadata(Assert.Single(context.Tools!)));
+
+        var invocation = new AIContextProvider.InvokingContext(agent, null, context);
+        if (expectedError == null)
+        {
+            var result = await dynamicPhase.InvokingAsync(invocation, ct);
+            Assert.Equal(["first", "second"], result.Tools!.Select(tool => tool.Name));
+            Assert.Equal(writeMetadata, AgwToolMetadataBinding.GetMetadata(result.Tools!.Last()));
+            Assert.IsType<ApprovalRequiredAIFunction>(result.Tools!.Last());
+        }
+        else
+        {
+            var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+                await dynamicPhase.InvokingAsync(invocation, ct)
+            );
+            Assert.Contains(expectedError, exception.Message, StringComparison.Ordinal);
+        }
     }
 
     private sealed class ToolProducingProvider : AIContextProvider

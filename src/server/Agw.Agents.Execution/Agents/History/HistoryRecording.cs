@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Agw.Agents.Execution.Context;
 using Agw.Projects.Contracts.History;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -31,6 +32,7 @@ internal sealed class HistoryRecording
     private readonly string? _agentName;
     private readonly bool _structuredResult;
     private List<ChatMessage>? _stagedInput;
+    private int? _inputStepIndex;
     private bool _failed;
 
     /// <summary>
@@ -77,7 +79,11 @@ internal sealed class HistoryRecording
     /// </summary>
     internal bool ModelCallStarted { get; private set; }
 
-    internal void MarkModelCall() => ModelCallStarted = true;
+    internal void MarkModelCall(int? inputStepIndex)
+    {
+        _inputStepIndex = inputStepIndex;
+        ModelCallStarted = true;
+    }
 
     /// <summary>
     /// 暂存本次运行的原始输入，在第一次模型请求前写入历史。
@@ -86,6 +92,17 @@ internal sealed class HistoryRecording
     internal void Stage(IReadOnlyList<ChatMessage> input) => _stagedInput = input.ToList();
 
     internal IReadOnlyList<ChatMessage>? TakeStagedInput() => Interlocked.Exchange(ref _stagedInput, null);
+
+    internal ValueTask WriteContextAttachmentsAsync(
+        IReadOnlyList<ChatMessage> messages,
+        CancellationToken cancellationToken
+    ) =>
+        ModelCallStarted
+            ? WriteMessagesAsync(messages, _inputStepIndex, cancellationToken)
+            : throw new AgwException(
+                ErrorCodes.AgentExecutionFailed,
+                "Writing context attachments requires a model call to have started."
+            );
 
     /// <summary>
     /// 按顺序写入完整消息：临时副本与交接前缀不写入，只去掉空白文本（空推理可能带签名）。
@@ -160,7 +177,11 @@ internal sealed class HistoryRecording
     /// Writes one tool result message whose row Id is generated from the turnId and its callIds. The streamed copy and the next model request write the same row,
     /// and a rerun after recovery updates it again; message IDs synthesized by the SDK take no part in the row identity.
     /// </summary>
-    internal ValueTask PutToolResultAsync(ChatMessage message, int? stepIndex, CancellationToken cancellationToken)
+    internal async ValueTask<ChatMessage> PutToolResultAsync(
+        ChatMessage message,
+        int? stepIndex,
+        CancellationToken cancellationToken
+    )
     {
         var stable = message.Clone();
         stable.Contents = message.Contents.ToList();
@@ -173,7 +194,8 @@ internal sealed class HistoryRecording
                 ? CreateDeterministicGuid($"{turnId:N}:{string.Join(',', callIds)}").ToString("D")
             : Guid.TryParse(message.MessageId, out _) ? message.MessageId
             : Guid.CreateVersion7().ToString("D");
-        return WriteAsync(stable, stepIndex, replaceStreamed: true, cancellationToken);
+        await WriteAsync(stable, stepIndex, replaceStreamed: true, cancellationToken).ConfigureAwait(false);
+        return stable;
     }
 
     private static Guid CreateDeterministicGuid(string value)

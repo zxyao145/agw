@@ -24,6 +24,25 @@ namespace Agw.Tools.Tests;
 public sealed class UserMemoryProviderTests
 {
     [Fact]
+    public async Task GetContentAsync_WithAndWithoutMemories_ReturnsContentOrNull()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var fixture = await Fixture.CreateAsync(ct);
+        var provider = new UserMemoryProvider(fixture.ScopeFactory);
+        IConversationContextSource source = provider;
+        Assert.Equal("User Memory", source.Title);
+        Assert.Null(await source.GetContentAsync(ct));
+
+        var context = await InvokeProviderAsync(provider);
+        var write = GetFunction(context, UserMemoryProvider.WriteToolName);
+        await write.InvokeAsync(Arguments(("name", "Profile"), ("content", "Prefer concise answers.")), ct);
+
+        var content = await source.GetContentAsync(ct);
+        Assert.Contains("Prefer concise answers.", content, StringComparison.Ordinal);
+        Assert.Equal((await provider.CreateContextMessageAsync(ct))?.Text, content);
+    }
+
+    [Fact]
     public async Task Tools_CrudCurrentUserAndContextUsesContentNotDescription()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -31,6 +50,8 @@ public sealed class UserMemoryProviderTests
         var provider = new UserMemoryProvider(fixture.ScopeFactory);
         var context = await InvokeProviderAsync(provider);
 
+        Assert.StartsWith("## User Memory", context.Instructions);
+        Assert.Contains("Knowledge that belongs to one project goes to project memory.", context.Instructions);
         Assert.Equal(
             [
                 UserMemoryProvider.DeleteToolName,

@@ -191,10 +191,10 @@ The compaction strategy calculates the effective input budget as:
 InputBudget = MaxContextWindowTokens - MaxOutputTokens
 ```
 
-`ContextWindowCompactionPipeline` evicts older tool results when estimated
-input tokens exceed `min(InputBudget × 50%, 64_000)`. Above 80% of the input
-budget, it truncates older message groups, keeping each tool call with its
-result. The provider reports the final token count.
+`ContextWindowCompactionPipeline` starts evicting older tool results above
+`T = min(InputBudget × 50%, 64_000)` and targets 60% of T. Above 80% of the
+input budget, it truncates older message groups to 80% of T. Each tool call
+stays grouped with its result. The provider reports the final token count.
 
 With the defaults of `256_000 / 64_000`, the effective input budget is
 `192_000`, so the two thresholds are `64_000` and `153_600`
@@ -254,10 +254,12 @@ State belongs to the runtime behavior that needs it, not to the catalog:
 - User Memory is always stored in the database and isolated by the authenticated
   user ID. Only its Markdown content is encrypted; names and descriptions stay
   searchable.
-- The shared Agent request-context pipeline injects at most 50 User Memory names
-  and complete Markdown bodies for System and External Agents. The injected
-  context is transient and is not persisted as conversation history. Descriptions
-  remain display metadata for management UI and `user_memory_list`.
+- System Agents send up to 50 User Memory names and complete Markdown bodies with
+  the Project Memory index in the first user message of every request. The session
+  stores this context and recomputes it when truncation changes the first history
+  message. External Agents include User Memory in their first user input of each
+  turn. Descriptions remain display metadata for the management UI and
+  `user_memory_list`.
 - Background relations and results are persisted by their owning runtime.
 
 ### Memory scope and privacy
@@ -594,16 +596,21 @@ explicitly rather than waiting indefinitely.
 | Control | What it decides | Enforcement |
 | --- | --- | --- |
 | Tool selection | Which capabilities this Agent/Project contributes. | Definition resolution and materialization. |
-| Plan/Execute (`mode`) | Whether the current Agent mode permits a tool. | `AgentModeProvider`, explicit `AllowInPlanMode`, visibility filtering, and invocation guard. |
+| Plan/Execute (`mode`) | Whether the current Agent mode permits a tool call. | `AgentModeProvider`, explicit `AllowInPlanMode`, and the function invocation guard. |
 | `AgwToolPermission` | Whether an ordinary function needs execution approval. | Metadata binding and `ApprovalRequiredAIFunction`. |
 | `AgwPermissionMode` | How an execution resolves that approval. | Session grants and execution interaction rules. |
 | Human-input protocol / HumanGate | Which real answer or workflow decision is required. | Typed interaction handler and tool protocol / workflow boundary. |
 
-When the `mode` ToolBlock supplies an `AgentModeProvider`, the Plan guard runs
-after tool-producing providers, hides restricted tools from the model, and
-rechecks mode before invoking restricted functions. Missing/unknown mode fails
-closed to Plan restrictions. `FullAccess` and an earlier approval cannot bypass
-this guard. Switching `mode` to `execute` does not change `AgwPermissionMode`.
+When the `mode` ToolBlock supplies an `AgentModeProvider`, the guard runs after
+tool-producing providers. Plan and Execute send the same tool definitions to
+the model. Calling a restricted function in Plan mode returns
+`PlanModeToolNotAllowed` before approval. The guard rechecks mode before
+executing a restricted function, including previously approved calls and calls
+under `FullAccess`. A missing or unknown mode applies Plan restrictions.
+`AgwPermissionMode` controls execution approval independently.
+The model service runs `HostedWebSearchTool`, which is allowed in both modes.
+With the `mode` ToolBlock configured, a hosted tool must be allowed in Plan mode.
+A restricted tool without an `AIFunction` fails request preparation in either mode.
 
 `ask_user_question` and Agent-requested `mode_set` use
 [`IHumanInteractionProtocol`](HumanInteraction/IHumanInteractionProtocol.cs)

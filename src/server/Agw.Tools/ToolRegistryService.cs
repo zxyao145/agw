@@ -301,7 +301,8 @@ public sealed class ToolRegistryService
                     try
                     {
                         BindContributionTools(contribution, contextualTool, "contextual");
-                        AddContribution(result, contribution);
+                        result.Merge(contribution);
+                        result.AddResource(contribution);
                     }
                     catch
                     {
@@ -768,26 +769,6 @@ public sealed class ToolRegistryService
             RequiresConfirmation = descriptor.MayRequireApproval,
             ExcludeFromList = descriptor.ExcludeFromList,
         };
-
-    private static void AddContribution(ToolContribution destination, ToolContribution contribution)
-    {
-        destination.Tools.AddRange(contribution.Tools);
-        destination.PlanModeAllowedToolNames.UnionWith(contribution.PlanModeAllowedToolNames);
-        destination.ContextProviders.AddRange(contribution.ContextProviders);
-        destination.LoopEvaluators.AddRange(contribution.LoopEvaluators);
-        destination.AutoApprovalRules.AddRange(contribution.AutoApprovalRules);
-        foreach (var metadata in contribution.DynamicToolMetadata)
-        {
-            destination.DynamicToolMetadata.Add(metadata.Key, metadata.Value);
-        }
-        destination.Warnings.AddRange(contribution.Warnings);
-        foreach (var warning in contribution.InvocationWarnings)
-        {
-            destination.InvocationWarnings[warning.Key] = warning.Value;
-        }
-
-        destination.AddResource(contribution);
-    }
 
     private bool IsAllowedInPlanMode(string name)
     {

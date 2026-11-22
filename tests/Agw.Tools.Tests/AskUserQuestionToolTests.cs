@@ -10,6 +10,17 @@ namespace Agw.Tools.Tests;
 public class AskUserQuestionToolTests
 {
     [Fact]
+    public void ToAITool_ModelSchema_ContainsOnlyQuestions()
+    {
+        var function = Assert.IsAssignableFrom<AIFunction>(new AskUserQuestionTool().ToAITool());
+
+        Assert.Equal(
+            ["questions"],
+            function.JsonSchema.GetProperty("properties").EnumerateObject().Select(property => property.Name)
+        );
+    }
+
+    [Fact]
     public async Task InvokeAsync_BeforeHumanResponse_RemainsPendingAndIgnoresModelAnswer()
     {
         var channel = new TestHumanInteractionChannel();

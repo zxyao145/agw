@@ -32,46 +32,26 @@ namespace Agw.Tools.Impl.ToolBlocks.Todo;
 /// </remarks>
 public sealed class AgwTodoProvider : AIContextProvider, IDisposable
 {
-    private const string DefaultInstructions = """
+    private const string Instructions = """
         ## Todo Items
-
-        You have access to a todo list for tracking work items.
-        When a user asks you to perform a task, follow these steps to manage your work:
-        1. Determine whether the ask requires multiple steps to complete (complex) or can be completed using a single step (simple).
-        2. If complex, turn the task into manageable todo items and add them to the list.
-        3. If simple, don't add a todo item, but rather just complete the task directly.
-
-        ### General TODO Guidelines
-        Ask questions from the user where clarification is needed to create effective todos.
-        If the user provides feedback on your plan, adjust your todos accordingly by adding new items or removing irrelevant/old ones.
-        During execution, use the todo list to keep track of what needs to be done, mark items as complete when finished, and remove any items that are no longer needed.
-        When a user changes the topic, changes their mind or switches to a new request, ensure that you update the todo list accordingly by removing irrelevant/old items, clearing the list, or adding new ones as needed.
-
-        Use these tools to manage your tasks:
-        - Use todos_add to break down complex work into trackable items (supports adding one or many at once).
-        - Use todos_complete to mark items as done when finished (supports one or many at once). Include a reason describing how the items were completed.
-        - Use todos_get_remaining to check what work is still pending.
-        - Use todos_get_all to review the full list including completed items.
-        - Use todos_remove to remove items that are no longer needed (supports one or many at once).
+        Track multi-step work with the `todos_*` tools.
+        Answer single-step requests directly without a todo list.
+        - Break complex work into todo items before starting, and ask the user when an item needs clarification.
+        - Mark items complete with a reason as you finish them, and remove items that no longer apply.
+        - When the user changes the request, update the list first.
         """;
 
     private readonly ProviderSessionState<AgwTodoState> _sessionState;
-    private readonly string _instructions;
-    private readonly bool _suppressTodoListMessage;
-    private readonly Func<IReadOnlyList<AgwTodoItem>, string>? _todoListMessageBuilder;
     private readonly ConditionalWeakTable<AgentSession, SemaphoreSlim> _sessionLocks = new();
     private readonly SemaphoreSlim _nullSessionLock = new(1, 1);
     private IReadOnlyList<string>? _stateKeys;
 
     /// <summary>
+    /// 创建 AgwTodoProvider 并配置会话状态。
     /// Initializes a new instance of the <see cref="AgwTodoProvider"/> class.
     /// </summary>
-    /// <param name="options">Optional settings that control provider behavior. When <see langword="null"/>, defaults are used.</param>
-    public AgwTodoProvider(AgwTodoProviderOptions? options = null)
+    public AgwTodoProvider()
     {
-        this._instructions = options?.Instructions ?? DefaultInstructions;
-        this._suppressTodoListMessage = options?.SuppressTodoListMessage ?? false;
-        this._todoListMessageBuilder = options?.TodoListMessageBuilder;
         this._sessionState = new ProviderSessionState<AgwTodoState>(
             _ => new AgwTodoState(),
             this.GetType().Name,
@@ -151,39 +131,10 @@ public sealed class AgwTodoProvider : AIContextProvider, IDisposable
     }
 
     /// <inheritdoc />
-    protected override async ValueTask<AIContext> ProvideAIContextAsync(
+    protected override ValueTask<AIContext> ProvideAIContextAsync(
         InvokingContext context,
         CancellationToken cancellationToken = default
-    )
-    {
-        var aiContext = new AIContext { Instructions = this._instructions, Tools = this.CreateTools(context.Session) };
-
-        if (!this._suppressTodoListMessage)
-        {
-            // Inject a synthetic user message summarizing the current todo list so the agent
-            // is aware of outstanding work at the start of each invocation.
-            SemaphoreSlim sessionLock = this.GetSessionLock(context.Session);
-            await sessionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-            List<AgwTodoItem> currentItems;
-            try
-            {
-                AgwTodoState state = this._sessionState.GetOrInitializeState(context.Session);
-                currentItems = state.Items.ToList();
-            }
-            finally
-            {
-                sessionLock.Release();
-            }
-
-            string message = this._todoListMessageBuilder is not null
-                ? this._todoListMessageBuilder(currentItems)
-                : FormatTodoListMessage(currentItems);
-
-            aiContext.Messages = [new ChatMessage(ChatRole.User, message)];
-        }
-
-        return aiContext;
-    }
+    ) => ValueTask.FromResult(new AIContext { Instructions = Instructions, Tools = this.CreateTools(context.Session) });
 
     /// <summary>
     /// Returns the per-session semaphore used to serialize all todo operations.
@@ -358,7 +309,7 @@ public sealed class AgwTodoProvider : AIContextProvider, IDisposable
         ];
     }
 
-    internal static string FormatTodoListMessage(List<AgwTodoItem> items)
+    internal static string FormatTodoListMessage(IReadOnlyList<AgwTodoItem> items)
     {
         if (items.Count == 0)
         {

@@ -1,3 +1,4 @@
+using Agw.Tools.Impl.ToolBlocks.Mode;
 using Agw.Tools.ToolBlocks;
 
 namespace Agw.Tools.Impl.ToolBlocks.Todo;
@@ -29,9 +30,13 @@ public sealed class TodoToolBlock : IToolBlock
         contribution.PlanModeAllowedToolNames.UnionWith(
             Descriptor.Members.Where(static member => member.AllowInPlanMode).Select(static member => member.Name)
         );
-        contribution.ContextProviders.Add(new AgwTodoProvider());
+        var provider = new AgwTodoProvider();
+        contribution.ContextProviders.Add(provider);
+        contribution.ContextAttachmentSources.Add(
+            new TodoReminderAttachmentSource(provider, Descriptor.MemberToolNames)
+        );
         var evaluatorOptions = context.EnabledToolBlockNames.Contains(ToolBlockNames.Mode)
-            ? new TodoCompletionLoopEvaluatorOptions { Modes = ["execute"] }
+            ? new TodoCompletionLoopEvaluatorOptions { Modes = [ModeToolBlock.ExecuteModeName] }
             : null;
         contribution.LoopEvaluators.Add(new TodoCompletionLoopEvaluator(evaluatorOptions));
         return ValueTask.FromResult(contribution);

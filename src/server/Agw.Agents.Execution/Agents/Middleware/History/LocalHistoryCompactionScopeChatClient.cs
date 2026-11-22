@@ -15,7 +15,7 @@ namespace Agw.Agents.Execution.Agents.Middleware.History;
 /// </remarks>
 internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClient
 {
-    private const string CompactionIndexVersion = "tool-result-eviction-v6";
+    private const string CompactionIndexVersion = "tool-result-eviction-v7";
 
     private readonly string? _compactionStateKey;
     private readonly string? _compactionVersionStateKey;
@@ -98,6 +98,9 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
             RunContextAccessor.SetCurrent(originalContext);
         }
     }
+
+    internal static AgentSession? GetOriginalSession(AgentSession? session) =>
+        session is LocalHistorySession localHistorySession ? localHistorySession.OriginalSession : session;
 
     /// <summary>
     /// <para>隔离输入并临时替换本地历史的压缩上下文，调用结束后恢复原上下文。</para>
@@ -264,6 +267,8 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
         {
             _innerSession = innerSession;
         }
+
+        internal AgentSession OriginalSession => _innerSession;
 
         /// <summary>
         /// <para>隐藏无键的 ChatClientAgentSession 查询，其余服务查询委托原会话和基类。</para>

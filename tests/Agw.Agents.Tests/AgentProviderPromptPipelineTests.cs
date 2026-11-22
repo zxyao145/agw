@@ -129,16 +129,5 @@ public sealed class AgentProviderPromptPipelineTests
         };
 
     private static AgentCapabilityComposition CreateCapabilities(params AITool[] tools) =>
-        new(
-            tools,
-            [],
-            [],
-            [],
-            [],
-            [],
-            new HashSet<string>(),
-            [],
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-            new AgentResourceLease()
-        );
+        AgwAgentTestHost.Capabilities(tools: tools);
 }

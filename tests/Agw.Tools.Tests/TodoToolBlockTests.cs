@@ -49,6 +49,13 @@ public sealed class TodoToolBlockTests
         var invokingContext = new AIContextProvider.InvokingContext(agent, session, new AIContext());
 #pragma warning restore MAAI001
         AIContext context = await provider.InvokingAsync(invokingContext, TestContext.Current.CancellationToken);
+        Assert.StartsWith("## Todo Items", context.Instructions);
+        const string opening =
+            "Track multi-step work with the `todos_*` tools.\n"
+            + "Answer single-step requests directly without a todo list.";
+        Assert.Contains(opening, context.Instructions?.ReplaceLineEndings("\n"));
+        Assert.Null(context.Messages);
+        Assert.IsType<TodoReminderAttachmentSource>(Assert.Single(contribution.ContextAttachmentSources));
         AIFunction addTodos = GetTool(context.Tools!, "todos_add");
         AIFunction completeTodos = GetTool(context.Tools!, "todos_complete");
 

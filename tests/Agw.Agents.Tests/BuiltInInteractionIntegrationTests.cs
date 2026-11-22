@@ -61,17 +61,11 @@ public sealed class BuiltInInteractionIntegrationTests
         var providers = toolName == "mode_set" ? modeTools.ContextProviders.ToList() : new List<AIContextProvider>();
         if (durable)
             providers.Add(new DeferredHumanInteractionProvider());
-        await using var capabilities = new AgentCapabilityComposition(
-            toolName == "ask_user_question" ? [new AskUserQuestionTool().ToAITool()] : [],
-            [],
-            [],
-            providers,
-            [],
-            [ToolApprovalAgent.AllToolsAutoApprovalRule],
-            modeTools.PlanModeAllowedToolNames,
-            [],
-            new Dictionary<string, string>(),
-            new AgentResourceLease()
+        await using var capabilities = AgwAgentTestHost.Capabilities(
+            tools: toolName == "ask_user_question" ? [new AskUserQuestionTool().ToAITool()] : [],
+            contextProviders: providers,
+            autoApprovalRules: [ToolApprovalAgent.AllToolsAutoApprovalRule],
+            planModeAllowedToolNames: modeTools.PlanModeAllowedToolNames
         );
         var arguments =
             toolName == "mode_set"

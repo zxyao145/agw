@@ -137,7 +137,7 @@ public sealed class SkillToolCompositionTests
 
         // Assert
         Assert.Equal(expectedCalls, calls);
-        Assert.Equal(allowInPlan, client.ExposedToolNames.Contains("job_operation"));
+        Assert.Contains("job_operation", client.ExposedToolNames);
         Assert.Empty(response.Messages.SelectMany(message => message.Contents).OfType<ToolApprovalRequestContent>());
         if (!allowInPlan)
         {
@@ -220,20 +220,24 @@ public sealed class SkillToolCompositionTests
         IReadOnlyList<AITool>? tools = null,
         IReadOnlySet<string>? declaredToolNames = null,
         string? mode = null
-    ) =>
-        new(
-            tools ?? [],
-            [],
-            [],
-            mode == null ? [] : [new AgentModeProvider(new AgentModeProviderOptions { DefaultMode = mode })],
-            [],
-            [],
-            new HashSet<string>(),
-            [],
-            new Dictionary<string, string>(),
-            new AgentResourceLease(),
-            declaredToolNames
-        );
+    )
+    {
+        var contribution = new ToolContribution();
+        contribution.Tools.AddRange(tools ?? []);
+        if (mode != null)
+            contribution.ContextProviders.Add(
+                new AgentModeProvider(new AgentModeProviderOptions { DefaultMode = mode })
+            );
+        if (declaredToolNames != null)
+        {
+            foreach (var name in declaredToolNames)
+                contribution.DynamicToolMetadata.Add(
+                    name,
+                    new AgwToolMetadata("tool-block:test", AgwToolPermission.ReadOnly)
+                );
+        }
+        return AgwAgentTestHost.Capabilities(contribution);
+    }
 
     private sealed class TestRegistration : IAgentSkillRegistration
     {

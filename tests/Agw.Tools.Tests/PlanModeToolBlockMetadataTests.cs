@@ -72,7 +72,7 @@ public sealed class PlanModeToolBlockMetadataTests
         );
         var session = await childAgent.CreateSessionAsync(TestContext.Current.CancellationToken);
         var runtimeContext = await Assert
-            .Single(contribution.ContextProviders)
+            .Single(contribution.DynamicContextProviders)
             .InvokingAsync(
                 new AIContextProvider.InvokingContext(childAgent, session, new AIContext()),
                 TestContext.Current.CancellationToken

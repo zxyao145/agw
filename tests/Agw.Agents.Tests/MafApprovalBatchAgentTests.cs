@@ -436,17 +436,9 @@ public sealed class MafApprovalBatchAgentTests : IAsyncDisposable
             ),
             new CaptionInputProtocol()
         );
-        var capabilities = new AgentCapabilityComposition(
-            [write, input],
-            [],
-            [],
-            [new DeferredHumanInteractionProvider()],
-            [],
-            [],
-            new HashSet<string>(),
-            [],
-            new Dictionary<string, string>(),
-            new AgentResourceLease()
+        var capabilities = AgwAgentTestHost.Capabilities(
+            tools: [write, input],
+            contextProviders: [new DeferredHumanInteractionProvider()]
         );
         return model.AsAgwAgent(
             new ResolvedAgentDefinition

@@ -176,17 +176,10 @@ public sealed class MafInteractionIntegrationTests : IDisposable
             ),
             new SampleInputProtocol()
         );
-        var capabilities = new AgentCapabilityComposition(
-            [tool],
-            [],
-            [],
-            deferred ? [new DeferredHumanInteractionProvider()] : [],
-            [],
-            [ToolApprovalAgent.AllToolsAutoApprovalRule],
-            new HashSet<string>(),
-            [],
-            new Dictionary<string, string>(),
-            new AgentResourceLease()
+        var capabilities = AgwAgentTestHost.Capabilities(
+            tools: [tool],
+            contextProviders: deferred ? [new DeferredHumanInteractionProvider()] : [],
+            autoApprovalRules: [ToolApprovalAgent.AllToolsAutoApprovalRule]
         );
         return model.AsAgwAgent(
             new ResolvedAgentDefinition

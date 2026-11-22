@@ -44,7 +44,9 @@ public sealed class UserMemoryToolBlock : IToolBlock
         contribution.PlanModeAllowedToolNames.UnionWith(
             Descriptor.Members.Where(static member => member.AllowInPlanMode).Select(static member => member.Name)
         );
-        contribution.ContextProviders.Add(new UserMemoryProvider(_serviceScopeFactory));
+        var provider = new UserMemoryProvider(_serviceScopeFactory);
+        contribution.ContextProviders.Add(provider);
+        contribution.ConversationContextSources.Add(provider);
         return ValueTask.FromResult(contribution);
     }
 }

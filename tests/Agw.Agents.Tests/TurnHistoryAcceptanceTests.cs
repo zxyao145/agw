@@ -244,22 +244,13 @@ public sealed class TurnHistoryAcceptanceTests : IDisposable
     private static AIAgent CreateAgent(HistoryTestFixture fixture, IChatClient model)
     {
         var history = fixture.CreateProvider();
-        var capabilities = new AgentCapabilityComposition(
+        var capabilities = AgwAgentTestHost.Capabilities(
             tools:
             [
                 AIFunctionFactory.Create(() => "found", "lookup"),
                 new ApprovalRequiredAIFunction(AIFunctionFactory.Create(() => "guarded result", "guarded")),
                 AIFunctionFactory.Create((Func<string>)(() => throw new InvalidOperationException("broken")), "broken"),
-            ],
-            pluginSkills: [],
-            warnings: [],
-            contextProviders: [],
-            loopEvaluators: [],
-            autoApprovalRules: [],
-            planModeAllowedToolNames: new HashSet<string>(),
-            toolWarnings: [],
-            toolInvocationWarnings: new Dictionary<string, string>(),
-            lease: new AgentResourceLease()
+            ]
         );
         var definition = new ResolvedAgentDefinition
         {

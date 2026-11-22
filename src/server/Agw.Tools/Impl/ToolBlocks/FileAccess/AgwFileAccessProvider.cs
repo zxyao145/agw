@@ -37,21 +37,18 @@ internal sealed class AgwFileAccessProvider : AIContextProvider
     private const string DirectoryIdDescription =
         "Additional Project directory ID. Omit or use null for the primary directory.";
 
-    private const string Instructions = """
+    private const string Instructions = $$"""
         ## File Access
-        You have access to a shared file storage area via the `file_access_*` tools for reading, writing, and managing files.
-        These files persist beyond the current session and may be shared across sessions or agents.
-        Use these tools to read input data provided by the user, write output artifacts, and manage any files the user has asked you to work with.
-
-        - Never delete or overwrite existing files unless the user has explicitly asked you to do so.
-        - Use `file_access_ls` to locate directories. Search for specific names or phrases with `file_access_grep`,
-          limiting the search with `directory` or `globPattern`. Pass the returned `continuation` to read the next page.
-        - To make small edits to an existing file, prefer `file_access_replace` (substring replacement) or
-          `file_access_replace_lines` (whole-line replacement) over rewriting the whole file.
-        - Use `file_access_read` for file content and `file_access_read_lines` with `startLine` and `endLine` for a range.
-          Pass any returned continuation back with the same file, range, and directory to read the next page.
-        - File paths are relative to the selected Project directory. Omit `directoryId` for the primary directory;
-          use a `directoryId` from the Project directory list for an additional directory.
+        The `file_access_*` tools read, write, and manage files in the Project directories.
+        Paths are relative to the selected Project directory.
+        - Never delete or overwrite existing files unless the user explicitly asked for it.
+        - {{
+            "Locate directories with `file_access_ls` and search with `file_access_grep`, "
+            + "limited by `directory` or `globPattern`."
+        }}
+        - Read a range with `file_access_read_lines`.
+        When a read or search returns a `continuation`, pass it back with the same arguments to get the next page.
+        - For a small edit, use `file_access_replace` or `file_access_replace_lines`.
         """;
 
     private readonly ProjectAgentFileStore _primaryStore;

@@ -83,7 +83,7 @@ internal sealed class ModeSetHumanInteractionProvider : AIContextProvider
                 JsonElement { ValueKind: JsonValueKind.String } element => element.GetString(),
                 _ => null,
             };
-            if (mode is not ("plan" or "execute"))
+            if (mode is not (ModeToolBlock.PlanModeName or ModeToolBlock.ExecuteModeName))
             {
                 throw new AgwException(ErrorCodes.InvalidParam, "mode_set.mode must be either 'plan' or 'execute'.");
             }
@@ -92,6 +92,6 @@ internal sealed class ModeSetHumanInteractionProvider : AIContextProvider
         }
 
         private static string ToDisplayName(string mode) =>
-            string.Equals(mode, "plan", StringComparison.Ordinal) ? "Plan" : "Execute";
+            string.Equals(mode, ModeToolBlock.PlanModeName, StringComparison.Ordinal) ? "Plan" : "Execute";
     }
 }

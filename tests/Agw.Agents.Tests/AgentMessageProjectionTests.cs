@@ -9,6 +9,30 @@ namespace Agw.Agents.Tests;
 public sealed class AgentMessageProjectionTests
 {
     [Fact]
+    public void Append_UserMessagePutInEarlierStep_ReusesExistingRow()
+    {
+        var projection = CreateProjection();
+        var id = Guid.CreateVersion7().ToString("N");
+        var put = projection.Put(new ChatMessage(ChatRole.User, "continue") { MessageId = id }, stepIndex: 4);
+
+        var appended = projection.Append(new ChatMessage(ChatRole.User, "continue") { MessageId = id }, stepIndex: 5);
+
+        Assert.Equal(put.MessageId, Assert.Single(projection.ReadMessages()).MessageId);
+        Assert.Equal(put.MessageId, appended.MessageId);
+    }
+
+    [Fact]
+    public void Append_AssistantMessageWithSameSourceInLaterStep_CreatesNewRow()
+    {
+        var projection = CreateProjection();
+        projection.Put(new ChatMessage(ChatRole.Assistant, "a") { MessageId = "chatcmpl-1" }, stepIndex: 1);
+
+        projection.Append(new ChatMessage(ChatRole.Assistant, "b") { MessageId = "chatcmpl-1" }, stepIndex: 2);
+
+        Assert.Equal(2, projection.ReadMessages().Count);
+    }
+
+    [Fact]
     public void CloneContent_TextAndReasoning_CopySerializableStateIntoIndependentCollections()
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);

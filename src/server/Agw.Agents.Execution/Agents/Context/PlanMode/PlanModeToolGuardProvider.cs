@@ -1,4 +1,5 @@
 using Agw.Shared.Exceptions;
+using Agw.Tools.Impl.ToolBlocks.Mode;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -7,13 +8,6 @@ namespace Agw.Agents.Execution.Agents.Context.PlanMode;
 
 internal sealed class PlanModeToolGuardProvider : AIContextProvider
 {
-    internal const string EnforcementInstructions = """
-        ## Plan Mode Tool Enforcement
-        Plan mode is enforced by the server. Only the tools currently exposed to you may be used.
-        Todo tools may be used to organize planning. Do not attempt shell commands; file or project-memory mutations; skill scripts; background-task mutations; or external Connection/MCP tools.
-        Inspect and research existing data, ask clarifying questions when needed, then present the plan in chat and wait for explicit human approval before requesting a switch to Execute mode.
-        """;
-
     private readonly AgentModeProvider _modeProvider;
     private readonly IReadOnlySet<string> _allowedToolNames;
     private readonly ILogger _logger;
@@ -41,67 +35,38 @@ internal sealed class PlanModeToolGuardProvider : AIContextProvider
     {
         var executeMode = await IsExecuteModeAsync(_modeProvider, context.Session, _logger, cancellationToken)
             .ConfigureAwait(false);
-        var tools = context.AIContext.Tools;
-        var duplicateNames =
-            tools == null
-                ? []
-                : tools
-                    .Where(static tool => !string.IsNullOrWhiteSpace(tool.Name))
-                    .GroupBy(static tool => tool.Name, StringComparer.OrdinalIgnoreCase)
-                    .Where(static group => group.Skip(1).Any())
-                    .Select(static group => group.Key)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (executeMode)
+        if (context.AIContext.Tools is { } tools)
         {
-            if (tools != null)
-            {
-                context.AIContext.Tools = tools
-                    .Select(tool => WrapIfRestricted(tool, context.Session, duplicateNames.Contains(tool.Name)))
-                    .ToArray();
-            }
+            var duplicateNames = tools
+                .Where(static tool => !string.IsNullOrWhiteSpace(tool.Name))
+                .GroupBy(static tool => tool.Name, StringComparer.OrdinalIgnoreCase)
+                .Where(static group => group.Skip(1).Any())
+                .Select(static group => group.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            return context.AIContext;
-        }
-
-        if (tools != null)
-        {
             context.AIContext.Tools = tools
-                .Where(tool =>
-                    !duplicateNames.Contains(tool.Name) && (_allowedToolNames.Contains(tool.Name) || tool is AIFunction)
-                )
                 .Select(tool =>
-                    _allowedToolNames.Contains(tool.Name)
-                        ? tool
-                        : WrapRestrictedFunction(tool, context.Session, hideFromModel: true)
-                )
+                {
+                    var isRestricted = duplicateNames.Contains(tool.Name) || !_allowedToolNames.Contains(tool.Name);
+                    return isRestricted
+                        ? WrapRestrictedTool(tool, context.Session, wasPlanModeActive: !executeMode)
+                        : tool;
+                })
                 .ToArray();
         }
 
-        context.AIContext.Instructions = string.IsNullOrWhiteSpace(context.AIContext.Instructions)
-            ? EnforcementInstructions
-            : $"{context.AIContext.Instructions}\n\n{EnforcementInstructions}";
         return context.AIContext;
     }
 
-    private AITool WrapIfRestricted(AITool tool, AgentSession? session, bool hasNameConflict)
+    private AIFunction WrapRestrictedTool(AITool tool, AgentSession? session, bool wasPlanModeActive)
     {
-        if ((!hasNameConflict && _allowedToolNames.Contains(tool.Name)) || tool is not AIFunction)
-        {
-            return tool;
-        }
-
-        return WrapRestrictedFunction(tool, session, hideFromModel: false);
-    }
-
-    private AITool WrapRestrictedFunction(AITool tool, AgentSession? session, bool hideFromModel)
-    {
-        var function = (AIFunction)tool;
-        if (function is PlanModeRestrictedAIFunction existing && existing.HideFromModel == hideFromModel)
-        {
-            return function;
-        }
-
-        return new PlanModeRestrictedAIFunction(function, _modeProvider, session, _logger, hideFromModel);
+        var function =
+            tool as AIFunction
+            ?? throw new AgwException(
+                ErrorCodes.AgentExecutionFailed,
+                $"Plan mode restrictions for tool '{tool.Name}' require an AIFunction."
+            );
+        return new PlanModeRestrictedAIFunction(function, _modeProvider, session, _logger, wasPlanModeActive);
     }
 
     internal static async ValueTask<bool> IsExecuteModeAsync(
@@ -119,7 +84,7 @@ internal sealed class PlanModeToolGuardProvider : AIContextProvider
         try
         {
             var mode = await modeProvider.GetModeAsync(session, cancellationToken).ConfigureAwait(false);
-            return string.Equals(mode, "execute", StringComparison.Ordinal);
+            return string.Equals(mode, ModeToolBlock.ExecuteModeName, StringComparison.Ordinal);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -144,21 +109,21 @@ internal sealed class PlanModeRestrictedAIFunction : DelegatingAIFunction
         AgentModeProvider modeProvider,
         AgentSession? session,
         ILogger logger,
-        bool hideFromModel
+        bool wasPlanModeActive
     )
-        : base(innerFunction)
+        : base(innerFunction is PlanModeRestrictedAIFunction existing ? existing.InnerFunction : innerFunction)
     {
         _modeProvider = modeProvider;
         _session = session;
         _logger = logger;
-        HideFromModel = hideFromModel;
+        WasPlanModeActive = wasPlanModeActive;
     }
 
-    internal bool HideFromModel { get; }
+    internal bool WasPlanModeActive { get; }
 
     public override object? GetService(Type serviceType, object? serviceKey = null)
     {
-        if (HideFromModel && serviceType == typeof(ApprovalRequiredAIFunction))
+        if (WasPlanModeActive && serviceType == typeof(ApprovalRequiredAIFunction))
         {
             return null;
         }
@@ -171,11 +136,12 @@ internal sealed class PlanModeRestrictedAIFunction : DelegatingAIFunction
         CancellationToken cancellationToken
     )
     {
-        if (
-            !await PlanModeToolGuardProvider
+        var restrictionsApply =
+            WasPlanModeActive
+            || !await PlanModeToolGuardProvider
                 .IsExecuteModeAsync(_modeProvider, _session, _logger, cancellationToken)
-                .ConfigureAwait(false)
-        )
+                .ConfigureAwait(false);
+        if (restrictionsApply)
         {
             var errorCode = ErrorCodes.PlanModeToolNotAllowed.Code;
             return $"{errorCode / 10_000:D3}_{errorCode % 10_000:D4} "

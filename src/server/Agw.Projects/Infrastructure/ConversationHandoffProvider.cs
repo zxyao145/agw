@@ -196,14 +196,18 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
     private static HandoffCandidate? CreateCandidate(AttributedRecord item)
     {
         var message = item.Record.ToChatMessage();
-        if (
-            message == null
-            || ConversationHandoffMetadata.IsHandoffMessage(message)
-            || ConversationHistoryMetadata.IsModelHistoryExcluded(message)
-        )
-        {
+        if (message is null)
             return null;
-        }
+
+        var hasAttachment =
+            message.AdditionalProperties?.GetValueOrDefault(ConversationHistoryMetadata.ContextAttachmentTypeKey)
+            is not null;
+        var excludeMessage =
+            ConversationHandoffMetadata.IsHandoffMessage(message)
+            || ConversationHistoryMetadata.IsModelHistoryExcluded(message)
+            || hasAttachment;
+        if (excludeMessage)
+            return null;
 
         var isResult = AgwMessageClassifier.IsResult(message);
         if (message.Role == ChatRole.User)

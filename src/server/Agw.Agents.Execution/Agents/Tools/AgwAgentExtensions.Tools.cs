@@ -1,5 +1,7 @@
 using Agw.Agents.Execution.Agents.Composition;
+using Agw.Agents.Execution.Agents.Context.Conversation;
 using Agw.Agents.Execution.Agents.Context.PlanMode;
+using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.History;
 using Agw.Agents.Execution.Agents.Middleware.ModelInput;
 using Agw.Agents.Execution.Agents.Middleware.ToolFeedback;
@@ -51,7 +53,7 @@ public static class AgwAgentExtensions
         var configuredChatClient = BuildChatClient(
             chatClient,
             definition,
-            modeProvider != null,
+            capabilities,
             functionLoopContextTracker,
             loggerFactory,
             services
@@ -86,7 +88,8 @@ public static class AgwAgentExtensions
             // 配置了 Response Schema 时启用结构化输出；未配置时保持现有行为。
             ResponseFormat = definition.ResponseFormat,
         };
-        // 等所有 Provider 生成 Tool 后再添加 Plan 限制；受限 Tool 会对 Model 隐藏，调用时也会被拒绝。
+        // 在所有 Provider 生成 Tool 后添加 Plan 模式的执行检查。
+        // Adds the Plan mode execution checks after all providers have supplied their tools.
         var contextProviders = capabilities.ContextProviders.ToList();
         if (modeProvider != null)
         {
@@ -123,34 +126,16 @@ public static class AgwAgentExtensions
     private static IChatClient BuildChatClient(
         IChatClient chatClient,
         ResolvedAgentDefinition definition,
-        bool hasModeProvider,
+        AgentCapabilityComposition capabilities,
         FunctionLoopContextTracker? functionLoopContextTracker,
         ILoggerFactory loggerFactory,
         IServiceProvider services
     )
     {
-        // 请求按 Use 的注册顺序进入各层，响应按相反顺序返回。
-        var toolInvocationExceptionHandler = new ToolInvocationExceptionHandler(
-            loggerFactory.CreateLogger<ToolInvocationExceptionHandler>()
-        );
-        var chatClientBuilder = chatClient
-            .AsBuilder()
-            // 将用户批准绑定到原始 Tool 调用，防止继续执行时换成其他 Tool 或参数。
-            .UseApprovalResponseBinding(loggerFactory)
-            // SDK 可能要求同一批 Tool 一起审批；这里让原本无需审批的 Tool 自动继续执行。
-            .UseApprovalNotRequiredFunctionBypassing()
-            // 将需要用户回答的问题标记为 UserInput，确保 FullAccess 下也会等待用户回答。
-            .Use(inner => new HumanInteractionDescriptionChatClient(
-                inner,
-                services.GetService(typeof(IHumanInteractionContextAccessor)) as IHumanInteractionContextAccessor
-            ))
-            // 执行 Model 请求的 Tool，并将结果交回 Model；需要审批时先返回审批请求。
-            // FunctionInvoker 将 Tool 异常转换为可交给 Model 的错误信息。
-            .UseFunctionInvocation(
-                loggerFactory,
-                functionInvokingClient =>
-                    functionInvokingClient.FunctionInvoker = toolInvocationExceptionHandler.InvokeAsync
-            );
+        // 请求按注册顺序处理，响应按相反顺序返回。
+        // Requests follow registration order and responses travel in reverse.
+        var chatClientBuilder = chatClient.AsBuilder();
+        ConfigureToolInvocationPipeline(chatClientBuilder, loggerFactory, services);
         // 复制 Function Loop 使用的消息，避免历史处理修改原始内容；批准后继续执行时，跳过已添加的 Context。
         if (functionLoopContextTracker != null)
         {
@@ -160,14 +145,19 @@ public static class AgwAgentExtensions
             ));
         }
 
-        // 从发给 Model 的 Tool 列表中隐藏 Plan 模式禁用的 Tool；执行检查仍保留，防止 Model 强行调用。
-        if (hasModeProvider)
-        {
-            chatClientBuilder.Use(static innerClient => new PlanModeToolVisibilityChatClient(innerClient));
-        }
+        chatClientBuilder.Use(static innerClient => new ToolOrderingChatClient(innerClient));
 
         // 每次请求 Model 前处理历史，包括加入新消息、整理顺序、保存进度和 Compaction。
         ConfigureHistoryPipeline(chatClientBuilder, definition, loggerFactory);
+        if (capabilities.ConversationContextSources.Count > 0 || capabilities.ContextAttachmentSources.Count > 0)
+        {
+            chatClientBuilder.Use(innerClient => new ConversationContextChatClient(
+                innerClient,
+                capabilities.ConversationContextSources,
+                capabilities.ContextAttachmentSources,
+                definition.ChatHistoryProvider as AgwChatHistoryProvider
+            ));
+        }
 
         // 移除空消息和已处理的 Function 审批响应，避免发送 Model 无法接收的内容；MCP 审批响应仍保留。
         chatClientBuilder.Use(static innerClient => new ModelInputFilteringChatClient(innerClient));
@@ -178,6 +168,35 @@ public static class AgwAgentExtensions
         );
 
         return chatClientBuilder.Build(services);
+    }
+
+    private static void ConfigureToolInvocationPipeline(
+        ChatClientBuilder builder,
+        ILoggerFactory loggerFactory,
+        IServiceProvider services
+    )
+    {
+        var toolInvocationExceptionHandler = new ToolInvocationExceptionHandler(
+            loggerFactory.CreateLogger<ToolInvocationExceptionHandler>()
+        );
+        builder
+            // 将批准绑定到原始调用，保留同一批次中无需审批的调用。
+            // Binds approvals to their original calls and preserves calls that need no approval in the same batch.
+            .UseApprovalResponseBinding(loggerFactory)
+            .UseApprovalNotRequiredFunctionBypassing()
+            // 用户输入请求在 FullAccess 下也等待用户响应。
+            // User input requests wait for a user response even under FullAccess.
+            .Use(inner => new HumanInteractionDescriptionChatClient(
+                inner,
+                services.GetService(typeof(IHumanInteractionContextAccessor)) as IHumanInteractionContextAccessor
+            ))
+            // FunctionInvoker 将 Tool 异常转换为模型可以接收的错误结果。
+            // The function invoker converts tool exceptions into error results for the model.
+            .UseFunctionInvocation(
+                loggerFactory,
+                functionInvokingClient =>
+                    functionInvokingClient.FunctionInvoker = toolInvocationExceptionHandler.InvokeAsync
+            );
     }
 
     /// <summary>

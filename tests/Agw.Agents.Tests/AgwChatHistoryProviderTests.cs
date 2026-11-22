@@ -3,12 +3,14 @@ using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.History;
+using Agw.Agents.Execution.Agents.Tools;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Projects.Application.History;
 using Agw.Projects.Application.Persistence;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Testing;
 using Microsoft.Agents.AI;
@@ -36,6 +38,89 @@ public sealed class AgwChatHistoryProviderTests : IDisposable
     private readonly HistorySessionState _sessionState = new();
 
     public void Dispose() => _userScope.Dispose();
+
+    [Fact]
+    public async Task WriteContextAttachmentsAsync_RecordingMissing_ThrowsAgentExecutionFailed()
+    {
+        await using var fixture = await HistoryTestFixture.CreateAsync();
+        var history = fixture.CreateProvider();
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await history.WriteContextAttachmentsAsync(new FakeAgentSession(), [], cancellationToken)
+        );
+
+        Assert.Equal(ErrorCodes.AgentExecutionFailed.Code, exception.Code);
+        Assert.Empty(await fixture.ReadMessagesAsync());
+    }
+
+    [Fact]
+    public async Task WriteContextAttachmentsAsync_ModelCallNotStarted_ThrowsAgentExecutionFailed()
+    {
+        await using var fixture = await HistoryTestFixture.CreateAsync();
+        var history = fixture.CreateProvider();
+        using var model = new RecordingModelClient();
+        var agent = new ChatClientAgent(model, new ChatClientAgentOptions { Name = "test-agent" });
+        var session = await fixture.CreateSessionAsync(agent);
+        history.Begin(agent, session);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await history.WriteContextAttachmentsAsync(
+                session,
+                [new ChatMessage(ChatRole.User, "reminder")],
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Equal(ErrorCodes.AgentExecutionFailed.Code, exception.Code);
+        Assert.Empty(await fixture.ReadMessagesAsync());
+    }
+
+    [Fact]
+    public async Task InvokingCoreAsync_ModeChangeNotice_IsRemoved()
+    {
+        using var owner = HistoryTestFixture.EnterUser();
+        await using var fixture = await HistoryTestFixture.CreateAsync();
+        var model = new RecordingModelClient();
+        var history = fixture.CreateProvider();
+        var modeProvider = new AgentModeProvider(new AgentModeProviderOptions { DefaultMode = "execute" });
+        await using var capabilities = AgwAgentTestHost.Capabilities(contextProviders: [modeProvider]);
+        var agent = HistoryTestFixture.Record(
+            model.AsAgwAgent(
+                AgwAgentTestHost.Definition(history),
+                capabilities,
+                NullLoggerFactory.Instance,
+                fixture.Services
+            ),
+            history
+        );
+        var session = await fixture.CreateSessionAsync(agent);
+        await AgwAgentTestHost.RunTurnAsync(fixture, agent, session, new ChatMessage(ChatRole.User, "one"));
+        await modeProvider.SetModeAsync(session, "plan", TestContext.Current.CancellationToken);
+        var instruction = new ChatMessage(ChatRole.System, "node rules").WithAgentRequestMessageSource(
+            AgentRequestMessageSourceType.AIContextProvider,
+            "AgentflowMessageTransforms"
+        );
+
+        await AgwAgentTestHost.RunTurnAsync(
+            fixture,
+            agent,
+            session,
+            instruction,
+            new ChatMessage(ChatRole.User, "two")
+        );
+
+        Assert.DoesNotContain(
+            model.Requests[1].Messages,
+            message => message.Text.StartsWith("[Mode changed", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain(
+            await fixture.ReadMessagesAsync(),
+            message => message.Text.StartsWith("[Mode changed", StringComparison.Ordinal)
+        );
+        Assert.Single(model.Requests[1].Messages, message => message.Text == "node rules");
+        Assert.Single(model.Requests[1].Messages, message => message.Text == "two");
+    }
 
     [Fact]
     public void TryGetProjectContext_InitializedSession_ReturnsProjectAndContext()

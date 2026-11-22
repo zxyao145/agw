@@ -394,6 +394,36 @@ public class ConversationHandoffProviderTests
     }
 
     [Fact]
+    public async Task CreateAsync_ContextAttachmentRows_AreSkipped()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = PushTestUser();
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var source = CreateMetadata(AgentRuntimeType.Agent, Guid.CreateVersion7());
+        var reminder = CreateUserMessage("<system-reminder>\nPlan mode is active.\n</system-reminder>", "reminder");
+        reminder.AdditionalProperties ??= [];
+        reminder.AdditionalProperties[ConversationHistoryMetadata.ContextAttachmentTypeKey] = "plan_mode";
+        await SeedAsync(
+            options,
+            projectId,
+            conversationId,
+            cancellationToken,
+            CreateRecord(conversationId, 0, CreateUserMessage("request", "user"), source),
+            CreateRecord(conversationId, 1, reminder, source),
+            CreateRecord(conversationId, 2, CreateAssistantMessage("answer", "assistant"), source)
+        );
+        await using var dbContext = new AgwDbContext(options);
+
+        var handoff = await CreateProvider(dbContext)
+            .CreateAsync(conversationId, AgentRuntimeType.Agentflow, Guid.CreateVersion7(), cancellationToken);
+
+        Assert.Equal(["request", "answer"], handoff.Messages.Select(message => message.Text));
+    }
+
+    [Fact]
     public async Task CreateAsync_PrivateControlAndToolMessages_ReturnsOnlyPublicTextAndResult()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

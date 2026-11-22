@@ -33,35 +33,30 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
     private readonly HashSet<string> _planModeAllowedToolNames;
 
     internal AgentCapabilityComposition(
-        IReadOnlyList<AITool> tools,
+        ToolContribution contribution,
         IReadOnlyList<PluginSkillReference> pluginSkills,
         IReadOnlyList<ConnectionCapabilityWarning> warnings,
-        IReadOnlyList<AIContextProvider> contextProviders,
-        IReadOnlyList<LoopEvaluator> loopEvaluators,
-        IReadOnlyList<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>> autoApprovalRules,
-        IReadOnlySet<string> planModeAllowedToolNames,
-        IReadOnlyList<string> toolWarnings,
-        IReadOnlyDictionary<string, string> toolInvocationWarnings,
         AgentResourceLease lease,
-        IReadOnlySet<string>? declaredToolNames = null,
         IReadOnlyList<AgentSkill>? extensionSkills = null
     )
     {
-        _tools = tools.ToList();
-        _toolNames = tools.Select(tool => tool.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (declaredToolNames != null)
-        {
-            _toolNames.UnionWith(declaredToolNames);
-        }
+        _tools = contribution.Tools.ToList();
+        _toolNames = _tools.Select(tool => tool.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _toolNames.UnionWith(contribution.DynamicToolMetadata.Keys);
         PluginSkills = pluginSkills;
         Warnings = warnings;
-        _contextProviders = contextProviders.ToList();
-        LoopEvaluators = loopEvaluators;
-        _autoApprovalRules = autoApprovalRules.ToList();
-        _planModeAllowedToolNames = new HashSet<string>(planModeAllowedToolNames, StringComparer.OrdinalIgnoreCase);
-        ToolWarnings = toolWarnings;
-        ToolInvocationWarnings = toolInvocationWarnings;
+        _contextProviders = contribution.ContextProviders.ToList();
+        LoopEvaluators = contribution.LoopEvaluators;
+        _autoApprovalRules = contribution.AutoApprovalRules.ToList();
+        _planModeAllowedToolNames = new HashSet<string>(
+            contribution.PlanModeAllowedToolNames,
+            StringComparer.OrdinalIgnoreCase
+        );
+        ToolWarnings = contribution.Warnings;
+        ToolInvocationWarnings = contribution.InvocationWarnings;
         ExtensionSkills = extensionSkills ?? [];
+        ConversationContextSources = contribution.ConversationContextSources.ToArray();
+        ContextAttachmentSources = contribution.ContextAttachmentSources;
         _lease = lease;
     }
 
@@ -90,6 +85,10 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
     /// 运行时向 Agent 提供 Context 和动态 Tool 的 Provider，按列表顺序执行。
     /// </summary>
     public IReadOnlyList<AIContextProvider> ContextProviders => _contextProviders;
+
+    public IReadOnlyList<IConversationContextSource> ConversationContextSources { get; }
+
+    public IReadOnlyList<IContextAttachmentSource> ContextAttachmentSources { get; }
 
     /// <summary>
     /// Rules that decide whether the Agent should continue running; LoopAgent is configured when rules are present.

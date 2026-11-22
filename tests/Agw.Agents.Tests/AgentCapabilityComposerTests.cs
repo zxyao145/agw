@@ -3,6 +3,7 @@ using System.Reflection;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context.Workspace;
+using Agw.Agents.Execution.Agents.Tools;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Extensions.Contracts;
@@ -25,9 +26,11 @@ using Agw.Skills.Contracts.References;
 using Agw.Tools.Abstractions;
 using Agw.Tools.Abstractions.ToolBlocks;
 using Agw.Tools.Impl.ContextualTools.WebSearch;
+using Agw.Tools.Impl.ToolBlocks.Todo;
 using Agw.Tools.Impl.ToolBlocks.UserMemory;
 using Agw.Tools.Runtime;
 using Agw.Tools.ToolBlocks;
+using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -39,6 +42,93 @@ namespace Agw.Agents.Tests;
 
 public class AgentCapabilityComposerTests
 {
+    [Theory]
+    [InlineData("file-access,notification,todo")]
+    [InlineData("notification,todo,file-access")]
+    public async Task ComposeAsync_StaticAndDynamicProviders_OrdersStaticInstructionsBeforeDynamic(
+        string configuredOrder
+    )
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var database = await TestDatabase.CreateAsync(cancellationToken);
+        var composer = CreateComposer(
+            database.Context,
+            database.ExtensionCapabilities,
+            CreateToolRegistry(database.Services),
+            new StubConnectionCapabilityResolver((_, _, _) => CreateResolution()),
+            new StubMcpToolMaterializer((_, _, _) => CreateToolLease([], [])),
+            [
+                new ProviderToolBlock("todo"),
+                new ProviderToolBlock("file-access"),
+                new ProviderToolBlock("notification", dynamicInstructions: "notification runtime settings"),
+            ]
+        );
+        var agent = new Agent
+        {
+            Type = AgentType.System,
+            Tools = configuredOrder
+                .Split(',')
+                .Select(name => (ToolValueObject)new ToolBlockValue { Definition = new NamedToolBlockDefinition(name) })
+                .ToList(),
+        };
+
+        await using var composition = await composer.ComposeAsync(
+            agent,
+            new Project { Id = Guid.CreateVersion7() },
+            new Dictionary<string, string>(),
+            cancellationToken
+        );
+
+        var instructions = await GetModelInstructionsAsync(composition, database.Services, cancellationToken);
+        AssertInstructionsOrder(instructions);
+        Assert.Contains("agw-job", instructions, StringComparison.Ordinal);
+    }
+
+    private static async Task<string> GetModelInstructionsAsync(
+        AgentCapabilityComposition composition,
+        IServiceProvider services,
+        CancellationToken cancellationToken
+    )
+    {
+        var skills = new AgentSkillsProviderBuilder()
+            .UseSkill(new AgentRuntimeFactorySystemCompositionTests.TestClassSkill())
+            .UsePromptTemplate("Skill catalog:\n{skills}")
+            .Build();
+        composition.AddResource(skills);
+        composition.AddContextProvider(skills);
+        var model = new RecordingModelClient();
+        var agent = model.AsAgwAgent(
+            AgwAgentTestHost.Definition(new InMemoryChatHistoryProvider(), systemPrompt: "Agent system prompt"),
+            composition,
+            NullLoggerFactory.Instance,
+            services
+        );
+        await agent.RunAsync("Reply", cancellationToken: cancellationToken);
+        return Assert.IsType<string>(Assert.Single(model.Requests).Instructions);
+    }
+
+    private static void AssertInstructionsOrder(string instructions)
+    {
+        var previous = -1;
+        foreach (
+            var section in new[]
+            {
+                "Agent system prompt",
+                "static todo",
+                "static file-access",
+                "static notification",
+                "# Project Workspace",
+                "notification runtime settings",
+                "Skill catalog:",
+            }
+        )
+        {
+            var position = instructions.IndexOf(section, StringComparison.Ordinal);
+            Assert.True(position > previous, $"Expected section '{section}' at the next position.");
+            previous = position;
+        }
+    }
+
     [Fact]
     public async Task ComposeAsync_LocalWebSearch_RegistersInvocationWarning()
     {
@@ -275,6 +365,8 @@ public class AgentCapabilityComposerTests
 
         Assert.Empty(composition.Tools);
         Assert.NotNull(Assert.Single(composition.ContextProviders).GetService<UserMemoryProvider>());
+        Assert.Empty(composition.ConversationContextSources);
+        Assert.Empty(composition.ContextAttachmentSources);
         Assert.Empty(composition.PlanModeAllowedToolNames);
         Assert.Null(unrelatedBlock.MaterializedDefaultMode);
         Assert.Empty(resolver.Calls);
@@ -433,6 +525,8 @@ public class AgentCapabilityComposerTests
         );
 
         Assert.Equal("test_block_tool", Assert.Single(composition.Tools).Name);
+        Assert.IsType<TestConversationContextSource>(Assert.Single(composition.ConversationContextSources));
+        Assert.IsType<TodoReminderAttachmentSource>(Assert.Single(composition.ContextAttachmentSources));
         Assert.Equal(["test_block_tool"], composition.PlanModeAllowedToolNames);
         Assert.Equal("execute", toolBlock.MaterializedDefaultMode);
     }
@@ -627,6 +721,60 @@ public class AgentCapabilityComposerTests
         public override string GetDefinitionName() => "test-block";
     }
 
+    private sealed record NamedToolBlockDefinition : ToolBlockDefinition<EmptyToolOptions>
+    {
+        private readonly string _name;
+
+        public NamedToolBlockDefinition(string name)
+        {
+            _name = name;
+        }
+
+        public override string GetDefinitionName() => _name;
+    }
+
+    private sealed class ProviderToolBlock : IToolBlock
+    {
+        private readonly string? _dynamicInstructions;
+
+        public ProviderToolBlock(string name, string? dynamicInstructions = null)
+        {
+            Descriptor = new(name, name, "Provides instructions.", ToolBlockScope.Agent, []);
+            _dynamicInstructions = dynamicInstructions;
+        }
+
+        public ToolBlockDescriptor Descriptor { get; }
+
+        public ValueTask<ToolContribution> MaterializeAsync(
+            ToolBlockDefinition definition,
+            ToolMaterializationContext context,
+            CancellationToken cancellationToken
+        )
+        {
+            var contribution = new ToolContribution();
+            contribution.ContextProviders.Add(new NamedContextProvider($"static {Descriptor.Name}"));
+            if (_dynamicInstructions != null)
+                contribution.DynamicContextProviders.Add(new NamedContextProvider(_dynamicInstructions));
+            return ValueTask.FromResult(contribution);
+        }
+    }
+
+    private sealed class NamedContextProvider : AIContextProvider
+    {
+        public NamedContextProvider(string name)
+        {
+            Name = name;
+        }
+
+        public string Name { get; }
+        public override IReadOnlyList<string> StateKeys => [];
+
+        protected override ValueTask<AIContext> ProvideAIContextAsync(
+            InvokingContext context,
+            CancellationToken cancellationToken = default
+        ) => ValueTask.FromResult(new AIContext { Instructions = Name });
+    }
+
     private sealed class TestToolBlock : IToolBlock
     {
         public string? MaterializedDefaultMode { get; private set; }
@@ -650,8 +798,21 @@ public class AgentCapabilityComposerTests
             var contribution = new ToolContribution();
             contribution.Tools.Add(CreateTool("test_block_tool"));
             contribution.PlanModeAllowedToolNames.Add("test_block_tool");
+            var todoProvider = new AgwTodoProvider();
+            contribution.ContextAttachmentSources.Add(
+                new TodoReminderAttachmentSource(todoProvider, new TodoToolBlock().Descriptor.MemberToolNames)
+            );
+            contribution.ConversationContextSources.Add(new TestConversationContextSource());
             return ValueTask.FromResult(contribution);
         }
+    }
+
+    private sealed class TestConversationContextSource : IConversationContextSource
+    {
+        public string Title => "Test";
+
+        public ValueTask<string?> GetContentAsync(CancellationToken cancellationToken) =>
+            ValueTask.FromResult<string?>(null);
     }
 
     private sealed class TestDatabase : IAsyncDisposable

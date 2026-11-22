@@ -42,6 +42,172 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         .Scope(ExecutionTestScopes.Context(userId: "tester"))
         .Push();
 
+    [Fact]
+    public async Task AsAgwAgent_ModeSwitched_KeepsToolsAndInstructionsIdentical()
+    {
+        var requests = await CaptureModeSwitchRequestsAsync();
+        Assert.Equal(6, requests.Count);
+        var first = requests[0];
+        var tools = first.GetProperty("tools").GetRawText();
+        var system = first.GetProperty("messages")[0];
+        Assert.Equal("system", system.GetProperty("role").GetString());
+        Assert.Contains("## Agent Mode", system.GetProperty("content").GetString());
+        var writeTool = Assert.Single(
+            first.GetProperty("tools").EnumerateArray().Select(item => item.GetProperty("function")),
+            function => function.GetProperty("name").GetString() == "write_record"
+        );
+        Assert.Equal("Writes a named record.", writeTool.GetProperty("description").GetString());
+        var name = writeTool.GetProperty("parameters").GetProperty("properties").GetProperty("name");
+        Assert.Equal("string", name.GetProperty("type").GetString());
+        foreach (var request in requests.Skip(1))
+        {
+            Assert.Equal(tools, request.GetProperty("tools").GetRawText());
+            Assert.Equal(system.GetRawText(), request.GetProperty("messages")[0].GetRawText());
+        }
+    }
+
+    private static async Task<IReadOnlyList<JsonElement>> CaptureModeSwitchRequestsAsync()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var owner = HistoryTestFixture.EnterUser();
+        await using var historyFixture = await HistoryTestFixture.CreateAsync();
+        await using var transport = new OpenAiReasoningChatClientTests.ClientFixture("https://api.openai.com/v1");
+        transport.Handler.CompleteAfterTools = true;
+        await using var mode = await MaterializeBlockAsync(new ModeToolBlock(), new ModeToolBlockDefinition());
+        var modeProvider = Assert.IsType<AgentModeProvider>(
+            Assert.Single(mode.ContextProviders).GetService<AgentModeProvider>()
+        );
+        var lookup = AIFunctionFactory.Create(() => "found", "lookup", "Looks up a record.");
+        var restricted = new ApprovalRequiredAIFunction(
+            AIFunctionFactory.Create((string name) => name, "write_record", "Writes a named record.")
+        );
+        mode.Tools.AddRange([restricted, lookup]);
+        mode.PlanModeAllowedToolNames.Add(lookup.Name);
+        await using var capabilities = AgwAgentTestHost.Capabilities(mode);
+        var history = historyFixture.CreateProvider();
+        var agent = HistoryTestFixture.Record(
+            transport.Client.AsAgwAgent(
+                CreateDefinition(history),
+                capabilities,
+                NullLoggerFactory.Instance,
+                historyFixture.Services
+            ),
+            history
+        );
+        var session = await historyFixture.CreateSessionAsync(agent);
+        foreach (var value in new[] { "execute", "plan", "execute" })
+        {
+            await modeProvider.SetModeAsync(session, value, ct);
+            await AgwAgentTestHost.RunTurnAsync(
+                historyFixture,
+                agent,
+                session,
+                new ChatMessage(ChatRole.User, $"Reply in {value} mode.")
+            );
+        }
+
+        return transport.Handler.Requests;
+    }
+
+    [Fact]
+    public async Task AsAgwAgent_ConsecutiveModelRequests_EachStartsWithPreviousRequest()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var owner = HistoryTestFixture.EnterUser();
+        await using var fixture = await HistoryTestFixture.CreateAsync();
+        await using var mode = await MaterializeBlockAsync(new ModeToolBlock(), new ModeToolBlockDefinition());
+        var modeProvider = Assert.IsType<AgentModeProvider>(
+            Assert.Single(mode.ContextProviders).GetService<AgentModeProvider>()
+        );
+        var search = AIFunctionFactory.Create(() => "search result", "web_search");
+        var model = new RecordingModelClient(
+            (index, _) =>
+                index is 0 or 1 or 4
+                    ? [new FunctionCallContent($"call-{index}", "web_search")]
+                    : [new TextContent("done")]
+        );
+        var history = fixture.CreateProvider();
+        var continueOnce = new DelegateLoopEvaluator(
+            (_, _) =>
+                ValueTask.FromResult(
+                    model.Requests.Count == 3 ? LoopEvaluation.Continue("keep going") : LoopEvaluation.Stop()
+                )
+        );
+        mode.Tools.Add(new ApprovalRequiredAIFunction(search));
+        mode.LoopEvaluators.Add(continueOnce);
+        mode.AutoApprovalRules.Add(ToolApprovalAgent.AllToolsAutoApprovalRule);
+        mode.PlanModeAllowedToolNames.Add(search.Name);
+        await using var capabilities = AgwAgentTestHost.Capabilities(mode);
+        var compaction = new CompactionProvider(
+            ContextWindowCompactionPipeline.Create(256_000, 64_000),
+            stateKey: "test-compaction"
+        );
+        var agent = HistoryTestFixture.Record(
+            model.AsAgwAgent(
+                AgwAgentTestHost.Definition(history, compaction),
+                capabilities,
+                NullLoggerFactory.Instance,
+                fixture.Services
+            ),
+            history
+        );
+        var session = await fixture.CreateSessionAsync(agent);
+        await modeProvider.SetModeAsync(session, "execute", cancellationToken);
+
+        await AgwAgentTestHost.RunTurnAsync(fixture, agent, session, new ChatMessage(ChatRole.User, "one"));
+        await modeProvider.SetModeAsync(session, "plan", cancellationToken);
+        await AgwAgentTestHost.RunTurnAsync(fixture, agent, session, new ChatMessage(ChatRole.User, "two"));
+        await modeProvider.SetModeAsync(session, "execute", cancellationToken);
+        await AgwAgentTestHost.RunTurnAsync(fixture, agent, session, new ChatMessage(ChatRole.User, "three"));
+
+        Assert.Equal(7, model.Requests.Count);
+        for (var index = 1; index < model.Requests.Count; index++)
+        {
+            var previous = model.Requests[index - 1];
+            var current = model.Requests[index];
+            Assert.Equal(
+                previous.Messages.Select(ModelMessageSignature),
+                current.Messages.Take(previous.Messages.Count).Select(ModelMessageSignature)
+            );
+            Assert.Equal(previous.Instructions, current.Instructions);
+            Assert.Equal(previous.ToolNames, current.ToolNames);
+        }
+
+        Assert.DoesNotContain("Current mode:", model.Requests[0].Instructions, StringComparison.Ordinal);
+        Assert.Equal(
+            ContextAttachmentTypes.PlanMode,
+            ContextAttachmentHistory.GetAttachmentType(model.Requests[4].Messages[^1])
+        );
+        Assert.Equal(
+            ContextAttachmentTypes.PlanModeExit,
+            ContextAttachmentHistory.GetAttachmentType(model.Requests[6].Messages[^1])
+        );
+        Assert.DoesNotContain(
+            model.Requests[6].Messages,
+            message => message.Text.StartsWith("[Mode changed", StringComparison.Ordinal)
+        );
+    }
+
+    private static string ModelMessageSignature(ChatMessage message) =>
+        JsonSerializer.Serialize(
+            new
+            {
+                Role = message.Role.Value,
+                message.Text,
+                Calls = message
+                    .Contents.OfType<FunctionCallContent>()
+                    .Select(call => new
+                    {
+                        call.CallId,
+                        call.Name,
+                        call.Arguments,
+                    }),
+                Results = message
+                    .Contents.OfType<FunctionResultContent>()
+                    .Select(result => new { result.CallId, result.Result }),
+            }
+        );
+
     public void Dispose()
     {
         _executionScope.Dispose();
@@ -52,7 +218,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
     public async Task AsAgwAgent_OwnedCapabilities_DisposeConfiguredChatClientPipeline()
     {
         var client = new StubChatClient();
-        var capabilities = CreateCapabilities();
+        var capabilities = AgwAgentTestHost.Capabilities();
         var innerAgent = client.AsAgwAgent(
             CreateDefinition(),
             capabilities,
@@ -81,7 +247,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
                 new CompactionProvider(strategy, stateKey: "test-compaction"),
                 maxOutputTokens: 64_000
             ),
-            CreateCapabilities(tools: [function]),
+            AgwAgentTestHost.Capabilities(tools: [function]),
             NullLoggerFactory.Instance,
             new ServiceCollection().BuildServiceProvider()
         );
@@ -133,7 +299,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         var client = new FunctionCallingStubChatClient();
         var agent = client.AsAgwAgent(
             CreateDefinition(new InMemoryChatHistoryProvider()),
-            CreateCapabilities(tools: [function]),
+            AgwAgentTestHost.Capabilities(tools: [function]),
             NullLoggerFactory.Instance,
             new ServiceCollection().BuildServiceProvider()
         );
@@ -172,7 +338,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
                 new InMemoryChatHistoryProvider(),
                 new CompactionProvider(new CountingCompactionStrategy(), stateKey: "repeated-context-compaction")
             ),
-            CreateCapabilities(contextProviders: [contextProvider]),
+            AgwAgentTestHost.Capabilities(contextProviders: [contextProvider]),
             NullLoggerFactory.Instance,
             new ServiceCollection().BuildServiceProvider()
         );
@@ -220,7 +386,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
                 new InMemoryChatHistoryProvider(),
                 new CompactionProvider(new CountingCompactionStrategy(), stateKey: "streaming-compaction")
             ),
-            CreateCapabilities(tools: [function]),
+            AgwAgentTestHost.Capabilities(tools: [function]),
             NullLoggerFactory.Instance,
             new ServiceCollection().BuildServiceProvider()
         );
@@ -264,7 +430,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
                 new InMemoryChatHistoryProvider(),
                 new CompactionProvider(new CountingCompactionStrategy(), stateKey: "empty-text-function-loop")
             ),
-            CreateCapabilities(tools: [function]),
+            AgwAgentTestHost.Capabilities(tools: [function]),
             NullLoggerFactory.Instance,
             new ServiceCollection().BuildServiceProvider()
         );
@@ -435,6 +601,24 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             new AIFunctionFactoryOptions { Name = "web_search" }
         );
         var client = new FunctionCallingStubChatClient(functionCallCount: 2, functionRoundCount: 3);
+        using var todos = new AgwTodoProvider();
+        await using var capabilities = AgwAgentTestHost.Capabilities(
+            new ToolContribution
+            {
+                Tools = { new ApprovalRequiredAIFunction(function) },
+                ContextProviders =
+                {
+                    new StaticTextContextProvider("mode context"),
+                    todos,
+                    new StaticTextContextProvider("memory context"),
+                },
+                AutoApprovalRules = { ToolApprovalAgent.AllToolsAutoApprovalRule },
+                ContextAttachmentSources =
+                {
+                    new TodoReminderAttachmentSource(todos, new TodoToolBlock().Descriptor.MemberToolNames),
+                },
+            }
+        );
         var agent = client.AsAgwAgent(
             CreateDefinition(
                 historyProvider,
@@ -444,16 +628,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
                 ),
                 maxOutputTokens: 1_000
             ),
-            CreateCapabilities(
-                tools: [new ApprovalRequiredAIFunction(function)],
-                contextProviders:
-                [
-                    new StaticTextContextProvider("mode context"),
-                    new AgwTodoProvider(),
-                    new StaticTextContextProvider("memory context"),
-                ],
-                autoApprovalRules: [ToolApprovalAgent.AllToolsAutoApprovalRule]
-            ),
+            capabilities,
             NullLoggerFactory.Instance,
             serviceProvider
         );
@@ -488,7 +663,8 @@ public sealed class AgwAgentExtensionsTests : IDisposable
                 Assert.Single(request, message => message.Text == "memory context");
                 Assert.Single(
                     request,
-                    message => message.Text.StartsWith("### Current todo list", StringComparison.Ordinal)
+                    message =>
+                        ContextAttachmentHistory.GetAttachmentType(message) == ContextAttachmentTypes.TodoReminder
                 );
             }
         );
@@ -508,7 +684,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         Assert.Contains(storedMessages, message => message.Text.StartsWith("user-39:", StringComparison.Ordinal));
         Assert.Single(
             storedMessages,
-            message => message.Text.StartsWith("### Current todo list", StringComparison.Ordinal)
+            message => ContextAttachmentHistory.GetAttachmentType(message) == ContextAttachmentTypes.TodoReminder
         );
         Assert.Single(storedMessages, message => message.Text == "mode context");
         Assert.Single(storedMessages, message => message.Text == "memory context");
@@ -522,6 +698,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
     [InlineData("function-result-order-v3")]
     [InlineData("function-result-order-v4")]
     [InlineData("tool-result-eviction-v5")]
+    [InlineData("tool-result-eviction-v6")]
     public async Task AsAgwAgent_StalledCompactionState_RebuildsFromCompleteHistory(string legacyVersion)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -532,7 +709,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
                 historyProvider,
                 new CompactionProvider(new CountingCompactionStrategy(), stateKey: "stalled-compaction")
             ),
-            CreateCapabilities(contextProviders: [new StaticTextContextProvider("memory context")]),
+            AgwAgentTestHost.Capabilities(contextProviders: [new StaticTextContextProvider("memory context")]),
             NullLoggerFactory.Instance,
             new ServiceCollection().BuildServiceProvider()
         );
@@ -568,17 +745,19 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         Assert.True(
             session.StateBag.TryGetValue<string>("stalled-compaction.agw-index-version", out var compactionIndexVersion)
         );
-        Assert.Equal("tool-result-eviction-v6", compactionIndexVersion);
+        Assert.Equal("tool-result-eviction-v7", compactionIndexVersion);
     }
 
     [Fact]
     public void AsAgwAgent_WithLoopEvaluator_KeepsLoopAgentOutermost()
     {
-        var capabilities = CreateCapabilities(
-            contextProviders: [new AgwTodoProvider()],
-            loopEvaluators: [new StopLoopEvaluator()],
-            toolWarnings: ["Hosted web search fell back to local search."]
-        );
+        var contribution = new ToolContribution
+        {
+            ContextProviders = { new AgwTodoProvider() },
+            LoopEvaluators = { new StopLoopEvaluator() },
+            Warnings = { "Hosted web search fell back to local search." },
+        };
+        var capabilities = AgwAgentTestHost.Capabilities(contribution);
 
         var agent = new StubChatClient().AsAgwAgent(
             CreateDefinition(),
@@ -595,7 +774,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
     [Fact]
     public void AsAgwAgent_WithoutLoopEvaluator_StillEnablesToolApprovalAndTelemetry()
     {
-        var capabilities = CreateCapabilities();
+        var capabilities = AgwAgentTestHost.Capabilities();
 
         var agent = new StubChatClient().AsAgwAgent(
             CreateDefinition(),
@@ -630,12 +809,11 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         var client = new IllegalShellCallChatClient();
         var agent = client.AsAgwAgent(
             CreateDefinition(),
-            CreateCapabilities(
+            AgwAgentTestHost.Capabilities(
                 tools: [new ApprovalRequiredAIFunction(shellFunction)],
                 contextProviders: throughRegistry
                     ? [.. contribution.ContextProviders, new DynamicSkillToolsProvider()]
                     : [modeProvider, new DynamicSkillToolsProvider()],
-                autoApprovalRules: [ToolApprovalAgent.AllToolsAutoApprovalRule],
                 planModeAllowedToolNames: new HashSet<string>(
                     ["mode_get", "mode_set", "load_skill", "read_skill_resource"],
                     StringComparer.OrdinalIgnoreCase
@@ -653,13 +831,10 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         );
 
         Assert.Equal(0, invocationCount);
-        Assert.DoesNotContain(
-            client.ExposedToolNames,
-            name => string.Equals(name, "run_shell", StringComparison.OrdinalIgnoreCase)
-        );
+        Assert.Contains("run_shell", client.ExposedToolNames);
         Assert.Contains("load_skill", client.ExposedToolNames);
         Assert.Contains("read_skill_resource", client.ExposedToolNames);
-        Assert.DoesNotContain("run_skill_script", client.ExposedToolNames);
+        Assert.Contains("run_skill_script", client.ExposedToolNames);
         Assert.DoesNotContain(
             response.Messages.SelectMany(static message => message.Contents),
             static content => content is ToolApprovalRequestContent
@@ -688,7 +863,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         var client = new ApprovalShellCallChatClient();
         var agent = client.AsAgwAgent(
             CreateDefinition(),
-            CreateCapabilities(
+            AgwAgentTestHost.Capabilities(
                 tools: [new ApprovalRequiredAIFunction(shellFunction)],
                 contextProviders: [modeProvider],
                 planModeAllowedToolNames: new HashSet<string>(
@@ -731,15 +906,14 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             (Func<string>)(() => "search result"),
             new AIFunctionFactoryOptions { Name = "web_search" }
         );
+        var contribution = new ToolContribution
+        {
+            Tools = { tool },
+            InvocationWarnings = { ["web_search"] = "fallback warning" },
+        };
         var agent = new FunctionCallingStubChatClient().AsAgwAgent(
             CreateDefinition(),
-            CreateCapabilities(
-                tools: [tool],
-                toolInvocationWarnings: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["web_search"] = "fallback warning",
-                }
-            ),
+            AgwAgentTestHost.Capabilities(contribution),
             NullLoggerFactory.Instance,
             new ServiceCollection().BuildServiceProvider()
         );
@@ -768,14 +942,10 @@ public sealed class AgwAgentExtensionsTests : IDisposable
     [Fact]
     public async Task AsAgwAgent_InvocationWarningWithoutToolCall_DoesNotEmitWarning()
     {
+        var contribution = new ToolContribution { InvocationWarnings = { ["web_search"] = "fallback warning" } };
         var agent = new StubChatClient().AsAgwAgent(
             CreateDefinition(),
-            CreateCapabilities(
-                toolInvocationWarnings: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["web_search"] = "fallback warning",
-                }
-            ),
+            AgwAgentTestHost.Capabilities(contribution),
             NullLoggerFactory.Instance,
             new ServiceCollection().BuildServiceProvider()
         );
@@ -904,10 +1074,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         var client = new FunctionCallingStubChatClient();
         var agent = client.AsAgwAgent(
             CreateDefinition(historyProvider),
-            CreateCapabilities(
-                tools: [new ApprovalRequiredAIFunction(function)],
-                contextProviders: [new AgwTodoProvider()]
-            ),
+            AgwAgentTestHost.Capabilities(tools: [new ApprovalRequiredAIFunction(function)]),
             NullLoggerFactory.Instance,
             serviceProvider
         );
@@ -990,7 +1157,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         Assert.Equal(storedFunctionCallIndex + 1, storedFunctionResultIndex);
         Assert.Contains(
             storedMessages.Skip(storedFunctionResultIndex + 1),
-            message => message.Text.StartsWith("### Current todo list", StringComparison.Ordinal)
+            message => message.Text == "Follow the node instructions."
         );
     }
 
@@ -1129,7 +1296,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         );
         var agent = new StubChatClient().AsAgwAgent(
             CreateDefinition(historyProvider),
-            CreateCapabilities(toolWarnings: ["fallback warning"]),
+            AgwAgentTestHost.Capabilities(new ToolContribution { Warnings = { "fallback warning" } }),
             NullLoggerFactory.Instance,
             serviceProvider
         );
@@ -1210,7 +1377,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
     private static AIAgent CreateTodoMutationAgent(IReadOnlyList<AIContextProvider>? providers = null) =>
         new TodoFunctionCallingStubChatClient().AsAgwAgent(
             CreateDefinition(),
-            CreateCapabilities(
+            AgwAgentTestHost.Capabilities(
                 contextProviders: providers ?? [new AgwTodoProvider()],
                 loopEvaluators: [new StopLoopEvaluator()]
             ),
@@ -1309,29 +1476,6 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             CompactionProvider = compactionProvider,
             MaxOutputTokens = maxOutputTokens,
         };
-
-    private static AgentCapabilityComposition CreateCapabilities(
-        IReadOnlyList<AITool>? tools = null,
-        IReadOnlyList<AIContextProvider>? contextProviders = null,
-        IReadOnlyList<LoopEvaluator>? loopEvaluators = null,
-        IReadOnlyList<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>>? autoApprovalRules = null,
-        IReadOnlySet<string>? planModeAllowedToolNames = null,
-        IReadOnlyList<string>? toolWarnings = null,
-        IReadOnlyDictionary<string, string>? toolInvocationWarnings = null
-    ) =>
-        new(
-            tools: tools ?? [],
-            pluginSkills: [],
-            warnings: [],
-            contextProviders: contextProviders ?? [],
-            loopEvaluators: loopEvaluators ?? [],
-            autoApprovalRules: autoApprovalRules ?? [],
-            planModeAllowedToolNames: planModeAllowedToolNames ?? new HashSet<string>(),
-            toolWarnings: toolWarnings ?? [],
-            toolInvocationWarnings: toolInvocationWarnings
-                ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-            lease: new AgentResourceLease()
-        );
 
     private sealed class StopLoopEvaluator : LoopEvaluator
     {

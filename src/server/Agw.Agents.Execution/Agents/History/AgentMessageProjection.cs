@@ -83,11 +83,14 @@ internal sealed class AgentMessageProjection : IConversationMessageSource
                 entry = newMessage
                     ? null
                     : _messages.Values.LastOrDefault(value =>
-                        value.Completed
-                        && value.SourceId == message.MessageId
-                        && value.Purpose == purpose
-                        && (value.StepIndex == null || value.StepIndex == stepIndex)
-                    );
+                    {
+                        var matchesStep = value.StepIndex is null || value.StepIndex == stepIndex;
+                        var matchesUser = message.Role == ChatRole.User && value.Header.Role == ChatRole.User;
+                        return value.Completed
+                            && value.SourceId == message.MessageId
+                            && value.Purpose == purpose
+                            && (matchesStep || matchesUser);
+                    });
                 if (entry != null)
                     _aliases.Add(identity, entry);
                 else

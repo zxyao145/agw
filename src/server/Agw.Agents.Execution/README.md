@@ -470,15 +470,19 @@ A2A Agent 支持 `FullAccess` 权限模式，向远端发送文本、图片和�
 
 运行时使用 `ContextWindowCompactionPipeline` 构建两阶段策略，不调用额外的总结模型：
 
-- 输入 Token 估算值超过 `min(有效输入预算 × 50%, 64_000)` 时，`ToolResultEvictionCompactionStrategy` 从最早的 Tool call 组开始，将普通 result 正文替换为 `[Tool result removed from context by compaction]`，直到估算值回到预算内或可清理的结果用尽。`ask_user_question` 按 `CallId` 保留完整交互结果，包括答案、备注和取消状态。Assistant 的推理与调用、最近两个非 System 组都会保留。
-- 达到 80% 时，MAF 的 `TruncationCompactionStrategy` 截断较旧的消息组，同样保留最近 2 个组；
+- 清空阈值 T 为 `min(有效输入预算 × 50%, 64_000)`。估算值超过 T 时，`ToolResultEvictionCompactionStrategy` 从最早的 Tool call 组开始，将普通 result 正文替换为 `[Tool result removed from context by compaction]`，直到估算值不超过 T 的 60%，或者可清理的结果用尽。`ask_user_question` 按 `CallId` 保留完整交互结果，包括答案、备注和取消状态。Assistant 的推理与调用、最近两个非 System 组都会保留。
+- 估算值超过输入预算的 80% 时，消息截断以 T 的 80% 为目标，保留 System 消息、最近两个非 System 消息组和 `ask_user_question` 调用及回答所在的组。
 - Tool call 与对应 result 始终作为原子消息组处理。
 
-模型服务按各自协议校验回放的 Assistant 输出：DeepSeek thinking 模式要求带 tools 的请求把本轮 Assistant 输出的 `reasoning_text` 传回，空字符串视为缺失并返回 400；OpenAI Responses 要求推理条目后紧跟其原始条目。压缩只改写 Tool result 正文，不生成新的 Assistant 消息，因此压缩后的请求在所有协议下都保持合法。
+模型服务按各自协议校验回放的 Assistant 输出：DeepSeek thinking 模式要求带 tools 的请求把本轮 Assistant 输出的 `reasoning_text` 传回，空字符串视为缺失并返回 400；OpenAI Responses 要求推理条目后紧跟其原始条目。清空步骤只替换 Tool result 正文，保留对应的 Assistant 输出。
 
 `CompactionProvider` 位于函数调用循环内部，并在逐次历史持久化层之后执行，所以同一轮中的每次模型请求都会重新评估上下文。`FunctionLoopMessageIsolationChatClient` 会为每次实际注入的动态上下文消息副本补充唯一 `MessageId`，同时继续移除同一函数循环中的未变化副本；这避免压缩索引按内容匹配到上一轮相同上下文并跳过其间的新消息。`LocalHistoryCompactionScopeChatClient` 仅在本地历史 sentinel 存在时为该 provider 暴露共享 `StateBag` 的本地 session 视图，避免后续 Tool iteration 被误判为远程服务托管历史。压缩结果只传给当前模型请求；`ConversationHistoryStore` 保存未压缩的原始消息。
 
 Provider 状态保存在现有 `AgentSession.StateBag`，并随 `AgentSessionStateStore` 序列化和恢复。state key 使用 `agw.compaction.{agentId}`，避免同一会话中的多个 Definition Agent 相互覆盖状态。Agw 另存内部索引版本；版本变化时会丢弃旧压缩索引，并在下一轮从完整聊天历史自动重建。
+
+两次 Compaction 之间，模型请求在现有消息之后追加内容。Tool 定义按名称排序，system 文本依次包含固定指令、静态 Tool 说明和动态环境说明。Mode 切换时继续发送相同的 Tool 定义和 system 文本。Plan 模式要求通过 `plan_mode` 提示发送，受限 Tool 被调用时返回 `PlanModeToolNotAllowed`。
+
+System Agent 将 User Memory 正文和 Project Memory 索引保存为会话上下文，并作为每次请求的第一条 user 消息发送。该消息只保存在 Agent session，消息截断改变历史起点时重新生成。Plan 模式和 Todo 提示按规则追加到请求末尾，并随本次输入写入历史。External Agent 在每个 Turn 的第一条用户请求中加入 User Memory。
 
 工具审批续跑可以附带新的用户文字。历史读取按 `CallId` 保留完整的调用/结果组，允许配对跨过用户补充文字，但不跨过下一条 Assistant 响应；模型请求将匹配的工具结果放在调用之后，再附加这些文字。`FunctionResultOrderingChatClient` 在逐次历史持久化之前整理注入的上下文，在读取历史之后整理完整请求；历史清理继续移除不完整调用和孤立结果。
 

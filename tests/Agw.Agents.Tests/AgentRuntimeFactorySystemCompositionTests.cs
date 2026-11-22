@@ -6,6 +6,7 @@ using System.Security.Claims;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Facades;
 using Agw.Agents.Execution.Agents.Composition;
+using Agw.Agents.Execution.Agents.Context.Conversation;
 using Agw.Agents.Execution.Agents.Context.Workspace;
 using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Agents.Middleware.History;
@@ -333,21 +334,7 @@ public class AgentRuntimeFactorySystemCompositionTests
             Assert.NotNull(aiAgent);
             var recordingAgent = aiAgent!.GetService<Agw.Agents.Execution.Agents.History.HistoryRecordingAgent>();
             Assert.NotNull(recordingAgent);
-            var memoryFactoryField = typeof(Agw.Agents.Execution.Agents.History.HistoryRecordingAgent).GetField(
-                "_createMemoryContextAsync",
-                BindingFlags.Instance | BindingFlags.NonPublic
-            );
-            Assert.NotNull(memoryFactoryField);
-            var memoryFactory = memoryFactoryField.GetValue(recordingAgent);
-            if (includeUserMemory)
-            {
-                var callback = Assert.IsType<Func<CancellationToken, ValueTask<ChatMessage?>>>(memoryFactory);
-                Assert.IsType<UserMemoryProvider>(callback.Target);
-            }
-            else
-            {
-                Assert.Null(memoryFactory);
-            }
+            Assert.Equal(includeUserMemory, aiAgent.GetService<ConversationContextChatClient>() != null);
             var agentOptions = FindInObjectGraph<ChatClientAgentOptions>(aiAgent!);
             var chatOptions = Assert.IsType<ChatOptions>(agentOptions.ChatOptions);
             Assert.Equal("You are a helpful agent.", chatOptions.Instructions);
@@ -382,7 +369,9 @@ public class AgentRuntimeFactorySystemCompositionTests
             );
             var compactionProvider = FindInObjectGraph<CompactionProvider>(compactionScope);
             Assert.Equal($"agw.compaction.{agent.Id:N}", Assert.Single(compactionProvider.StateKeys));
-            var instructionsProvider = Assert.IsType<AgwWorkspaceProvider>(contextProviders[0]);
+            if (includeUserMemory)
+                Assert.IsType<UserMemoryProvider>(contextProviders[0].GetService<UserMemoryProvider>());
+            var instructionsProvider = Assert.IsType<AgwWorkspaceProvider>(contextProviders[^2]);
             var skillsProvider = Assert.IsType<AgentSkillsProvider>(contextProviders[^1]);
             var instructionsContext = await instructionsProvider.InvokingAsync(
                 new AIContextProvider.InvokingContext(aiAgent, null, new AIContext()),
@@ -787,18 +776,7 @@ public class AgentRuntimeFactorySystemCompositionTests
             ]
         );
 
-        await using var capabilities = new AgentCapabilityComposition(
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            new HashSet<string>(),
-            [],
-            new Dictionary<string, string>(),
-            new AgentResourceLease()
-        );
+        await using var capabilities = AgwAgentTestHost.Capabilities();
         try
         {
             Assert.NotNull(method);
@@ -1267,7 +1245,7 @@ public class AgentRuntimeFactorySystemCompositionTests
         public AITool ToAITool(Guid projectId) => AIFunctionFactory.Create(() => projectId.ToString(), Name);
     }
 
-    private sealed class TestClassSkill : AgentClassSkill<TestClassSkill>
+    internal sealed class TestClassSkill : AgentClassSkill<TestClassSkill>
     {
         public override AgentSkillFrontmatter Frontmatter { get; } = new("agw-job", "Manage jobs.");
 

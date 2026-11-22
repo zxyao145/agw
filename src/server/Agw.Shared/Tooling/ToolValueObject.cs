@@ -45,7 +45,7 @@ public static class ToolBlockDefinitionNames
     public const string Notification = "notification";
 
     public static IReadOnlyList<string> All { get; } =
-    [Todo, Mode, ProjectMemory, UserMemory, FileReadonlyAccess, FileAccess, BackgroundAgents, Notification];
+    [Todo, Mode, UserMemory, ProjectMemory, FileReadonlyAccess, FileAccess, BackgroundAgents, Notification];
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]

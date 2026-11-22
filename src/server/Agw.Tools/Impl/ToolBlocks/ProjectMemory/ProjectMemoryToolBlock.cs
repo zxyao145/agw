@@ -91,9 +91,9 @@ public sealed class ProjectMemoryToolBlock : IToolBlock
                 $"Project Memory storage '{storage}' is not supported."
             ),
         };
-        contribution.ContextProviders.Add(
-            new ProjectMemoryProvider(store, _applicationLock, GetMutationResourceName(context, storage))
-        );
+        var provider = new ProjectMemoryProvider(store, _applicationLock, GetMutationResourceName(context, storage));
+        contribution.ContextProviders.Add(provider);
+        contribution.ConversationContextSources.Add(provider);
         return ValueTask.FromResult(contribution);
     }
 

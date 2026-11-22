@@ -12,7 +12,7 @@ namespace Agw.Tools.Impl.ToolBlocks.ProjectMemory;
 /// <summary>
 /// Provides project-scoped file memory without persisting provider state in an Agent session.
 /// </summary>
-public sealed class ProjectMemoryProvider : AIContextProvider
+public sealed class ProjectMemoryProvider : AIContextProvider, IConversationContextSource
 {
     public const string WriteToolName = "project_memory_write";
     public const string ReadFileToolName = "project_memory_read";
@@ -24,19 +24,19 @@ public sealed class ProjectMemoryProvider : AIContextProvider
 
     private const string DescriptionSuffix = "_description.md";
     private const string MemoryIndexFileName = "memories.md";
+    private const string MemoryIndexTitle = "Project Memory Index";
+    private const string MemoryIndexHeading = "# " + MemoryIndexTitle;
     private const int MaxIndexEntries = 50;
 
-    private const string Instructions = """
+    private const string Instructions = $$"""
         ## Project Memory
-        You have access to project-scoped, file-based memory through the `project_memory_*` tools.
-        These memories are shared by all agents and conversations in the current project.
-        Use them for durable project knowledge such as architecture decisions, conventions, plans, and reusable results.
-        Do not use project memory for private user information that should follow a user across projects.
-
-        - Use descriptive file names (for example, "projectarchitecture.md" or "codingconventions.md").
-        - Include a description when writing a file to improve future discovery.
-        - Before starting related work, use project_memory_ls and project_memory_grep to find existing memories.
-        - Keep memories current by overwriting files or using project_memory_replace and project_memory_replace_lines.
+        {{
+            "The `project_memory_*` tools store durable project knowledge shared by all agents and conversations "
+            + "of this project: architecture decisions, conventions, plans, reusable results."
+        }}
+        Private user information belongs in user memory.
+        - Before related work, look up existing memories with `project_memory_ls` and `project_memory_grep`.
+        - Write each memory with a descriptive file name and a description, and keep it current.
         """;
 
     private readonly AgwAgentFileStore _fileStore;
@@ -61,27 +61,25 @@ public sealed class ProjectMemoryProvider : AIContextProvider
 
     public override IReadOnlyList<string> StateKeys => [];
 
-    protected override async ValueTask<AIContext> ProvideAIContextAsync(
+    protected override ValueTask<AIContext> ProvideAIContextAsync(
         InvokingContext context,
         CancellationToken cancellationToken = default
-    )
-    {
-        var result = new AIContext { Instructions = Instructions, Tools = _tools ??= CreateTools() };
-        var index = await _fileStore.ReadAsync(MemoryIndexFileName, cancellationToken).ConfigureAwait(false);
-        if (!string.IsNullOrWhiteSpace(index))
-        {
-            result.Messages =
-            [
-                new ChatMessage(
-                    ChatRole.User,
-                    "The following is the shared project memory index. "
-                        + "Read relevant files with project_memory_read before continuing.\n\n"
-                        + index
-                ),
-            ];
-        }
+    ) => ValueTask.FromResult(new AIContext { Instructions = Instructions, Tools = _tools ??= CreateTools() });
 
-        return result;
+    string IConversationContextSource.Title => MemoryIndexTitle;
+
+    async ValueTask<string?> IConversationContextSource.GetContentAsync(CancellationToken cancellationToken)
+    {
+        var index = await _fileStore.ReadAsync(MemoryIndexFileName, cancellationToken).ConfigureAwait(false);
+        if (index is null)
+            return null;
+
+        var hasIndexHeading =
+            index == MemoryIndexHeading
+            || index.StartsWith(MemoryIndexHeading + "\n", StringComparison.Ordinal)
+            || index.StartsWith(MemoryIndexHeading + "\r\n", StringComparison.Ordinal);
+        var content = hasIndexHeading ? index[MemoryIndexHeading.Length..].TrimStart('\r', '\n') : index;
+        return string.IsNullOrWhiteSpace(content) ? null : content;
     }
 
     [Description(
@@ -278,7 +276,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
             .Take(MaxIndexEntries)
             .ToList();
-        var index = new StringBuilder().AppendLine("# Project Memory Index").AppendLine();
+        var index = new StringBuilder().AppendLine(MemoryIndexHeading).AppendLine();
 
         foreach (var file in files)
         {
