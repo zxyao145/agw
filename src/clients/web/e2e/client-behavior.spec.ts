@@ -61,6 +61,7 @@ test("login failure stays editable and a successful retry returns to the request
   await expect(page.getByText("The administrator password was not accepted.")).toBeVisible();
   await page.getByLabel("Administrator password").fill("correct");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.waitForURL(/\/agentflows\/?$/u, { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Agentflows", exact: true })).toBeVisible();
   expect(attempts).toBe(2);
 });

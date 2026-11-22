@@ -5,6 +5,7 @@ using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.History;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
+using Agw.Tools.Runtime;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -104,6 +105,21 @@ internal sealed class AgwChatHistoryProvider : ChatHistoryProvider
 
     internal void End(AgentSession session) => _recordings.TryRemove(session, out _);
 
+    internal ValueTask WriteContextAttachmentsAsync(
+        AgentSession session,
+        IReadOnlyList<ChatMessage> messages,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!_recordings.TryGetValue(session, out var recording))
+            throw new AgwException(
+                ErrorCodes.AgentExecutionFailed,
+                "Writing context attachments requires active history recording."
+            );
+
+        return recording.WriteContextAttachmentsAsync(messages, cancellationToken);
+    }
+
     protected override async ValueTask<IEnumerable<ChatMessage>> ProvideChatHistoryAsync(
         InvokingContext context,
         CancellationToken cancellationToken
@@ -118,11 +134,13 @@ internal sealed class AgwChatHistoryProvider : ChatHistoryProvider
             .ConfigureAwait(false);
         // 本次请求自带的消息（例如受理时已经写入的用户输入）只从请求进入模型，历史中的同一行不再重复。
         // Messages carried by this request (such as the user input written at acceptance) reach the model only through the request, without their history row.
-        var requestRowIds = context
-            .RequestMessages.Select(message => Guid.TryParse(message.MessageId, out var id) ? id : Guid.Empty)
-            .Where(id => id != Guid.Empty)
-            .ToHashSet();
-        var messages = ReadModelHistory(_recordings.GetValueOrDefault(session), entries, requestRowIds);
+        var requestRows = new Dictionary<Guid, ChatMessage>();
+        foreach (var message in context.RequestMessages)
+        {
+            if (Guid.TryParse(message.MessageId, out var id) && id != Guid.Empty)
+                requestRows.TryAdd(id, message);
+        }
+        var messages = ReadModelHistory(_recordings.GetValueOrDefault(session), entries, requestRows);
 
         // 旧会话可能残留没有对应响应的工具审批请求，FunctionInvokingChatClient 会在下一轮重放历史时直接抛错。
         // 响应也可能随本轮输入提交，因此合并检查后只过滤仍未答复的请求。
@@ -162,16 +180,21 @@ internal sealed class AgwChatHistoryProvider : ChatHistoryProvider
     private static List<ChatMessage> ReadModelHistory(
         HistoryRecording? recording,
         IReadOnlyList<ConversationHistoryEntry> entries,
-        HashSet<Guid> requestRowIds
+        IReadOnlyDictionary<Guid, ChatMessage> requestRows
     )
     {
         var cache = recording?.ModelHistory;
         var current = new Dictionary<Guid, (string Payload, ChatMessage Message)>(entries.Count);
         var messages = new List<ChatMessage>(entries.Count);
+        List<ChatMessage>? replayedInputs = null;
         foreach (var entry in entries)
         {
-            if (requestRowIds.Contains(entry.Id))
+            if (requestRows.TryGetValue(entry.Id, out var request))
+            {
+                if (request.Role == ChatRole.User)
+                    (replayedInputs ??= []).Add(request);
                 continue;
+            }
             var message =
                 cache != null
                 && cache.TryGetValue(entry.Id, out var cached)
@@ -181,8 +204,18 @@ internal sealed class AgwChatHistoryProvider : ChatHistoryProvider
             if (message == null)
                 continue;
             current[entry.Id] = (entry.Payload, message);
-            if (!IsExcludedFromModelHistory(message))
-                messages.Add(CopyForRequest(message));
+            if (IsExcludedFromModelHistory(message))
+                continue;
+
+            if (replayedInputs is { Count: > 0 })
+            {
+                // 重试时沿用提示前的输入顺序，便于 Compaction 识别新增的提示。
+                // Reuse the input's position before its attachments so compaction can see them on retry.
+                if (ContextAttachmentHistory.GetAttachmentType(message) is not null)
+                    messages.AddRange(replayedInputs);
+                replayedInputs.Clear();
+            }
+            messages.Add(CopyForRequest(message));
         }
 
         if (recording != null)
@@ -222,30 +255,18 @@ internal sealed class AgwChatHistoryProvider : ChatHistoryProvider
     {
         // 先读历史再写入本次请求，模型请求里同一内容只出现一次。
         // Read history before writing this request so the same content appears once in the model request.
-        var messages = (await base.InvokingCoreAsync(context, cancellationToken).ConfigureAwait(false)).ToList();
+        var history = await base.InvokingCoreAsync(context, cancellationToken).ConfigureAwait(false);
+        var messages = FilterModelMessages(history);
         var session =
             context.Session
             ?? throw new AgwException(ErrorCodes.InvalidParam, "Agw history requires an Agent session.");
         var recording = _recordings.GetValueOrDefault(session) ?? Begin(context.Agent, session, transient: true);
-        recording.MarkModelCall();
         var scope = TracksSteps ? ExecutionScope.Current : null;
-        var requestMessages = context.RequestMessages.ToList();
+        recording.MarkModelCall(scope?.StepIndex);
+        var requestMessages = context.RequestMessages.Where(message => !IsModeChangeNotice(message)).ToList();
 
-        // 上一 Step 的工具结果紧跟它们的调用写入，并在此保存 StepCompleted。
-        // The previous Step's tool results are written right after their calls, and StepCompleted is saved here.
-        var toolResults = requestMessages
-            .Where(message => message.Role == ChatRole.Tool && message.Contents.OfType<FunctionResultContent>().Any())
-            .Where(message => !ConversationHistoryMetadata.IsPersistenceExcluded(message))
-            .ToList();
-        if (toolResults.Count > 0)
-        {
-            foreach (var toolResult in toolResults)
-                await recording
-                    .PutToolResultAsync(toolResult, scope?.StepIndex, cancellationToken)
-                    .ConfigureAwait(false);
-            if (scope is { StepIndex: > 0 })
-                await SaveStepCompletedAsync(scope, context, cancellationToken).ConfigureAwait(false);
-        }
+        await PersistPreviousStepResultsAsync(recording, context, messages, scope, cancellationToken)
+            .ConfigureAwait(false);
 
         // 输入与需要排在响应之前的消息属于推进之前的 Step：Turn 的原始输入是 Step 0。
         // The input and messages that must precede the response belong to the Step before advancing: the turn's original input is Step 0.
@@ -261,6 +282,68 @@ internal sealed class AgwChatHistoryProvider : ChatHistoryProvider
         scope?.AdvanceStep();
         return messages;
     }
+
+    private static List<ChatMessage> FilterModelMessages(IEnumerable<ChatMessage> history)
+    {
+        var messages = new List<ChatMessage>();
+        var seenUserRows = new HashSet<Guid>();
+        foreach (var message in history)
+        {
+            if (IsModeChangeNotice(message))
+                continue;
+            if (message.Role == ChatRole.User && Guid.TryParse(message.MessageId, out var id))
+            {
+                var duplicateRow = !seenUserRows.Add(id);
+                if (duplicateRow)
+                    continue;
+            }
+            messages.Add(message);
+        }
+        return messages;
+    }
+
+    private async ValueTask PersistPreviousStepResultsAsync(
+        HistoryRecording recording,
+        InvokingContext context,
+        List<ChatMessage> messages,
+        ExecutionScope? scope,
+        CancellationToken cancellationToken
+    )
+    {
+        var toolResults = context
+            .RequestMessages.Where(message =>
+                message.Role == ChatRole.Tool && message.Contents.OfType<FunctionResultContent>().Any()
+            )
+            .Where(message =>
+                !IsModeChangeNotice(message) && !ConversationHistoryMetadata.IsPersistenceExcluded(message)
+            )
+            .ToList();
+        if (toolResults.Count == 0)
+            return;
+
+        foreach (var toolResult in toolResults)
+        {
+            // 工具结果在当前请求和后续历史中使用同一个消息 ID，以延续 Compaction 的索引。
+            // Compaction uses the same tool result ID in the request and the stored history.
+            var index = messages.FindIndex(message => ReferenceEquals(message, toolResult));
+            if (index < 0)
+                throw new AgwException(
+                    ErrorCodes.AgentExecutionFailed,
+                    "A tool result is missing from the model request."
+                );
+
+            messages[index] = await recording
+                .PutToolResultAsync(toolResult, scope?.StepIndex, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (scope is { StepIndex: > 0 })
+            await SaveStepCompletedAsync(scope, context, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool IsModeChangeNotice(ChatMessage message) =>
+        message.GetAgentRequestMessageSourceType() == AgentRequestMessageSourceType.AIContextProvider
+        && message.GetAgentRequestMessageSourceId() == typeof(AgentModeProvider).FullName;
 
     protected override async ValueTask InvokedCoreAsync(
         InvokedContext context,

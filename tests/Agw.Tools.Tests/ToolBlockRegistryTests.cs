@@ -1,11 +1,52 @@
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
+using Microsoft.Agents.AI;
 
 namespace Agw.Tools.Tests;
 
 public sealed class ToolBlockRegistryTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MaterializeAsync_BlockProviders_KeepsEachProviderInItsPhase(bool hasDynamicProvider)
+    {
+        var staticProvider = new TestContextProvider();
+        var dynamicProvider = new TestContextProvider();
+        var block = new RecordingToolBlock(
+            "mixed",
+            ToolBlockScope.Agent,
+            contribute: contribution =>
+            {
+                contribution.ContextProviders.Add(staticProvider);
+                if (hasDynamicProvider)
+                    contribution.DynamicContextProviders.Add(dynamicProvider);
+            }
+        );
+
+        await using var contribution = await new ToolBlockRegistry([block]).MaterializeAsync(
+            [new TestToolBlockDefinition("mixed")],
+            ToolBlockScope.Agent,
+            CreateContext(),
+            TestContext.Current.CancellationToken
+        );
+
+        var staticWrapper = Assert.IsType<AgwToolMetadataContextProvider>(Assert.Single(contribution.ContextProviders));
+        Assert.Same(staticProvider, staticWrapper.GetService<TestContextProvider>());
+        if (hasDynamicProvider)
+        {
+            var dynamicWrapper = Assert.IsType<AgwToolMetadataContextProvider>(
+                Assert.Single(contribution.DynamicContextProviders)
+            );
+            Assert.Same(dynamicProvider, dynamicWrapper.GetService<TestContextProvider>());
+        }
+        else
+        {
+            Assert.Empty(contribution.DynamicContextProviders);
+        }
+    }
+
     [Fact]
     public void Constructor_DuplicateIds_Throws()
     {
@@ -216,10 +257,12 @@ public sealed class ToolBlockRegistryTests
             IReadOnlyList<string>? memberToolNames = null,
             bool throwOnMaterialize = false,
             IReadOnlyList<string>? includedToolBlockNames = null,
-            AgwToolPermission memberPermission = AgwToolPermission.None
+            AgwToolPermission memberPermission = AgwToolPermission.None,
+            Action<ToolContribution>? contribute = null
         )
         {
             _throwOnMaterialize = throwOnMaterialize;
+            _contribute = contribute;
             Descriptor = new ToolBlockDescriptor(
                 id,
                 id,
@@ -233,6 +276,7 @@ public sealed class ToolBlockRegistryTests
         public ToolBlockDescriptor Descriptor { get; }
 
         private readonly bool _throwOnMaterialize;
+        private readonly Action<ToolContribution>? _contribute;
 
         public int MaterializationCount { get; private set; }
 
@@ -248,8 +292,15 @@ public sealed class ToolBlockRegistryTests
                 throw new InvalidOperationException("materialization failed");
             }
 
-            return ValueTask.FromResult(new ToolContribution());
+            var contribution = new ToolContribution();
+            _contribute?.Invoke(contribution);
+            return ValueTask.FromResult(contribution);
         }
+    }
+
+    private sealed class TestContextProvider : AIContextProvider
+    {
+        public override IReadOnlyList<string> StateKeys => [];
     }
 
     private sealed record TestToolBlockDefinition : ToolBlockDefinition<EmptyToolOptions>

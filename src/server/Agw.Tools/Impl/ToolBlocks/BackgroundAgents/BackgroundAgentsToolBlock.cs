@@ -60,7 +60,7 @@ public sealed class BackgroundAgentsToolBlock : IToolBlock
         contribution.PlanModeAllowedToolNames.UnionWith(
             Descriptor.Members.Where(static member => member.AllowInPlanMode).Select(static member => member.Name)
         );
-        contribution.ContextProviders.Add(new BackgroundAgentsProvider(backgroundAgents));
+        contribution.DynamicContextProviders.Add(new BackgroundAgentsProvider(backgroundAgents));
         foreach (var agent in backgroundAgents)
         {
             contribution.AddResource(new AgentResource(agent));

@@ -29,14 +29,26 @@ public sealed class ToolContribution : IAsyncDisposable
     public List<AITool> Tools { get; } = [];
 
     /// <summary>
-    /// Gets the trusted Tool names that may be exposed while the Agent is in Plan mode.
+    /// 获取允许在 Plan 模式下调用的 Tool 名称。
+    /// Gets the tool names trusted for execution in Plan mode.
     /// </summary>
     public HashSet<string> PlanModeAllowedToolNames { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Gets the providers that contribute invocation-specific instructions, messages, tools, or state.
+    /// 获取在 Workspace 之前运行的 Provider，它们可以提供静态 Instructions 和本次调用的 Tool。
+    /// Gets providers that run before Workspace and can contribute static instructions and invocation tools.
     /// </summary>
     public List<AIContextProvider> ContextProviders { get; } = [];
+
+    /// <summary>
+    /// 获取在 Workspace 之后运行的 Provider，它们可以提供随运行环境变化的 Instructions。
+    /// Gets providers that run after Workspace and can contribute instructions that vary with the runtime environment.
+    /// </summary>
+    public List<AIContextProvider> DynamicContextProviders { get; } = [];
+
+    public List<IConversationContextSource> ConversationContextSources { get; } = [];
+
+    public List<IContextAttachmentSource> ContextAttachmentSources { get; } = [];
 
     /// <summary>
     /// Gets the evaluators that determine whether the Agent loop should invoke the model again.
@@ -49,7 +61,8 @@ public sealed class ToolContribution : IAsyncDisposable
     public List<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>> AutoApprovalRules { get; } = [];
 
     /// <summary>
-    /// Gets metadata for tools produced dynamically by context providers.
+    /// 获取 Tool Block 成员的元数据，在 Provider 生成 Tool 前即可使用。
+    /// Gets Tool Block member metadata before providers produce the tools.
     /// </summary>
     public Dictionary<string, AgwToolMetadata> DynamicToolMetadata { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -62,6 +75,27 @@ public sealed class ToolContribution : IAsyncDisposable
     /// Gets warnings keyed by Tool name that should be surfaced only after that Tool is invoked.
     /// </summary>
     public Dictionary<string, string> InvocationWarnings { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 合并另一份 Contribution 的能力，由调用方管理其资源。
+    /// Merges another contribution's capabilities. The caller owns its resources.
+    /// </summary>
+    public void Merge(ToolContribution contribution)
+    {
+        Tools.AddRange(contribution.Tools);
+        PlanModeAllowedToolNames.UnionWith(contribution.PlanModeAllowedToolNames);
+        ContextProviders.AddRange(contribution.ContextProviders);
+        DynamicContextProviders.AddRange(contribution.DynamicContextProviders);
+        ConversationContextSources.AddRange(contribution.ConversationContextSources);
+        ContextAttachmentSources.AddRange(contribution.ContextAttachmentSources);
+        LoopEvaluators.AddRange(contribution.LoopEvaluators);
+        AutoApprovalRules.AddRange(contribution.AutoApprovalRules);
+        foreach (var (name, metadata) in contribution.DynamicToolMetadata)
+            DynamicToolMetadata.Add(name, metadata);
+        Warnings.AddRange(contribution.Warnings);
+        foreach (var (name, warning) in contribution.InvocationWarnings)
+            InvocationWarnings[name] = warning;
+    }
 
     /// <summary>
     /// Transfers ownership of a runtime resource to this contribution.

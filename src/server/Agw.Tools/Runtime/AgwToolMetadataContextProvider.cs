@@ -9,6 +9,7 @@ public sealed class AgwToolMetadataContextProvider : AIContextProvider
 {
     private readonly IReadOnlyDictionary<string, AgwToolMetadata> _metadata;
     private readonly IReadOnlyList<AIContextProvider>? _sourceProviders;
+    private readonly bool _requireAllMembers = true;
 
     public AgwToolMetadataContextProvider(IReadOnlyDictionary<string, AgwToolMetadata> metadata)
     {
@@ -16,15 +17,17 @@ public sealed class AgwToolMetadataContextProvider : AIContextProvider
         _metadata = new Dictionary<string, AgwToolMetadata>(metadata, StringComparer.OrdinalIgnoreCase);
     }
 
-    public AgwToolMetadataContextProvider(
+    internal AgwToolMetadataContextProvider(
         IReadOnlyList<AIContextProvider> sourceProviders,
-        IReadOnlyDictionary<string, AgwToolMetadata> metadata
+        IReadOnlyDictionary<string, AgwToolMetadata> metadata,
+        bool requireAllMembers
     )
     {
         ArgumentNullException.ThrowIfNull(sourceProviders);
         ArgumentNullException.ThrowIfNull(metadata);
         _sourceProviders = sourceProviders.ToArray();
         _metadata = new Dictionary<string, AgwToolMetadata>(metadata, StringComparer.OrdinalIgnoreCase);
+        _requireAllMembers = requireAllMembers;
     }
 
     public override IReadOnlyList<string> StateKeys =>
@@ -35,9 +38,11 @@ public sealed class AgwToolMetadataContextProvider : AIContextProvider
         CancellationToken cancellationToken = default
     )
     {
-        var initialTools = context.AIContext.Tools?.ToHashSet(ReferenceEqualityComparer.Instance) ?? [];
+        var initialTools = _sourceProviders is not null
+            ? context.AIContext.Tools?.ToHashSet(ReferenceEqualityComparer.Instance) ?? []
+            : [];
         var aiContext = context.AIContext;
-        if (_sourceProviders != null)
+        if (_sourceProviders is not null)
         {
             foreach (var provider in _sourceProviders)
             {
@@ -53,13 +58,12 @@ public sealed class AgwToolMetadataContextProvider : AIContextProvider
             return aiContext;
         }
 
-        var producedTools =
-            _sourceProviders == null ? tools.ToArray() : tools.Where(tool => !initialTools.Contains(tool)).ToArray();
-        ValidateProducedTools(producedTools);
-        var producedToolSet = producedTools.ToHashSet(ReferenceEqualityComparer.Instance);
+        // 最后一个阶段一并校验此 Block 在前一阶段已绑定的成员。
+        // The final phase also validates this block's members bound in the preceding phase.
+        ValidateProducedTools(tools.Where(tool => !initialTools.Contains(tool) || IsBoundMember(tool)));
         aiContext.Tools = tools
             .Select(tool =>
-                producedToolSet.Contains(tool) && _metadata.TryGetValue(tool.Name, out var metadata)
+                !initialTools.Contains(tool) && _metadata.TryGetValue(tool.Name, out var metadata)
                     ? AgwToolMetadataBinding.Bind(tool, metadata)
                     : tool
             )
@@ -103,7 +107,10 @@ public sealed class AgwToolMetadataContextProvider : AIContextProvider
         return null;
     }
 
-    private void ValidateProducedTools(IReadOnlyList<AITool> producedTools)
+    private bool IsBoundMember(AITool tool) =>
+        _metadata.TryGetValue(tool.Name, out var metadata) && AgwToolMetadataBinding.GetMetadata(tool) == metadata;
+
+    private void ValidateProducedTools(IEnumerable<AITool> producedTools)
     {
         var counts = producedTools
             .GroupBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase)
@@ -129,16 +136,19 @@ public sealed class AgwToolMetadataContextProvider : AIContextProvider
             );
         }
 
-        var missing = _metadata
-            .Keys.Except(counts.Keys, StringComparer.OrdinalIgnoreCase)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        if (missing.Length > 0)
+        if (_requireAllMembers)
         {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                $"ToolBlock did not produce its declared members: {string.Join(", ", missing)}."
-            );
+            var missing = _metadata
+                .Keys.Except(counts.Keys, StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            if (missing.Length > 0)
+            {
+                throw new AgwException(
+                    ErrorCodes.InvalidParam,
+                    $"ToolBlock did not produce its declared members: {string.Join(", ", missing)}."
+                );
+            }
         }
     }
 }

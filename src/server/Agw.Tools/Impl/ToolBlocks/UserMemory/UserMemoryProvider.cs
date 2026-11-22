@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Tools.Impl.ToolBlocks.UserMemory;
 
-public sealed class UserMemoryProvider : AIContextProvider
+public sealed class UserMemoryProvider : AIContextProvider, IConversationContextSource
 {
     public const string ListToolName = "user_memory_list";
     public const string ReadToolName = "user_memory_read";
@@ -14,19 +14,15 @@ public sealed class UserMemoryProvider : AIContextProvider
     public const string DeleteToolName = "user_memory_delete";
 
     private const int MaxContextEntries = 50;
-    private const string Instructions = """
+    private const string Instructions = $$"""
         ## User Memory
-        You have access to private, user-scoped memory through the `user_memory_*` tools.
-        These memories follow the current user across projects and conversations.
-        Use them for durable user preferences, personal conventions, recurring context, and facts the user wants remembered.
-        Use project memory instead for knowledge that belongs to one project or should be shared by every user of that project.
-
-        Up to 50 memory bodies are included below as Markdown context. Descriptions are display metadata and are not injected.
-
-        - Use user_memory_list to discover additional memories.
-        - Use user_memory_read to load a memory that is not included below or to retrieve it explicitly.
-        - Use user_memory_write to create or update a memory by name.
-        - Keep memories current and delete obsolete entries with user_memory_delete.
+        {{
+            "The `user_memory_*` tools store private memory that follows the current user across projects and "
+            + "conversations: preferences, personal conventions, recurring context."
+        }}
+        Knowledge that belongs to one project goes to project memory.
+        Up to 50 memory bodies are provided as context.
+        Use `user_memory_list` and `user_memory_read` for memories beyond those, and keep memories current.
         """;
 
     private readonly IServiceScopeFactory _serviceScopeFactory;
@@ -50,6 +46,25 @@ public sealed class UserMemoryProvider : AIContextProvider
 
     public async ValueTask<ChatMessage?> CreateContextMessageAsync(CancellationToken cancellationToken = default)
     {
+        var content = await ReadContextContentAsync(cancellationToken).ConfigureAwait(false);
+        if (content is null)
+            return null;
+
+        var message = new ChatMessage(ChatRole.User, content).WithAgentRequestMessageSource(
+            AgentRequestMessageSourceType.AIContextProvider,
+            ConversationHistoryMetadata.UserMemorySourceId
+        );
+        ConversationHistoryMetadata.ExcludeFromPersistence(message);
+        return message;
+    }
+
+    string IConversationContextSource.Title => "User Memory";
+
+    ValueTask<string?> IConversationContextSource.GetContentAsync(CancellationToken cancellationToken) =>
+        ReadContextContentAsync(cancellationToken);
+
+    private async ValueTask<string?> ReadContextContentAsync(CancellationToken cancellationToken)
+    {
         var memories = await ListContextAsync(MaxContextEntries, cancellationToken).ConfigureAwait(false);
         if (memories.Count == 0)
         {
@@ -67,17 +82,9 @@ public sealed class UserMemoryProvider : AIContextProvider
             content.AppendLine();
         }
 
-        var message = new ChatMessage(
-            ChatRole.User,
-            "The following Markdown is the current user's private memory content. "
-                + "Apply it as user-provided context.\n\n"
-                + content
-        ).WithAgentRequestMessageSource(
-            AgentRequestMessageSourceType.AIContextProvider,
-            ConversationHistoryMetadata.UserMemorySourceId
-        );
-        ConversationHistoryMetadata.ExcludeFromPersistence(message);
-        return message;
+        return "The following Markdown is the current user's private memory content. "
+            + "Apply it as user-provided context.\n\n"
+            + content;
     }
 
     [Description(

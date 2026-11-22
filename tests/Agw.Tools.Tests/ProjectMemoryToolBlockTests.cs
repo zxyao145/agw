@@ -54,7 +54,8 @@ public sealed class ProjectMemoryToolBlockTests
             TestContext.Current.CancellationToken
         );
 
-        Assert.Single(contribution.ContextProviders);
+        var provider = Assert.Single(contribution.ContextProviders);
+        Assert.Same(provider, Assert.Single(contribution.ConversationContextSources));
         Assert.Empty(contribution.Warnings);
     }
 

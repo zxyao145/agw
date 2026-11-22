@@ -149,6 +149,10 @@ public class AskUserQuestionToolResult
 
 internal class AskUserQuestionTool : IAgwTool
 {
+    private const string AnswersArgument = "answers";
+    private const string AnnotationsArgument = "annotations";
+    private const string MetadataArgument = "metadata";
+
     private static readonly Regex _htmlDocumentTag = new(
         @"<\s*(html|body|!doctype)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled
@@ -382,7 +386,11 @@ internal class AskUserQuestionTool : IAgwTool
     {
         Func<AskUserQuestionToolParams, AskUserQuestionToolResult> func = Execute;
         var innerFunction = (AIFunction)AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
-        return new HumanInteractionRequiredAIFunction(innerFunction, new AskUserQuestionInteractionProtocol());
+        var modelFunction = new HostManagedPropertiesAIFunction(
+            innerFunction,
+            new HashSet<string>(StringComparer.Ordinal) { AnswersArgument, AnnotationsArgument, MetadataArgument }
+        );
+        return new HumanInteractionRequiredAIFunction(modelFunction, new AskUserQuestionInteractionProtocol());
     }
 
     private sealed class AskUserQuestionInteractionProtocol : IHumanInteractionProtocol
@@ -423,8 +431,8 @@ internal class AskUserQuestionTool : IAgwTool
 
             var values = new Dictionary<string, object?>(arguments, StringComparer.Ordinal)
             {
-                ["answers"] = responseData.Answers,
-                ["annotations"] = responseData.Annotations,
+                [AnswersArgument] = responseData.Answers,
+                [AnnotationsArgument] = responseData.Annotations,
             };
             return new AIFunctionArguments(values) { Services = arguments.Services };
         }

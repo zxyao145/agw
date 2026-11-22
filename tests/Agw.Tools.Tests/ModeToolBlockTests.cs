@@ -60,6 +60,11 @@ public sealed class ModeToolBlockTests
         await using var contribution = materialized.Contribution;
 
         Assert.Equal(["mode_get", "mode_set"], contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal));
+        Assert.DoesNotContain("Current mode:", materialized.Context.Instructions);
+        Assert.Contains(
+            "The conversation is in Execute mode unless a system reminder says Plan mode is active.",
+            materialized.Context.Instructions
+        );
         Assert.Contains("prepare a decision-complete plan", materialized.Context.Instructions);
         Assert.Contains("Do not execute shell commands", materialized.Context.Instructions);
         Assert.Contains("Todo tools may be used", materialized.Context.Instructions);

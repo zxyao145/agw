@@ -1,8 +1,11 @@
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.History;
+using Agw.Agents.Execution.Agents.Tools;
+using Agw.Shared.Tooling;
 using Agw.Tools.Impl.Tools.Basic;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging.Abstractions;
 
 #pragma warning disable MAAI001
 
@@ -186,14 +189,14 @@ public sealed class ToolResultEvictionCompactionStrategyTests
             .SelectMany(message => message.Contents.OfType<FunctionResultContent>())
             .Where(result => Equals(result.Result, ToolResultEvictionCompactionStrategy.EvictedResultText))
             .ToList();
-        Assert.Equal("call-1", Assert.Single(evicted).CallId);
+        Assert.Equal(["call-1", "call-2"], evicted.Select(result => result.CallId));
         Assert.Equal(4, compacted.SelectMany(message => message.Contents.OfType<FunctionCallContent>()).Count());
         Assert.Equal(4, compacted.SelectMany(message => message.Contents.OfType<TextReasoningContent>()).Count());
     }
 
     [Theory]
     [InlineData(12, 0)]
-    [InlineData(13, 1)]
+    [InlineData(13, 6)]
     public async Task Create_LargeContextWindow_EvictsOldToolResultsAbove64000Tokens(int groups, int expectedEvictions)
     {
         var messages = CreateConversation(groups);
@@ -219,6 +222,137 @@ public sealed class ToolResultEvictionCompactionStrategyTests
             result => Assert.Equal(ResultLength, Assert.IsType<string>(result.Result).Length)
         );
     }
+
+    [Fact]
+    public async Task Create_TokensExceedEvictionTrigger_EvictsToTargetInOneRequest()
+    {
+        var strategy = ContextWindowCompactionPipeline.Create(1_000_000, 128_000);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var first = (
+            await CompactionProvider.CompactAsync(
+                strategy,
+                CreateConversation(13),
+                cancellationToken: cancellationToken
+            )
+        ).ToList();
+        Assert.Equal(6, CountEvicted(first));
+
+        var next = first.Concat(CreateConversation(14).TakeLast(2)).ToList();
+        var second = (
+            await CompactionProvider.CompactAsync(strategy, next, cancellationToken: cancellationToken)
+        ).ToList();
+
+        Assert.Equal(6, CountEvicted(second));
+        Assert.Equal(first, second.Take(first.Count), ReferenceEqualityComparer.Instance);
+    }
+
+    [Fact]
+    public async Task AsAgwAgent_StoredToolResultsAfterCompaction_KeepsRequestPrefix()
+    {
+        using var owner = HistoryTestFixture.EnterUser();
+        await using var fixture = await HistoryTestFixture.CreateAsync();
+        var history = fixture.CreateProvider();
+        var logger = NullLoggerFactory.Instance;
+        var model = new RecordingModelClient(
+            (index, _) => index < 9 ? [new FunctionCallContent($"read-{index}", "read")] : [new TextContent("done")]
+        );
+        var read = AIFunctionFactory.Create(() => new string('x', 3_000), "read");
+        await using var capabilities = AgwAgentTestHost.Capabilities(tools: [read]);
+        var definition = AgwAgentTestHost.Definition(
+            history,
+            new CompactionProvider(ContextWindowCompactionPipeline.Create(12_000, 2_000), stateKey: "test-compaction")
+        );
+        var agent = HistoryTestFixture.Record(
+            model.AsAgwAgent(definition, capabilities, logger, fixture.Services),
+            history
+        );
+        var session = await fixture.CreateSessionAsync(agent);
+        var input = new ChatMessage(ChatRole.User, "read the file") { MessageId = Guid.CreateVersion7().ToString("D") };
+
+        await AgwAgentTestHost.RunTurnAsync(fixture, agent, session, input);
+
+        Assert.Equal(10, model.Requests.Count);
+        var evictions = model
+            .Requests.Select(request =>
+                request
+                    .Messages.SelectMany(message => message.Contents.OfType<FunctionResultContent>())
+                    .Where(result =>
+                        result.Result?.ToString() == ToolResultEvictionCompactionStrategy.EvictedResultText
+                    )
+                    .Select(result => result.CallId)
+                    .ToArray()
+            )
+            .ToArray();
+        var first = Array.FindIndex(evictions, results => results.Length > 0);
+        Assert.InRange(first, 1, evictions.Length - 2);
+        Assert.All(evictions.Skip(first + 1), results => Assert.Equal(evictions[first], results));
+    }
+
+    [Fact]
+    public async Task Create_TokensExceedTruncationTrigger_TruncatesToTarget()
+    {
+        var strategy = ContextWindowCompactionPipeline.Create(100_000, 20_000);
+        var messages = Enumerable
+            .Range(1, 16)
+            .Select(index => new ChatMessage(ChatRole.User, $"u{index}:" + new string('x', ResultLength))
+            {
+                MessageId = $"user-{index}",
+            })
+            .ToList();
+
+        var compacted = (
+            await CompactionProvider.CompactAsync(
+                strategy,
+                messages,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        ).ToList();
+
+        Assert.Equal(
+            messages.Skip(10).Select(message => message.MessageId),
+            compacted.Select(message => message.MessageId)
+        );
+    }
+
+    [Fact]
+    public async Task Create_TruncationDropsOldHistory_PreservesUserAnswerWithItsToolCall()
+    {
+        var strategy = ContextWindowCompactionPipeline.Create(100_000, 20_000);
+        var answer = new FunctionResultContent("human-call", "Use SQLite.");
+        var call = new FunctionCallContent("human-call", ToolDefinitionNames.AskUserQuestion);
+        List<ChatMessage> messages =
+        [
+            new(ChatRole.User, "Pick a database."),
+            new(ChatRole.Assistant, [call]),
+            new(ChatRole.Tool, [answer]),
+            .. Enumerable
+                .Range(1, 16)
+                .Select(index => new ChatMessage(ChatRole.User, $"u{index}:" + new string('x', ResultLength))),
+        ];
+
+        var compacted = (
+            await CompactionProvider.CompactAsync(
+                strategy,
+                messages,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        ).ToList();
+
+        Assert.Same(
+            call,
+            Assert.Single(compacted.SelectMany(message => message.Contents.OfType<FunctionCallContent>()))
+        );
+        Assert.Same(
+            answer,
+            Assert.Single(compacted.SelectMany(message => message.Contents.OfType<FunctionResultContent>()))
+        );
+        Assert.DoesNotContain(compacted, message => message.Text.StartsWith("u10:", StringComparison.Ordinal));
+    }
+
+    private static int CountEvicted(IEnumerable<ChatMessage> messages) =>
+        messages
+            .SelectMany(message => message.Contents.OfType<FunctionResultContent>())
+            .Count(result => Equals(result.Result, ToolResultEvictionCompactionStrategy.EvictedResultText));
 
     [Theory]
     [InlineData(0, 0)]

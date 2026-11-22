@@ -1,4 +1,3 @@
-using Agw.Shared.Tooling;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -79,23 +78,11 @@ internal sealed class ToolResultEvictionCompactionStrategy : CompactionStrategy
     {
         // ask_user_question 的结果包含用户答案和后续执行的要求，按 CallId 完整保留。
         // ask_user_question results carry the user's answers and requirements for later steps; keep them whole by CallId.
-        var askUserQuestionCallIds = index
-            .GetIncludedMessages()
-            .SelectMany(message => message.Contents.OfType<FunctionCallContent>())
-            .Where(call => call.Name == ToolDefinitionNames.AskUserQuestion)
-            .Select(call => call.CallId)
-            .ToHashSet(StringComparer.Ordinal);
-        var activeGroups = index
-            .Groups.Where(group => !group.IsExcluded && group.Kind != CompactionGroupKind.System)
-            .ToList();
-        var preservedGroups = activeGroups
-            .Skip(Math.Max(0, activeGroups.Count - _minimumPreservedGroups))
-            .ToHashSet(ReferenceEqualityComparer.Instance);
-        var candidates = index
-            .Groups.Where(group =>
-                !group.IsExcluded
-                && group.Kind == CompactionGroupKind.ToolCall
-                && !preservedGroups.Contains(group)
+        var askUserQuestionCallIds = ContextWindowCompactionPipeline.GetAskUserQuestionCallIds(index);
+        var candidates = ContextWindowCompactionPipeline
+            .GetOlderGroups(index, _minimumPreservedGroups)
+            .Where(group =>
+                group.Kind == CompactionGroupKind.ToolCall
                 && group.Messages.Any(message =>
                     message
                         .Contents.OfType<FunctionResultContent>()

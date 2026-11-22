@@ -10,6 +10,7 @@ namespace Agw.Agents.Contracts.Execution;
 public static class ConversationHistoryMetadata
 {
     public const string AgentflowInputKey = "agentflowInput";
+    public const string ContextAttachmentTypeKey = "contextAttachmentType";
     public const string ModelHistoryExcludedKey = "modelHistoryExcluded";
     public const string PersistenceExcludedKey = "persistenceExcluded";
     public const string UserMemorySourceId = "Agw.UserMemory";

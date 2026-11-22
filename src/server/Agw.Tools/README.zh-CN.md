@@ -152,7 +152,7 @@ AsAgwAgent
 InputBudget = MaxContextWindowTokens - MaxOutputTokens
 ```
 
-`ContextWindowCompactionPipeline` 在输入 Token 估算值超过 `min(InputBudget × 50%, 64_000)` 时清理旧工具结果，超过输入预算的 80% 时截短旧消息。每个工具调用和对应结果按组处理。最终 Token 数由模型供应商报告。
+`ContextWindowCompactionPipeline` 在输入 token 估算值超过 `T = min(InputBudget × 50%, 64_000)` 时清空旧 Tool result，目标为 T 的 60%。超过输入预算的 80% 时截断旧消息组，目标为 T 的 80%。每个工具调用和对应结果按组处理。最终 token 数由模型供应商报告。
 
 默认配置 `256_000 / 64_000` 对应 `192_000` 的有效输入预算，两个阈值分别为 `64_000` 和 `153_600` 个输入 Token。Compaction Provider 位于函数调用循环内部，在每次模型请求前、历史写入之后检查预算。EF Core 保存完整原始历史，压缩状态随 `AgentSession.StateBag` 持久化。External Agent 与一次性 Summary client 使用各自的请求流程。
 
@@ -195,9 +195,9 @@ Catalog 构建和运行时组合都会校验名称：
   Workspace 的多个 Project 共享该目录。
 - User Memory 始终存储在数据库中，并按认证用户 ID 隔离。只有 Markdown
   正文加密，名称和描述保持可检索。
-- System 与 External Agent 共用的请求上下文管线最多注入 50 条 User Memory 名称及
-  完整 Markdown 正文；注入内容是瞬时上下文，不写入会话历史。描述仅用于管理界面和
-  `user_memory_list` 展示。
+- System Agent 将最多 50 条 User Memory 名称及完整 Markdown 正文和 Project Memory 索引放在
+  每次请求的第一条 user 消息中。Agent session 保存会话上下文，截断改变历史起点时重新计算。
+  External Agent 每个 Turn 的第一条用户请求带有 User Memory。描述用于管理界面和 `user_memory_list` 展示。
 - Background relation 与结果由对应 runtime 持久化。
 
 ### Memory 作用域与隐私边界
@@ -416,12 +416,20 @@ InProcess 保留异步等待 Task；先登记再发布，因此客户端立即�
 | 控制项 | 决定什么 | 执行位置 |
 | --- | --- | --- |
 | Tool 选择 | 当前 Agent/Project 提供哪些能力。 | Definition 合并与物化。 |
-| Plan/Execute（`mode`） | 当前 Agent 模式是否允许调用工具。 | `AgentModeProvider`、显式 `AllowInPlanMode`、可见性过滤与调用守卫。 |
+| Plan/Execute（`mode`） | 当前 Agent 模式是否允许调用工具。 | `AgentModeProvider`、显式 `AllowInPlanMode` 和函数调用守卫。 |
 | `AgwToolPermission` | 普通函数是否需要执行授权审批。 | 元数据绑定与 `ApprovalRequiredAIFunction`。 |
 | `AgwPermissionMode` | 当前执行如何处理审批。 | 会话授权与执行交互规则。 |
 | 用户输入协议 / HumanGate | 需要取得什么真实回答或工作流决定。 | 类型化交互 Handler 与工具协议 / 工作流边界。 |
 
-当 `mode` ToolBlock 提供 `AgentModeProvider` 时，Plan 守卫在工具生成 Provider 之后执行：从模型可见列表隐藏受限工具，并在调用受限函数前再次检查模式。模式缺失或未知时按 Plan 限制处理。`FullAccess` 或已经取得的审批不能绕过这个守卫；把 `mode` 切换成 `execute` 也不会改变 `AgwPermissionMode`。
+当 `mode` ToolBlock 提供 `AgentModeProvider` 时，守卫在生成工具的 Provider 之后执行。
+Plan 和 Execute 向模型发送相同的工具定义。
+在 Plan 模式调用受限函数时，审批前直接返回 `PlanModeToolNotAllowed`。
+守卫在执行受限函数前重新检查模式，包括已获批准的调用和 `FullAccess` 下的调用。
+缺少模式或模式无法识别时，应用 Plan 模式的限制。
+`AgwPermissionMode` 独立控制执行审批。
+模型服务负责执行 `HostedWebSearchTool`，两种模式均允许调用。
+配置 `mode` ToolBlock 时，模型服务执行的 Tool 必须允许在 Plan 模式调用。
+受限 Tool 必须为 `AIFunction`，否则两种模式都会在准备模型请求时抛出 `AgentExecutionFailed`。
 
 `ask_user_question` 和 Agent 发起的 `mode_set` 使用 [`IHumanInteractionProtocol`](HumanInteraction/IHumanInteractionProtocol.cs) 与 `HumanInteractionRequiredAIFunction`。它们声明 `None`，跳过的是普通执行授权，`UserInputInteraction` 仍需真实响应。取消输入时返回协议定义的取消结果，不执行内部动作；拒绝 HumanGate 则终止工作流。这些行为都不会被 `FullAccess` 代替。
 

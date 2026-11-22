@@ -1,4 +1,5 @@
 using Agw.Shared.Exceptions;
+using Microsoft.Agents.AI;
 
 namespace Agw.Tools.ToolBlocks;
 
@@ -243,13 +244,18 @@ public sealed class ToolBlockRegistry
                             static pair => pair.Value,
                             StringComparer.OrdinalIgnoreCase
                         );
-                    if (contribution.ContextProviders.Count > 0)
+                    var hasProviders =
+                        contribution.ContextProviders.Count > 0 || contribution.DynamicContextProviders.Count > 0;
+                    if (hasProviders)
                     {
-                        var sourceProviders = contribution.ContextProviders.ToArray();
-                        contribution.ContextProviders.Clear();
-                        contribution.ContextProviders.Add(
-                            new AgwToolMetadataContextProvider(sourceProviders, dynamicMetadata)
+                        // 动态阶段的完整性校验包含静态阶段已绑定的成员。
+                        // The final check in the dynamic phase includes members bound in the static phase.
+                        WrapProviders(
+                            contribution.ContextProviders,
+                            dynamicMetadata,
+                            requireAllMembers: contribution.DynamicContextProviders.Count == 0
                         );
+                        WrapProviders(contribution.DynamicContextProviders, dynamicMetadata, requireAllMembers: true);
                     }
                     else if (dynamicMetadata.Count > 0)
                     {
@@ -258,7 +264,8 @@ public sealed class ToolBlockRegistry
                             $"ToolBlock '{toolBlock.Descriptor.Name}' did not provide declared members: {string.Join(", ", dynamicMetadata.Keys.Order(StringComparer.Ordinal))}."
                         );
                     }
-                    AddContribution(result, contribution);
+                    result.Merge(contribution);
+                    result.AddResource(contribution);
                 }
                 catch
                 {
@@ -277,24 +284,18 @@ public sealed class ToolBlockRegistry
         }
     }
 
-    private static void AddContribution(ToolContribution destination, ToolContribution contribution)
+    private static void WrapProviders(
+        List<AIContextProvider> providers,
+        IReadOnlyDictionary<string, AgwToolMetadata> metadata,
+        bool requireAllMembers
+    )
     {
-        destination.Tools.AddRange(contribution.Tools);
-        destination.PlanModeAllowedToolNames.UnionWith(contribution.PlanModeAllowedToolNames);
-        destination.ContextProviders.AddRange(contribution.ContextProviders);
-        destination.LoopEvaluators.AddRange(contribution.LoopEvaluators);
-        destination.AutoApprovalRules.AddRange(contribution.AutoApprovalRules);
-        foreach (var metadata in contribution.DynamicToolMetadata)
-        {
-            destination.DynamicToolMetadata.Add(metadata.Key, metadata.Value);
-        }
-        destination.Warnings.AddRange(contribution.Warnings);
-        foreach (var warning in contribution.InvocationWarnings)
-        {
-            destination.InvocationWarnings[warning.Key] = warning.Value;
-        }
+        if (providers.Count == 0)
+            return;
 
-        destination.AddResource(contribution);
+        var wrapper = new AgwToolMetadataContextProvider(providers, metadata, requireAllMembers);
+        providers.Clear();
+        providers.Add(wrapper);
     }
 
     private static bool IsObsolete(Type type) => type.IsDefined(typeof(ObsoleteAttribute), inherit: false);

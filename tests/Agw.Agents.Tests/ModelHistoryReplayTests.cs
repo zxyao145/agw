@@ -246,18 +246,7 @@ public sealed class ModelHistoryReplayTests
     }
 
     private static AgentCapabilityComposition CreateCapabilities(IReadOnlyList<AITool> tools) =>
-        new(
-            tools: tools,
-            pluginSkills: [],
-            warnings: [],
-            contextProviders: [],
-            loopEvaluators: [],
-            autoApprovalRules: [],
-            planModeAllowedToolNames: new HashSet<string>(),
-            toolWarnings: [],
-            toolInvocationWarnings: new Dictionary<string, string>(),
-            lease: new AgentResourceLease()
-        );
+        AgwAgentTestHost.Capabilities(tools: tools);
 
     private sealed class ApprovalContinuationChatClient : IChatClient
     {

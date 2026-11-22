@@ -14,7 +14,6 @@ using Agw.Providers.Contracts.References;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
-using Agw.Tools.Impl.ToolBlocks.UserMemory;
 using Anthropic;
 using Anthropic.Core;
 using Microsoft.Agents.AI;
@@ -178,12 +177,7 @@ public partial class AgentRuntimeFactory
                 _loggerFactory,
                 _services
             );
-            var userMemoryProvider = capabilities
-                .ContextProviders.Select(static provider => provider.GetService<UserMemoryProvider>())
-                .SingleOrDefault(static provider => provider != null);
-            Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync =
-                userMemoryProvider == null ? null : userMemoryProvider.CreateContextMessageAsync;
-            aiAgent = new HistoryRecordingAgent(aiAgent, historyProvider, createMemoryContextAsync, _logger);
+            aiAgent = new HistoryRecordingAgent(aiAgent, historyProvider, null, _logger);
             var agentBuilder = aiAgent
                 .AsBuilder()
                 .Use(runFunc: _telemetryMiddleware.RunAsync, runStreamingFunc: _telemetryMiddleware.RunStreamingAsync);

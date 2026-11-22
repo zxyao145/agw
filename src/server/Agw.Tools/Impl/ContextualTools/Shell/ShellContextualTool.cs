@@ -85,10 +85,10 @@ public sealed class ShellContextualTool : IContextualTool
             )
         );
         contribution.ContextProviders.Add(new ShellFileAccessInstructionsProvider());
-        contribution.ContextProviders.Add(new ShellEnvironmentProvider(executor));
+        contribution.DynamicContextProviders.Add(new ShellEnvironmentProvider(executor));
         if (backend == "docker" && context.WorkspaceSnapshot?.AdditionalDirectories.Count > 0)
         {
-            contribution.ContextProviders.Add(new DockerDirectoryProvider(context));
+            contribution.DynamicContextProviders.Add(new DockerDirectoryProvider(context));
         }
         contribution.AddResource(executor);
         return contribution;

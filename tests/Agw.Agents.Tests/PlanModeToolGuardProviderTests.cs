@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.Context.PlanMode;
+using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -9,13 +10,14 @@ namespace Agw.Agents.Tests;
 public sealed class PlanModeToolGuardProviderTests
 {
     [Fact]
-    public async Task InvokingAsync_PlanMode_ExposesOnlyExplicitlyAllowedTools()
+    public async Task InvokingAsync_PlanMode_KeepsAllToolsAndWrapsRestrictedOnes()
     {
         var modeProvider = CreateModeProvider("plan");
         var session = new TestAgentSession();
+        var hosted = new HostedWebSearchTool();
         var guard = new PlanModeToolGuardProvider(
             modeProvider,
-            new HashSet<string>(["project_memory_read"], StringComparer.OrdinalIgnoreCase)
+            new HashSet<string>(["project_memory_read", "web_search"], StringComparer.OrdinalIgnoreCase)
         );
         var context = await InvokeAsync(
             guard,
@@ -24,25 +26,51 @@ public sealed class PlanModeToolGuardProviderTests
                 CreateFunction("project_memory_read"),
                 CreateFunction("run_shell"),
                 CreateFunction("connection_read_only", readOnlyHint: true),
+                hosted,
             ]
         );
         var tools = context.Tools!.ToArray();
 
         Assert.Equal(
-            ["connection_read_only", "project_memory_read", "run_shell"],
-            tools.Select(static tool => tool.Name).Order(StringComparer.Ordinal)
+            ["project_memory_read", "run_shell", "connection_read_only", hosted.Name],
+            tools.Select(static tool => tool.Name)
         );
+        Assert.Same(hosted, tools[^1]);
         Assert.Equal(
             ["connection_read_only", "run_shell"],
             tools
                 .OfType<PlanModeRestrictedAIFunction>()
-                .Where(static function => function.HideFromModel)
+                .Where(static function => function.WasPlanModeActive)
                 .Select(static function => function.Name)
                 .Order(StringComparer.Ordinal)
         );
-        Assert.Contains("Plan mode is enforced by the server", context.Instructions);
-        Assert.Contains("Todo tools may be used", context.Instructions);
-        Assert.Contains("external Connection/MCP tools", context.Instructions);
+        Assert.Null(context.Instructions);
+    }
+
+    [Theory]
+    [InlineData("plan")]
+    [InlineData("execute")]
+    public async Task RunAsync_RestrictedHostedTool_ThrowsBeforeModelRequest(string mode)
+    {
+        using var model = new RecordingModelClient();
+        var hosted = new HostedWebSearchTool();
+        var guard = new PlanModeToolGuardProvider(CreateModeProvider(mode), new HashSet<string>());
+        var agent = new ChatClientAgent(
+            model,
+            new ChatClientAgentOptions
+            {
+                AIContextProviders = [guard],
+                ChatOptions = new ChatOptions { Tools = [hosted] },
+            }
+        );
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            agent.RunAsync("Search the web.", cancellationToken: TestContext.Current.CancellationToken)
+        );
+
+        Assert.Equal(ErrorCodes.AgentExecutionFailed.Code, exception.Code);
+        Assert.Contains(hosted.Name, exception.Message, StringComparison.Ordinal);
+        Assert.Empty(model.Requests);
     }
 
     [Fact]
@@ -59,7 +87,9 @@ public sealed class PlanModeToolGuardProviderTests
             [CreateFunction("file_access_read"), CreateFunction("file_access_read")]
         );
 
-        Assert.Empty(context.Tools!);
+        var tools = context.Tools!.ToArray();
+        Assert.Equal(2, tools.Length);
+        Assert.All(tools, tool => Assert.True(Assert.IsType<PlanModeRestrictedAIFunction>(tool).WasPlanModeActive));
     }
 
     [Fact]
@@ -78,8 +108,8 @@ public sealed class PlanModeToolGuardProviderTests
         var tools = context.Tools!.ToArray();
 
         Assert.Equal(["mode_get", "run_shell"], tools.Select(static tool => tool.Name));
-        Assert.True(Assert.IsType<PlanModeRestrictedAIFunction>(tools[1]).HideFromModel);
-        Assert.Contains(PlanModeToolGuardProvider.EnforcementInstructions, context.Instructions);
+        Assert.True(Assert.IsType<PlanModeRestrictedAIFunction>(tools[1]).WasPlanModeActive);
+        Assert.Null(context.Instructions);
     }
 
     [Fact]
@@ -108,8 +138,8 @@ public sealed class PlanModeToolGuardProviderTests
         );
 
         var tools = context.Tools!.ToArray();
-        Assert.True(Assert.IsType<PlanModeRestrictedAIFunction>(tools[1]).HideFromModel);
-        Assert.Contains(PlanModeToolGuardProvider.EnforcementInstructions, context.Instructions);
+        Assert.True(Assert.IsType<PlanModeRestrictedAIFunction>(tools[1]).WasPlanModeActive);
+        Assert.Null(context.Instructions);
     }
 
     [Fact]
@@ -140,7 +170,7 @@ public sealed class PlanModeToolGuardProviderTests
             TestContext.Current.CancellationToken
         );
 
-        Assert.True(guardedFunction.HideFromModel);
+        Assert.True(guardedFunction.WasPlanModeActive);
         Assert.Null(guardedFunction.GetService(typeof(ApprovalRequiredAIFunction)));
         Assert.Contains("403_0003 PlanModeToolNotAllowed", Assert.IsType<string>(result));
         Assert.Equal(0, invocationCount);
@@ -194,7 +224,7 @@ public sealed class PlanModeToolGuardProviderTests
         Assert.Collection(
             context.Tools!,
             tool => Assert.Equal("web_search", Assert.IsAssignableFrom<AIFunction>(tool).Name),
-            tool => Assert.False(Assert.IsType<PlanModeRestrictedAIFunction>(tool).HideFromModel)
+            tool => Assert.False(Assert.IsType<PlanModeRestrictedAIFunction>(tool).WasPlanModeActive)
         );
         Assert.Null(context.Instructions);
     }
@@ -216,7 +246,7 @@ public sealed class PlanModeToolGuardProviderTests
         var result = await functions[0].InvokeAsync(new AIFunctionArguments(), TestContext.Current.CancellationToken);
 
         Assert.Equal(2, functions.Length);
-        Assert.All(functions, static function => Assert.False(function.HideFromModel));
+        Assert.All(functions, static function => Assert.False(function.WasPlanModeActive));
         Assert.Contains("403_0003 PlanModeToolNotAllowed", Assert.IsType<string>(result));
         Assert.Equal(0, invocationCount);
 

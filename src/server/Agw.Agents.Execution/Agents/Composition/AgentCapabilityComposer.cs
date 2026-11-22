@@ -90,35 +90,12 @@ public sealed class AgentCapabilityComposer
     )
     {
         var lease = new AgentResourceLease();
-        var tools = new List<AITool>();
+        var combined = new ToolContribution();
         var registeredToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var pluginSkills = new List<PluginSkillReference>();
         var warnings = new List<ConnectionCapabilityWarning>();
-        var contextProviders = new List<Microsoft.Agents.AI.AIContextProvider>();
-        var loopEvaluators = new List<Microsoft.Agents.AI.LoopEvaluator>();
-        var autoApprovalRules = new List<Func<Microsoft.Agents.AI.ToolAutoApprovalRuleContext, ValueTask<bool>>>();
-        var planModeAllowedToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var toolWarnings = new List<string>();
-        var toolInvocationWarnings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var extensionSkills = new List<AgentSkill>();
-        AgentCapabilityComposition BuildComposition(
-            IReadOnlySet<string>? declaredToolNames = null,
-            IReadOnlyList<AgentSkill>? additionalSkills = null
-        ) =>
-            new(
-                tools,
-                pluginSkills,
-                warnings,
-                contextProviders,
-                loopEvaluators,
-                autoApprovalRules,
-                planModeAllowedToolNames,
-                toolWarnings,
-                toolInvocationWarnings,
-                lease,
-                declaredToolNames,
-                additionalSkills
-            );
+        AgentCapabilityComposition BuildComposition(IReadOnlyList<AgentSkill>? extensionSkills = null) =>
+            new(combined, pluginSkills, warnings, lease, extensionSkills);
 
         try
         {
@@ -132,6 +109,9 @@ public sealed class AgentCapabilityComposer
             var extensionToolDefinitions = resolvedToolValues.Tools.OfType<ExtensionToolDefinition>().ToArray();
             var executableToolDefinitions = resolvedToolValues
                 .Tools.Where(static definition => definition is not ExtensionToolDefinition)
+                .OrderBy(static definition =>
+                    GetDefinitionOrder(definition.GetDefinitionName(), ToolDefinitionNames.All)
+                )
                 .ToArray();
             var materializationContext = new ToolMaterializationContext
             {
@@ -182,16 +162,17 @@ public sealed class AgentCapabilityComposer
                         )
                         .ConfigureAwait(false);
                     lease.Add(userMemoryContribution);
-                    contextProviders.AddRange(userMemoryContribution.ContextProviders);
+                    combined.ContextProviders.AddRange(userMemoryContribution.ContextProviders);
                 }
 
                 return BuildComposition();
             }
 
-            contextProviders.Add(new AgwWorkspaceProvider(agent, project, _instructionSources, _logger));
+            var workspaceProvider = new AgwWorkspaceProvider(agent, project, _instructionSources, _logger);
 
             if (toolPolicy == BackgroundToolPolicy.None)
             {
+                combined.ContextProviders.Add(workspaceProvider);
                 return BuildComposition();
             }
 
@@ -204,24 +185,15 @@ public sealed class AgentCapabilityComposer
                         StringComparison.OrdinalIgnoreCase
                     )
                 )
+                .OrderBy(static definition =>
+                    GetDefinitionOrder(definition.GetDefinitionName(), ToolBlockDefinitionNames.All)
+                )
                 .ToArray();
 
             var toolContribution = await _toolRegistry
                 .MaterializeAsync(executableToolDefinitions, materializationContext, cancellationToken)
                 .ConfigureAwait(false);
-            AddContribution(
-                toolContribution,
-                "built-in",
-                tools,
-                registeredToolNames,
-                contextProviders,
-                loopEvaluators,
-                autoApprovalRules,
-                planModeAllowedToolNames,
-                toolWarnings,
-                toolInvocationWarnings,
-                lease
-            );
+            AddContribution(combined, toolContribution, registeredToolNames, "built-in", lease);
 
             var connectionIds = agent
                 .AgentConnectionRelations.Select(relation => relation.ConnectionId)
@@ -235,7 +207,7 @@ public sealed class AgentCapabilityComposer
                     .ResolveAsync(project.Id, connectionIds, cancellationToken)
                     .ConfigureAwait(false);
                 lease.Add(resolution);
-                AddTools(tools, registeredToolNames, resolution.Tools, "connection");
+                AddTools(combined.Tools, registeredToolNames, resolution.Tools, "connection");
                 pluginSkills.AddRange(resolution.PluginSkills);
                 warnings.AddRange(resolution.Warnings);
                 foreach (var warning in resolution.Warnings)
@@ -262,7 +234,7 @@ public sealed class AgentCapabilityComposer
                     agent,
                     project,
                     environmentVariables,
-                    tools,
+                    combined.Tools,
                     registeredToolNames,
                     lease,
                     cancellationToken
@@ -277,19 +249,7 @@ public sealed class AgentCapabilityComposer
                     cancellationToken
                 )
                 .ConfigureAwait(false);
-            AddContribution(
-                contribution,
-                "tool-block",
-                tools,
-                registeredToolNames,
-                contextProviders,
-                loopEvaluators,
-                autoApprovalRules,
-                planModeAllowedToolNames,
-                toolWarnings,
-                toolInvocationWarnings,
-                lease
-            );
+            AddContribution(combined, contribution, registeredToolNames, "tool-block", lease);
             foreach (var warning in contribution.Warnings)
             {
                 _logger.LogWarning("Tool Block warning for agent {AgentId}: {Warning}", agent.Id, warning);
@@ -351,30 +311,39 @@ public sealed class AgentCapabilityComposer
             if (extensionCapabilities != null)
             {
                 var selectedTools = extensionCapabilities.SelectTools(extensionSelection);
-                AddTools(tools, registeredToolNames, selectedTools, "extension");
-                planModeAllowedToolNames.UnionWith(
+                AddTools(combined.Tools, registeredToolNames, selectedTools, "extension");
+                combined.PlanModeAllowedToolNames.UnionWith(
                     selectedTools
                         .Where(tool => AgwToolMetadataBinding.GetMetadata(tool)?.AllowInPlanMode == true)
                         .Select(tool => tool.Name)
                 );
-                extensionSkills.AddRange(extensionCapabilities.Skills);
             }
 
+            // 静态 Provider 先绑定 Tool Block 成员，动态 Provider 再校验全部成员。
+            // Static providers bind their Tool Block members before dynamic providers validate the complete set.
+            combined.ContextProviders.Add(workspaceProvider);
+            combined.ContextProviders.AddRange(combined.DynamicContextProviders);
             if (deferHumanInteractions)
-                contextProviders.Add(new DeferredHumanInteractionProvider());
+                combined.ContextProviders.Add(new DeferredHumanInteractionProvider());
 
-            return BuildComposition(
-                toolContribution
-                    .DynamicToolMetadata.Keys.Concat(contribution.DynamicToolMetadata.Keys)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase),
-                extensionSkills
-            );
+            return BuildComposition(extensionCapabilities?.Skills);
         }
         catch
         {
             await DisposeWithoutThrowingAsync(lease).ConfigureAwait(false);
             throw;
         }
+    }
+
+    private static int GetDefinitionOrder(string name, IReadOnlyList<string> names)
+    {
+        for (var index = 0; index < names.Count; index++)
+        {
+            if (string.Equals(name, names[index], StringComparison.OrdinalIgnoreCase))
+                return index;
+        }
+
+        return names.Count;
     }
 
     private async Task AddIndependentMcpToolsAsync(
@@ -451,66 +420,38 @@ public sealed class AgentCapabilityComposer
     {
         foreach (var tool in tools)
         {
-            if (string.IsNullOrWhiteSpace(tool.Name))
-            {
-                throw new AgwException(
-                    ErrorCodes.IntegrationToolNameInvalid,
-                    $"Capability source '{source}' produced a tool without a name."
-                );
-            }
-
-            if (!registeredToolNames.Add(tool.Name))
-            {
-                throw new AgwException(
-                    ErrorCodes.IntegrationToolNameConflict,
-                    $"Tool name '{tool.Name}' conflicts with another agent capability source."
-                );
-            }
-
+            RegisterToolName(registeredToolNames, tool.Name, source);
             destination.Add(tool);
         }
     }
 
     private static void AddContribution(
+        ToolContribution destination,
         ToolContribution contribution,
-        string source,
-        ICollection<AITool> tools,
         ISet<string> registeredToolNames,
-        ICollection<Microsoft.Agents.AI.AIContextProvider> contextProviders,
-        ICollection<Microsoft.Agents.AI.LoopEvaluator> loopEvaluators,
-        ICollection<Func<Microsoft.Agents.AI.ToolAutoApprovalRuleContext, ValueTask<bool>>> autoApprovalRules,
-        ISet<string> planModeAllowedToolNames,
-        ICollection<string> warnings,
-        IDictionary<string, string> invocationWarnings,
+        string source,
         AgentResourceLease lease
     )
     {
         lease.Add(contribution);
-        AddTools(tools, registeredToolNames, contribution.Tools, source);
-        planModeAllowedToolNames.UnionWith(contribution.PlanModeAllowedToolNames);
-        foreach (var provider in contribution.ContextProviders)
-        {
-            contextProviders.Add(provider);
-        }
+        foreach (var tool in contribution.Tools)
+            RegisterToolName(registeredToolNames, tool.Name, source);
+        destination.Merge(contribution);
+    }
 
-        foreach (var evaluator in contribution.LoopEvaluators)
+    private static void RegisterToolName(ISet<string> registeredToolNames, string name, string source)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new AgwException(
+                ErrorCodes.IntegrationToolNameInvalid,
+                $"Capability source '{source}' produced a tool without a name."
+            );
+        if (!registeredToolNames.Add(name))
         {
-            loopEvaluators.Add(evaluator);
-        }
-
-        foreach (var rule in contribution.AutoApprovalRules)
-        {
-            autoApprovalRules.Add(rule);
-        }
-
-        foreach (var warning in contribution.Warnings)
-        {
-            warnings.Add(warning);
-        }
-
-        foreach (var warning in contribution.InvocationWarnings)
-        {
-            invocationWarnings[warning.Key] = warning.Value;
+            throw new AgwException(
+                ErrorCodes.IntegrationToolNameConflict,
+                $"Tool name '{name}' conflicts with another agent capability source."
+            );
         }
     }
 

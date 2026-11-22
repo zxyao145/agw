@@ -43,20 +43,38 @@ public sealed class ProjectMemoryProviderTests : IDisposable
         Assert.NotNull(tools);
 
         Assert.Empty(provider.StateKeys);
+        Assert.StartsWith("## Project Memory", context.Instructions);
         Assert.Contains("shared by all agents and conversations", context.Instructions);
+        Assert.Contains("Private user information belongs in user memory.", context.Instructions);
         Assert.Equal(ToolNames, tools.Select(static tool => tool.Name).Order(StringComparer.Ordinal));
         Assert.Null(context.Messages);
     }
 
     [Fact]
-    public async Task InvokingAsync_MissingMemory_DoesNotCreateDirectory()
+    public async Task GetContentAsync_MissingIndex_ReturnsNull()
     {
         var store = new RecordingEmptyAgentFileStore();
 
-        var context = await InvokeProviderAsync(CreateProvider(store));
+        var provider = CreateProvider(store);
+        IConversationContextSource source = provider;
 
-        Assert.NotNull(context.Tools);
+        Assert.Equal("Project Memory Index", source.Title);
+        Assert.Null(await source.GetContentAsync(TestContext.Current.CancellationToken));
         Assert.Equal(0, store.CreateDirectoryCallCount);
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public async Task GetContentAsync_ExistingIndexWithHeading_ReturnsOnlyBody(string lineEnding)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+        const string body = "- **notes.md**: Project notes";
+        await store.WriteAsync("memories.md", $"# Project Memory Index{lineEnding}{lineEnding}{body}", ct);
+        IConversationContextSource source = CreateProvider(store);
+
+        Assert.Equal(body, await source.GetContentAsync(ct));
     }
 
     [Fact]
@@ -83,9 +101,14 @@ public sealed class ProjectMemoryProviderTests : IDisposable
         );
         var secondProvider = CreateProvider(store);
         var secondContext = await InvokeProviderAsync(secondProvider);
-        var indexMessage = Assert.Single(secondContext.Messages!);
-        Assert.Contains("architecture.md", indexMessage.Text);
-        Assert.Contains("Architecture decisions", indexMessage.Text);
+        Assert.Null(secondContext.Messages);
+        Assert.StartsWith(
+            "# Project Memory Index",
+            await store.ReadAsync("memories.md", TestContext.Current.CancellationToken)
+        );
+        IConversationContextSource source = secondProvider;
+        var index = await source.GetContentAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("- **architecture.md**: Architecture decisions", index?.TrimEnd());
 
         var read = GetFunction(secondContext, ProjectMemoryProvider.ReadFileToolName);
         var readResult = await read.InvokeAsync(
@@ -246,10 +269,10 @@ public sealed class ProjectMemoryProviderTests : IDisposable
             Directory.CreateSymbolicLink(Path.Combine(_workspace, ".agw", "memory"), outside);
             var store = CreateStore();
 
-            // 提供上下文时读取记忆索引就会被拒绝；直接写入同样被拒绝，外部目录保持为空。
-            // Reading the memory index while providing context is already rejected; a direct write is rejected as
-            // well, and the outside directory stays empty.
-            var indexRead = await Assert.ThrowsAsync<AgwException>(() => InvokeProviderAsync(CreateProvider(store)));
+            IConversationContextSource source = CreateProvider(store);
+            var indexRead = await Assert.ThrowsAsync<AgwException>(async () =>
+                await source.GetContentAsync(TestContext.Current.CancellationToken)
+            );
             var write = await Assert.ThrowsAsync<AgwException>(() =>
                 store.WriteAsync("notes.md", "escaped", TestContext.Current.CancellationToken)
             );

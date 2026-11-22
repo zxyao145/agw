@@ -14,6 +14,41 @@ namespace Agw.Agents.Tests;
 
 public sealed class HistoryRecordingAgentTests
 {
+    [Fact]
+    public async Task RunStreamingAsync_LoopAgentFeedback_PersistsOneRow()
+    {
+        using var owner = HistoryTestFixture.EnterUser();
+        await using var fixture = await HistoryTestFixture.CreateAsync();
+        var model = new RecordingModelClient();
+        var history = fixture.CreateProvider();
+        var continueOnce = new DelegateLoopEvaluator(
+            (context, _) =>
+                ValueTask.FromResult(
+                    context.Iteration == 1 && model.Requests.Count == 1
+                        ? LoopEvaluation.Continue("keep going")
+                        : LoopEvaluation.Stop()
+                )
+        );
+        await using var capabilities = AgwAgentTestHost.Capabilities(loopEvaluators: [continueOnce]);
+        var agent = HistoryTestFixture.Record(
+            model.AsAgwAgent(
+                AgwAgentTestHost.Definition(history),
+                capabilities,
+                NullLoggerFactory.Instance,
+                fixture.Services
+            ),
+            history
+        );
+        var session = await fixture.CreateSessionAsync(agent);
+
+        await AgwAgentTestHost.RunTurnAsync(fixture, agent, session, new ChatMessage(ChatRole.User, "question"));
+        await AgwAgentTestHost.RunTurnAsync(fixture, agent, session, new ChatMessage(ChatRole.User, "next"));
+
+        Assert.Equal(3, model.Requests.Count);
+        Assert.Single(await fixture.ReadMessagesAsync(), message => message.Text == "keep going");
+        Assert.Single(model.Requests[2].Messages, message => message.Text == "keep going");
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -589,18 +624,7 @@ public sealed class HistoryRecordingAgentTests
         };
 
     private static AgentCapabilityComposition CreateCapabilities(IReadOnlyList<AITool>? tools = null) =>
-        new(
-            tools: tools ?? [],
-            pluginSkills: [],
-            warnings: [],
-            contextProviders: [],
-            loopEvaluators: [],
-            autoApprovalRules: [],
-            planModeAllowedToolNames: new HashSet<string>(),
-            toolWarnings: [],
-            toolInvocationWarnings: new Dictionary<string, string>(),
-            lease: new AgentResourceLease()
-        );
+        AgwAgentTestHost.Capabilities(tools: tools);
 
     private sealed class GetEnumeratorThrowingAgent : AIAgent
     {
