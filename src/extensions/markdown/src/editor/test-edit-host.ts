@@ -9,6 +9,7 @@ import type { Editor } from "@tiptap/core";
 import { JSDOM } from "jsdom";
 
 import { connectTestHost, type TestHost } from "../test-host";
+import { LayoutFreeResizeObserver } from "../test-layout";
 import { installMermaidDom } from "../test-mermaid-dom";
 
 const { window } = new JSDOM("<!doctype html><html><body></body></html>", {
@@ -30,14 +31,6 @@ Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
   value: window.localStorage,
 });
-// jsdom 没有 ResizeObserver（Radix tooltip 的箭头使用它）；没有排版时元素尺寸不会变化，观察者从不回调。
-// jsdom lacks ResizeObserver (Radix's tooltip arrow uses it); without layout no element size changes, so the observer
-// never calls back.
-class LayoutFreeResizeObserver {
-  public observe(): void {}
-  public unobserve(): void {}
-  public disconnect(): void {}
-}
 Object.assign(globalThis, {
   window,
   document: window.document,

@@ -6,16 +6,22 @@ import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 
 import { connectTestHost } from "../test-host";
+import { LayoutFreeResizeObserver, outlineItems } from "../test-layout";
 import { installMermaidDom } from "../test-mermaid-dom";
 
 // React 在 jsdom 的 document 中渲染，Markdown 管线使用 window.DOMParser。
 // React renders into jsdom's document, and the Markdown pipeline uses window.DOMParser.
-const { window } = new JSDOM("<!doctype html><html><body></body></html>");
+const { window } = new JSDOM("<!doctype html><html><body></body></html>", {
+  pretendToBeVisual: true,
+});
 Object.assign(globalThis, {
   window,
   document: window.document,
   DOMParser: window.DOMParser,
+  ResizeObserver: LayoutFreeResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 });
 installMermaidDom(window);
@@ -127,6 +133,114 @@ function heading(viewer: Viewer): string | null {
 function paragraph(viewer: Viewer): string | null {
   return viewer.container.querySelector("article.markdown-body p")?.textContent ?? null;
 }
+
+test("a document with level 1-4 headings shows the outline beside the article", async () => {
+  files.set(`${ROOT}outline.md`, {
+    text: "## Install\n\n### Requirements\n\n#### Versions\n\n##### Five\n\n## Usage\n",
+  });
+  const viewer = mountViewer();
+  try {
+    await viewer.show("outline.md");
+    await until(viewer, () => outlineItems(viewer.container) !== null, "the outline");
+    assert.deepEqual(outlineItems(viewer.container), [
+      ["Install", "0"],
+      ["Requirements", "1"],
+      ["Versions", "2"],
+      ["Usage", "0"],
+    ]);
+    const layout = viewer.container.querySelector(".preview-layout")!;
+    assert.equal(layout.hasAttribute("data-outline"), true);
+    assert.deepEqual(
+      [...layout.children].map((child) => child.localName),
+      ["article", "nav"],
+    );
+    const nav = layout.querySelector("nav.outline")!;
+    assert.equal(nav.getAttribute("aria-label"), "Outline");
+    assert.equal(nav.querySelector(".outline-title")?.textContent, "Outline");
+    for (const item of nav.querySelectorAll(".outline-item")) {
+      assert.equal(item.getAttribute("type"), "button");
+      assert.equal(item.getAttribute("title"), item.textContent);
+    }
+  } finally {
+    await viewer.unmount();
+  }
+});
+
+test("an outline can show a heading whose GitHub slug is empty", async () => {
+  files.set(`${ROOT}punctuation.md`, { text: "## !!!\n" });
+  const viewer = mountViewer();
+  try {
+    await viewer.show("punctuation.md");
+    await until(viewer, () => outlineItems(viewer.container) !== null, "the punctuation outline");
+    assert.equal(viewer.container.querySelector(".markdown-body h2")?.id, "");
+    assert.deepEqual(outlineItems(viewer.container), [["!!!", "0"]]);
+  } finally {
+    await viewer.unmount();
+  }
+});
+
+test("a document without level 1-4 headings shows no outline", async () => {
+  files.set(`${ROOT}flat.md`, { text: "##### Five\n\nText.\n" });
+  const viewer = mountViewer();
+  try {
+    await viewer.show("flat.md");
+    await until(viewer, () => paragraph(viewer) === "Text.", "the content");
+    assert.equal(outlineItems(viewer.container), null);
+    assert.equal(
+      viewer.container.querySelector(".preview-layout")?.hasAttribute("data-outline"),
+      false,
+    );
+  } finally {
+    await viewer.unmount();
+  }
+});
+
+test("loading and failed reads show no outline", async () => {
+  files.set(`${ROOT}slow.md`, { text: "# Slow\n" });
+  files.set(`${ROOT}failed.md`, { code: "ERR_NOT_TEXT" });
+  const viewer = mountViewer();
+  try {
+    let release!: () => void;
+    gate = new Promise((resolve) => (release = resolve));
+    await viewer.show("slow.md");
+    await until(viewer, () => reads.length === 1, "the read");
+    assert.match(viewer.container.textContent ?? "", /Loading/u);
+    assert.equal(outlineItems(viewer.container), null);
+    release();
+    await until(
+      viewer,
+      () => outlineItems(viewer.container) !== null,
+      "the outline after the read",
+    );
+    await viewer.show("failed.md");
+    await until(
+      viewer,
+      () => viewer.container.querySelector(".document-error") !== null,
+      "the error panel",
+    );
+    assert.equal(outlineItems(viewer.container), null);
+  } finally {
+    await viewer.unmount();
+  }
+});
+
+test("showing a changed file again updates the outline", async () => {
+  files.set(`${ROOT}changing.md`, { text: "# First\n" });
+  const viewer = mountViewer();
+  try {
+    await viewer.show("changing.md");
+    await until(viewer, () => outlineItems(viewer.container)?.length === 1, "the first outline");
+    files.set(`${ROOT}changing.md`, { text: "# First\n\n## Second\n" });
+    await viewer.show("changing.md");
+    await until(viewer, () => outlineItems(viewer.container)?.length === 2, "the updated outline");
+    assert.deepEqual(outlineItems(viewer.container), [
+      ["First", "0"],
+      ["Second", "1"],
+    ]);
+  } finally {
+    await viewer.unmount();
+  }
+});
 
 test("the Markdown article uses the shared Markdown typography in document density", async () => {
   files.set(`${ROOT}typography.md`, { text: "# Title" });

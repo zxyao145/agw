@@ -197,6 +197,38 @@ HTML block
 </div>
 `;
 
+// 大纲检查使用长章节、短结尾和无标题文档。The outline checks use long sections, a short ending, and a plain file.
+const OUTLINE_BODY = Array.from(
+  { length: 20 },
+  (_, index) => `Body paragraph ${index + 1} of this section.`,
+).join("\n\n");
+const OUTLINE_MARKDOWN =
+  [
+    "# Outline sample",
+    OUTLINE_BODY,
+    "## Install",
+    OUTLINE_BODY,
+    "### Requirements",
+    OUTLINE_BODY,
+    "#### Versions",
+    OUTLINE_BODY,
+    "##### Level five",
+    OUTLINE_BODY,
+    "###### Level six",
+    OUTLINE_BODY,
+    "## 中文 标题",
+    OUTLINE_BODY,
+    "## Usage",
+    OUTLINE_BODY,
+    "### Options",
+    OUTLINE_BODY,
+    "## Short end",
+    "Short end text.",
+    "## Last",
+    "Last text.",
+  ].join("\n\n") + "\n";
+const PLAIN_MARKDOWN = "First plain paragraph.\n\nSecond plain paragraph.\n";
+
 // 缩进不规范的 TypeScript：唯一缩进的一行为 4 个空格，Monaco 按 4 个空格缩进格式化。
 // TypeScript with irregular indentation: the only indented line uses 4 spaces, so Monaco formats with 4 spaces.
 const APP_TS = `function   add(a:number,b:number){
@@ -573,6 +605,8 @@ async function prepareServerData(baseUrl, echoPort) {
   // Markdown extension 与 todo-editor 使用的文件。Files for the Markdown extension and todo-editor.
   await mkdir(join(projectDirectory, "notes"), { recursive: true });
   await writeFile(join(projectDirectory, "notes", "edit.md"), MIXED_MARKDOWN);
+  await writeFile(join(projectDirectory, "notes", "outline.md"), OUTLINE_MARKDOWN);
+  await writeFile(join(projectDirectory, "notes", "plain.md"), PLAIN_MARKDOWN);
   await writeFile(join(projectDirectory, "notes", "typography.md"), TYPOGRAPHY_MARKDOWN);
   await writeFile(join(projectDirectory, "first-line.md"), FIRST_LINE_MARKDOWN);
   await mkdir(join(projectDirectory, "src"), { recursive: true });

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
+import { outlineItems } from "../test-layout";
 import { createEditHost, fileUri, pressKey, settle, typeText, until } from "./test-edit-host";
 
 // React 在 jsdom 的 document 中渲染；react-dom 在全局对象准备好之后才导入。
@@ -266,6 +267,10 @@ test("a load failure shows the error panel and hides the editor", async () => {
     /^Could not read broken\.mdFront matter isn't valid YAML: /,
   );
   assert.equal(container.querySelector<HTMLElement>(".edit-scroll")?.hidden, true);
+  assert.equal(
+    container.querySelector(".edit-scroll")?.contains(container.querySelector("nav.outline")),
+    true,
+  );
 });
 
 /** 等待浮层（BubbleMenu 默认延迟 250 ms 更新）。Waits for the popovers (BubbleMenu updates after 250 ms). */
@@ -566,40 +571,99 @@ test("the Mixed view has no top bar; Save and the encoding are in the host's Mor
   assert.equal(viewer.firstElementChild?.className, "edit-scroll");
 });
 
-test("unloading the Mixed view destroys the editor without drawing the document again", async () => {
+test("unloading Mixed with an outline destroys the editor without a redraw or errors", async () => {
   // 列表项、代码块与图片都由节点视图绘制。List items, code blocks and images are drawn by node views.
   host.files.set(
     "unload.md",
-    "- item one\n- item two\n\n```ts\nconst a = 1;\n```\n\n![alt](https://example.com/a.png)\n\nText.\n",
+    "## Title\n\n- item one\n- item two\n\n```ts\nconst a = 1;\n```\n\n![alt](https://example.com/a.png)\n\nText.\n",
   );
   const document = new EditDocument(host.api, { uri: fileUri("unload.md"), name: "unload.md" });
   const container = window.document.createElement("div");
   window.document.body.append(container);
-  const root = createRoot(container);
+  const errors: unknown[] = [];
+  const root = createRoot(container, {
+    onUncaughtError: (error) => errors.push(error),
+    onCaughtError: (error) => errors.push(error),
+  });
   await act(async () =>
     root.render(createElement(EditView, { api: host.api, editDocument: document })),
   );
   await act(() => until(() => document.session.state !== "loading", "unload.md to load"));
   const editorElement = container.querySelector(".ProseMirror")!;
   assert.ok(editorElement.querySelector(".edit-image"));
+  assert.deepEqual(outlineItems(container), [["Title", "0"]]);
   const observer = new window.MutationObserver(() => undefined);
   observer.observe(editorElement, { childList: true, subtree: true });
 
-  // 与 onUnload 相同，在 act 之外调用：act 中的 root.unmount() 推迟到 act 结束，onUnload 中它同步执行。
-  // Called outside act as in onUnload: inside act root.unmount() is deferred until act ends, in onUnload it runs
-  // synchronously.
+  // act 会推迟 root.unmount()，在 act 外调用才能像 onUnload 一样同步卸载。
+  // act defers root.unmount() until it ends. Calling outside act matches the synchronous onUnload.
   const scope = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
   scope.IS_REACT_ACT_ENVIRONMENT = false;
   try {
     unmountEditView(root, document);
+    assert.equal(
+      observer.takeRecords().some((record) => record.addedNodes.length > 0),
+      false,
+    );
+    // 等待一帧，让残留的测量回调可以执行。Wait one frame so any pending outline measurement can run.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   } finally {
     scope.IS_REACT_ACT_ENVIRONMENT = true;
+    observer.disconnect();
+    container.remove();
   }
-  const added = observer
-    .takeRecords()
-    .reduce((count, record) => count + record.addedNodes.length, 0);
-  observer.disconnect();
-  container.remove();
   assert.equal(document.editor.isDestroyed, true);
-  assert.equal(added, 0);
+  assert.equal(errors.length, 0, String(errors[0]));
+});
+
+test("the outline beside the editor lists the headings with their depth", async () => {
+  const { container } = await mount(
+    "outline.md",
+    "## Install\n\n### Requirements\n\n#### Versions\n\n## Usage\n",
+  );
+  assert.deepEqual(outlineItems(container), [
+    ["Install", "0"],
+    ["Requirements", "1"],
+    ["Versions", "2"],
+    ["Usage", "0"],
+  ]);
+  const layout = container.querySelector(".edit-scroll > .edit-layout")!;
+  assert.deepEqual(
+    [...layout.children].map((child) => child.className),
+    ["edit-column document-column", "outline"],
+  );
+});
+
+test("the outline shows No headings before creating a heading and after deleting it", async () => {
+  const { document, container } = await mount("no-headings.md", "Text.\n");
+  const { editor } = document;
+  const empty = () => container.querySelector("nav.outline .outline-empty")?.textContent ?? null;
+  assert.equal(empty(), "No headings");
+  await act(async () => {
+    editor.commands.setTextSelection(1 + "Text.".length);
+    pressKey(editor, "Enter");
+    typeText(editor, "## Title");
+    await settle();
+  });
+  assert.deepEqual(outlineItems(container), [["Title", "0"]]);
+  assert.equal(empty(), null);
+  await act(async () => {
+    editor.commands.deleteNode("heading");
+    await settle();
+  });
+  assert.equal(empty(), "No headings");
+});
+
+test("typing in a paragraph of a document with headings commits nothing in React", async () => {
+  const { document, commits } = await mount("typing-outline.md", "## Title\n\nText.\n");
+  await act(async () => {
+    document.editor.commands.setTextSelection(document.editor.state.doc.content.size - 1);
+    await settle();
+  });
+  const before = commits.count;
+  await act(async () => {
+    typeText(document.editor, "x");
+    await settle();
+  });
+  assert.equal(commits.count, before);
 });

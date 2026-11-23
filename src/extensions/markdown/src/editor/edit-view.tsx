@@ -1,10 +1,12 @@
 import type { ExtensionApi } from "@agw/extension-sdk";
 import { EditorContent } from "@tiptap/react";
+import { useState, useSyncExternalStore } from "react";
 import type { Root } from "react-dom/client";
 
 import { DocumentError } from "../shared/document-error";
 import { useSessionValue } from "../shared/editor-chrome";
 import { notifyFailure } from "../shared/errors";
+import { OutlinePanel, useActiveHeading } from "../shared/outline-panel";
 import { BlockHandle } from "./block-handle";
 import type { EditDocument } from "./edit-document";
 import { FormattingMenu } from "./formatting-menu";
@@ -14,11 +16,11 @@ import { SlashMenu } from "./slash-menu";
 import { TableToolbar } from "./table-toolbar";
 
 /**
- * Mixed 查看器（设计 5.7）：居中的内容列与编辑器的菜单；保存状态由宿主显示在文件名后，编码与 Save 在宿主文件标题栏的
+ * Mixed 查看器（设计 5.7）：内容列、标题大纲与编辑器菜单。保存状态由宿主显示在文件名后，编码与 Save 在宿主文件标题栏的
  * More 菜单中（header-items.ts）。文档会话读取中显示 "Loading"，为 Failed 时显示说明面板。
- * The Mixed viewer (design section 5.7): the centered content column and the editor's menus; the host shows the save
- * status after the file name, and the encoding and Save in the More menu of its file header (header-items.ts). A
- * loading session shows "Loading" and a Failed one the explanation panel.
+ * The Mixed viewer (design section 5.7): the content column, heading outline, and editor menus.
+ * The host shows the save status after the file name, and the encoding and Save in the More menu of its file header
+ * (header-items.ts). A loading session shows "Loading" and a Failed one the explanation panel.
  */
 export function EditView({ api, editDocument }: { api: ExtensionApi; editDocument: EditDocument }) {
   const { editor, session, ui } = editDocument;
@@ -42,11 +44,7 @@ export function EditView({ api, editDocument }: { api: ExtensionApi; editDocumen
           }
         />
       ) : null}
-      <div className="edit-scroll" hidden={phase !== "ready"}>
-        <div className="edit-column">
-          <EditorContent editor={editor} className="edit-content" />
-        </div>
-      </div>
+      <EditDocumentLayout editDocument={editDocument} ready={phase === "ready"} />
       <BlockHandle editor={editor} />
       <FormattingMenu editor={editor} ui={ui} />
       <LinkMenu api={api} editor={editor} ui={ui} fileUri={fileUri} />
@@ -54,6 +52,46 @@ export function EditView({ api, editDocument }: { api: ExtensionApi; editDocumen
       <ImageInsert editor={editor} ui={ui} />
       <TableToolbar editor={editor} />
       <SlashMenu store={editDocument.slashMenu} />
+    </div>
+  );
+}
+
+function EditDocumentLayout({
+  editDocument,
+  ready,
+}: {
+  editDocument: EditDocument;
+  ready: boolean;
+}) {
+  const { editor, outline } = editDocument;
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
+  const [documentColumn, setDocumentColumn] = useState<HTMLDivElement | null>(null);
+  const headings = useSyncExternalStore(outline.subscribe, () => outline.headings);
+  const { active, pin } = useActiveHeading({
+    scroller: ready ? scroller : null,
+    documentColumn,
+    headingElements: () =>
+      outline.headings.map(
+        (_, index) => editor.view.nodeDOM(outline.position(index)) as HTMLElement | null,
+      ),
+    headings,
+  });
+
+  function selectHeading(index: number): void {
+    const pos = outline.position(index);
+    editor.commands.focus(pos + 1, { scrollIntoView: false });
+    (editor.view.nodeDOM(pos) as HTMLElement).scrollIntoView({ block: "start" });
+    pin(index);
+  }
+
+  return (
+    <div ref={setScroller} className="edit-scroll" hidden={!ready}>
+      <div className="edit-layout outline-layout" data-outline="">
+        <div ref={setDocumentColumn} className="edit-column document-column">
+          <EditorContent editor={editor} className="edit-content" />
+        </div>
+        <OutlinePanel headings={headings} active={active} onSelect={selectHeading} />
+      </div>
     </div>
   );
 }

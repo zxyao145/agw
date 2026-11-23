@@ -8,6 +8,7 @@ import { applyWorkspaceBackdrop } from "../shared/workspace-backdrop";
 import { MarkdownDocument } from "./markdown-document";
 import "../shared/document-error.css";
 import "../shared/mermaid-diagram.css";
+import "../shared/outline.css";
 import "./markdown.css";
 
 const container = document.getElementById("root");

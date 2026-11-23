@@ -4,6 +4,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { EditorState } from "@tiptap/pm/state";
 
 import { createEditExtensions } from "./edit-extensions";
+import { EditOutline } from "./edit-outline";
 import { EditUi } from "./edit-ui";
 import { loadMarkdown, type LoadedMarkdown, type MarkdownBaseline } from "./markdown-loader";
 import { MarkdownRoundTripError, writeMarkdown } from "./markdown-writer";
@@ -48,6 +49,7 @@ function editorBaseline(loaded: LoadedMarkdown, doc: ProseMirrorNode): MarkdownB
 
 export class EditDocument {
   public readonly editor: Editor;
+  public readonly outline: EditOutline;
   public readonly session: DocumentSession;
   public readonly ui = new EditUi();
   public readonly slashMenu = new SlashMenuStore();
@@ -72,6 +74,7 @@ export class EditDocument {
         throw error;
       },
     });
+    this.outline = new EditOutline(this.editor);
     let doc = this.editor.state.doc;
     this.editor.on("transaction", () => {
       if (this.editor.state.doc === doc) return;
@@ -98,6 +101,7 @@ export class EditDocument {
 
   public dispose(): void {
     this.session.dispose();
+    this.outline.dispose();
     this.editor.destroy();
   }
 
