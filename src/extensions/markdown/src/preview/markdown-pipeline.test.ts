@@ -12,10 +12,10 @@ import type { MermaidBlockProps } from "./markdown-pipeline";
 const { window } = new JSDOM("");
 Object.assign(globalThis, { window, DOMParser: window.DOMParser });
 
-const { renderMarkdown } = await import("./markdown-pipeline");
+const { indexRenderedHeadings, renderMarkdown } = await import("./markdown-pipeline");
 
 function render(markdown: string): string {
-  return renderToStaticMarkup(renderMarkdown(markdown));
+  return renderToStaticMarkup(renderMarkdown(markdown).element);
 }
 
 const FENCE = "```";
@@ -62,7 +62,7 @@ test("Mermaid code blocks stay code blocks without a mermaid component and go to
   const figure = ({ source, children }: MermaidBlockProps) =>
     createElement("figure", { "data-source": source }, children);
   assert.equal(
-    renderToStaticMarkup(renderMarkdown(markdown, { mermaid: figure })),
+    renderToStaticMarkup(renderMarkdown(markdown, { mermaid: figure }).element),
     '<figure data-source="flowchart LR"><pre><code class="language-mermaid">flowchart LR\n</code></pre></figure>',
   );
 });
@@ -144,5 +144,83 @@ test("code in an unregistered language is not highlighted", () => {
   assert.equal(
     render(FENCE + "nosuchlang\nx\n" + FENCE),
     '<pre><code class="language-nosuchlang">x\n</code></pre>',
+  );
+});
+
+function outline(markdown: string) {
+  return renderMarkdown(markdown).outline;
+}
+
+test("the outline lists the level 1-4 headings in document order", () => {
+  assert.deepEqual(outline("# A\n\n## B\n\n### C\n\n#### D\n\n##### E\n\n###### F\n\n## G"), [
+    { level: 1, label: "A", id: "a" },
+    { level: 2, label: "B", id: "b" },
+    { level: 3, label: "C", id: "c" },
+    { level: 4, label: "D", id: "d" },
+    { level: 2, label: "G", id: "g" },
+  ]);
+});
+
+test("setext headings and headings in blockquotes and list items are outline items", () => {
+  assert.deepEqual(outline("Title\n=====\n\nSub\n---\n\n> ## Quoted\n\n- item\n\n  ### Listed\n"), [
+    { level: 1, label: "Title", id: "title" },
+    { level: 2, label: "Sub", id: "sub" },
+    { level: 2, label: "Quoted", id: "quoted" },
+    { level: 3, label: "Listed", id: "listed" },
+  ]);
+});
+
+test("outline labels keep the text of marks, drop images and footnote references and collapse spaces", () => {
+  const labels = outline(
+    "## **Bold** *it* ~~old~~ `code` [link](https://example.com) ![img](i.png) note[^n]\n\n" +
+      "### Spaced   out\ttext\n\n[^n]: Note.\n",
+  ).map(({ label }) => label);
+  assert.deepEqual(labels, ["Bold it old code link note", "Spaced out text"]);
+});
+
+test("empty headings are not outline items", () => {
+  assert.deepEqual(outline("#\n\n## Kept\n\n###   \n"), [{ level: 2, label: "Kept", id: "kept" }]);
+});
+
+test("outline ids match the rendered heading ids, with suffixes for repeated headings", () => {
+  const { element, outline: items } = renderMarkdown("# Intro\n\n## Intro\n\n### 中文 标题");
+  assert.deepEqual(
+    items.map(({ id }) => id),
+    ["intro", "intro-1", "中文-标题"],
+  );
+  const html = renderToStaticMarkup(element);
+  for (const { id } of items) assert.match(html, new RegExp(`<h\\d id="${id}">`));
+});
+
+test("the footnotes section and headings in footnote definitions are not outline items", () => {
+  const { element, outline: items } = renderMarkdown(
+    "# Doc\n\nText[^a].\n\n[^a]: Note.\n\n    ## Inside note\n",
+  );
+  // 确认脚注定义渲染出了标题。Make sure the footnote definition renders a heading.
+  assert.match(
+    renderToStaticMarkup(element),
+    /<li id="user-content-fn-a">.*<h2 id="inside-note">/su,
+  );
+  assert.deepEqual(items, [{ level: 1, label: "Doc", id: "doc" }]);
+});
+
+test("heading lookup prefers the document heading when the footnotes label shares its id", () => {
+  const article = window.document.createElement("article");
+  article.innerHTML = render("# Footnote label\n\nText[^a].\n\n[^a]: Note.\n");
+  assert.equal(article.querySelectorAll('[id="footnote-label"]').length, 2);
+  assert.equal(indexRenderedHeadings(article).get("footnote-label")?.textContent, "Footnote label");
+});
+
+test("lines starting with # inside code blocks are not outline items", () => {
+  assert.deepEqual(
+    outline(FENCE + "sh\n# comment\n" + FENCE + "\n\n    # indented code\n\n## Real\n"),
+    [{ level: 2, label: "Real", id: "real" }],
+  );
+});
+
+test("inline HTML in a heading stays in the outline label as written", () => {
+  assert.deepEqual(
+    outline("## Install <kbd>npm</kbd>").map(({ label }) => label),
+    ["Install <kbd>npm</kbd>"],
   );
 });

@@ -1,0 +1,132 @@
+:root {
+  --outline-width: 240px;
+  --outline-gutter: 16px;
+  --outline-heading-offset: 16px;
+}
+
+.outline-layout {
+  --outline-side-track: minmax(0, 1fr);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--document-column-width)) var(
+      --outline-side-track
+    );
+}
+
+.outline-layout[data-outline] {
+  --outline-side-track: minmax(calc(var(--outline-width) + var(--outline-gutter)), 1fr);
+}
+
+.outline-layout > .document-column {
+  grid-column: 2;
+}
+
+.outline-layout > .outline {
+  grid-column: 3;
+}
+
+.outline {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  justify-self: start;
+  box-sizing: border-box;
+  width: var(--outline-width);
+  max-height: 100vh;
+  padding: 32px 16px 72px;
+  overflow-y: auto;
+}
+
+.outline-title {
+  margin: 0 0 8px;
+  color: var(--muted-foreground);
+  font-size: 0.75em;
+  font-weight: 600;
+}
+
+.outline-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.outline-item {
+  display: block;
+  width: 100%;
+  padding: 4px 12px;
+  padding-left: calc(12px + var(--outline-depth, 0) * 12px);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: inherit;
+  font-size: 0.875em;
+  line-height: 1.5;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.outline-item[data-depth="1"] {
+  --outline-depth: 1;
+}
+
+.outline-item[data-depth="2"] {
+  --outline-depth: 2;
+}
+
+.outline-item[data-depth="3"] {
+  --outline-depth: 3;
+}
+
+.outline-item:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.outline-item:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.outline-item[aria-current="location"] {
+  box-shadow: inset 2px 0 var(--primary);
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.outline-empty {
+  margin: 0;
+  padding: 4px 0 4px 12px;
+  color: var(--muted-foreground);
+  font-size: 0.875em;
+  line-height: 1.5;
+}
+
+:root[data-workspace-backdrop] .outline-layout > :is(.document-column, .outline) {
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--border) 60%, transparent),
+    0 18px 48px -12px color-mix(in oklab, var(--color-black) 18%, transparent);
+}
+
+:root[data-workspace-backdrop] .outline-layout > .document-column {
+  color: var(--card-foreground);
+}
+
+:root[data-workspace-backdrop] .outline {
+  max-height: calc(100vh - 80px);
+  padding: 16px 12px 24px;
+}
+
+@media (width < 960px) {
+  .outline-layout[data-outline] {
+    --outline-side-track: minmax(0, 1fr);
+  }
+
+  .outline {
+    display: none;
+  }
+}

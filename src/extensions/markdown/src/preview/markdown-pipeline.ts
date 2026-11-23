@@ -30,6 +30,7 @@ import { footnoteId, footnoteRefId } from "../markdown/markdown-extensions";
 import { normalizeMarkdownDocument } from "../markdown/normalize-document";
 import { parseMarkdown } from "../markdown/parse-markdown";
 import { isMermaidLanguage } from "../shared/mermaid-render";
+import { isOutlineLevel, outlineLabel, type OutlineHeading } from "../shared/outline";
 
 export type MarkdownImageProps = { src?: string; alt?: string; title?: string };
 
@@ -57,6 +58,7 @@ const TightListContext = createContext(false);
 const lowlight = createLowlight(common);
 const FOOTNOTE_PREFIX = "user-content-";
 const HEADING_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
+const HEADING_ID_SELECTOR = HEADING_TAGS.map((tag) => `${tag}[id]`).join(", ");
 
 function childList(children: ReactNode): ReactNode[] {
   if (children === undefined) return [];
@@ -374,8 +376,53 @@ function assignHeadingIds(document: JSONContent): JSONContent {
   return visit(document);
 }
 
-/** 解析并渲染一个 Markdown 文件。Parses and renders one Markdown file. */
-export function renderMarkdown(text: string, components: MarkdownComponents = {}): ReactElement {
+export type PreviewOutlineHeading = OutlineHeading & { id: string };
+
+function outlineText(node: JSONContent): string {
+  if (node.type === "text") return node.text ?? "";
+  return node.content ? node.content.map(outlineText).join("") : " ";
+}
+
+/** 从已分配标题 id 的文档收集大纲。Collects the outline from a document with assigned heading ids. */
+function collectOutline(document: JSONContent): PreviewOutlineHeading[] {
+  const outline: PreviewOutlineHeading[] = [];
+  function visit(node: JSONContent): void {
+    if (node.type === "footnotes") return;
+    if (node.type === "heading") {
+      const { level, id } = node.attrs as { level: unknown; id: string };
+      if (isOutlineLevel(level)) {
+        const label = outlineLabel(outlineText(node));
+        if (label) outline.push({ level, label, id });
+      }
+      return;
+    }
+    node.content?.forEach(visit);
+  }
+  visit(document);
+  return outline;
+}
+
+/** 解析一次并返回渲染元素与大纲。Parses once and returns the rendered element and outline. */
+export function renderMarkdown(
+  text: string,
+  components: MarkdownComponents = {},
+): { element: ReactElement; outline: PreviewOutlineHeading[] } {
   const document = assignHeadingIds(normalizeMarkdownDocument(parseMarkdown(text)));
-  return h(ComponentsContext, { value: components }, renderMarkdownJson({ content: document }));
+  return {
+    element: h(ComponentsContext, { value: components }, renderMarkdownJson({ content: document })),
+    outline: collectOutline(document),
+  };
+}
+
+/** 按 ID 查找渲染后的标题，支持空 ID。Indexes rendered headings by ID, including empty IDs. */
+export function indexRenderedHeadings(article: HTMLElement): ReadonlyMap<string, HTMLElement> {
+  const headingElementsById = new Map<string, HTMLElement>();
+  for (const headingElement of article.querySelectorAll<HTMLElement>(HEADING_ID_SELECTOR)) {
+    // 脚注区位于文末，重复 ID 使用先出现的标题。
+    // The footnotes follow the body, so the first heading wins if it shares their label ID.
+    if (!headingElementsById.has(headingElement.id)) {
+      headingElementsById.set(headingElement.id, headingElement);
+    }
+  }
+  return headingElementsById;
 }

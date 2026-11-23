@@ -4387,6 +4387,7 @@ async function clickInFrame(
   frame: FrameHandle,
   element: string,
   modifiers: ("meta" | "control")[] = [],
+  { scroll = true }: { scroll?: boolean } = {},
 ): Promise<void> {
   const window = hooks.mainWindow()!;
   app.focus({ steal: true });
@@ -4400,32 +4401,30 @@ async function clickInFrame(
     undefined,
     () => overlayState(frame),
   );
-  // 排版规范使内容变高，元素可能在滚动区域之外，先滚动到可见位置。弹出层可能先显示在临时位置，到下一帧才修正（例如
-  // `/` 菜单先按空容器定位在光标下方，floating-ui 的 autoUpdate 在下一帧把它移到光标上方）；对临时位置滚动会滚动整个页面，
-  // 点击会点到别的项目。所以元素出现后等一帧渲染完再滚动，命中检查也在一帧渲染完后进行（centerOf）。
-  // The typography makes content taller, so the element may lie outside the scroll area; scroll it into view first. A
-  // popup can first show at a provisional position that is corrected in the next frame (for example the `/` menu is
-  // first placed below the cursor for its empty container, and floating-ui's autoUpdate moves it above the cursor in
-  // the next frame); scrolling to the provisional position scrolls the whole page and the click hits another item. So
-  // the scroll waits for a rendered frame once the element exists, and the hit test also runs after a rendered frame
-  // (centerOf).
-  await until(
-    () =>
-      evalFrame<boolean>(
-        frame,
-        `(async () => {
-          if (!(${element})) return false;
-          await ${NEXT_RENDERED_FRAME};
-          const element = ${element};
-          if (!element) return false;
-          element.scrollIntoView({ block: "center" });
-          return true;
-        })()`,
-      ),
-    `${element} to exist`,
-    undefined,
-    () => overlayState(frame),
-  );
+  // 排版可能让目标超出可见区，点击前将其滚动到可见位置。Typography can push targets off-screen. Scroll them into view before clicking.
+  // `/` 菜单先显示在光标下方，floating-ui 下一帧定位。The `/` menu starts below the caret. floating-ui moves it on the next frame.
+  // 过早滚动会移动整个页面，导致点击别的选项。Scrolling too early can shift the page and make the click hit another option.
+  // 等渲染完成再滚动和执行 centerOf，点击才能命中。Scroll and hit-test with centerOf after layout so the click hits.
+  // 对 sticky 大纲项调用 scrollIntoView 会滚动页面。Calling scrollIntoView on a sticky outline item scrolls the page.
+  if (scroll) {
+    await until(
+      () =>
+        evalFrame<boolean>(
+          frame,
+          `(async () => {
+            if (!(${element})) return false;
+            await ${NEXT_RENDERED_FRAME};
+            const element = ${element};
+            if (!element) return false;
+            element.scrollIntoView({ block: "center" });
+            return true;
+          })()`,
+        ),
+      `${element} to exist`,
+      undefined,
+      () => overlayState(frame),
+    );
+  }
   const point = await until(
     async () => {
       const center = await centerOf(frame, element);
@@ -5501,6 +5500,367 @@ async function dragHandleFirstLine(): Promise<void> {
   await goToChat();
   pass(
     "the drag handle is centered on the first line of every block kind, in one column, at the default sizes and at base size 20",
+  );
+}
+
+const OUTLINE_BUTTONS = `[...document.querySelectorAll("nav.outline .outline-item")]`;
+const OUTLINE_ITEMS = `${OUTLINE_BUTTONS}
+  .map((heading) => [heading.textContent, heading.getAttribute("data-depth")])`;
+const CURRENT_OUTLINE_ITEM = `(document.querySelector('nav.outline [aria-current="location"]')?.textContent ?? null)`;
+const OUTLINE_BREAKPOINT = 960;
+const OUTLINE_WIDTH = 240;
+const OUTLINE_GUTTER = 16;
+const OUTLINE_RESERVED_WIDTH = OUTLINE_WIDTH + OUTLINE_GUTTER;
+const OUTLINE_JUMP_OFFSET = 16;
+const OUTLINE_LAYOUTS = {
+  preview: {
+    layoutSelector: ".preview-layout",
+    documentColumnSelector: ".markdown-body",
+    maxWidth: 980,
+    gap: OUTLINE_GUTTER,
+  },
+  mixed: {
+    layoutSelector: ".edit-layout",
+    documentColumnSelector: ".edit-column",
+    maxWidth: 894,
+    gap: 0,
+  },
+};
+type OutlineViewer = keyof typeof OUTLINE_LAYOUTS;
+const OUTLINE_EXPECTED = [
+  ["Outline sample", "0"],
+  ["Install", "1"],
+  ["Requirements", "2"],
+  ["Versions", "3"],
+  ["中文 标题", "1"],
+  ["Usage", "1"],
+  ["Options", "2"],
+  ["Short end", "1"],
+  ["Last", "1"],
+];
+
+function outlineItem(label: string): string {
+  return `${OUTLINE_BUTTONS}.find((heading) => heading.textContent === ${JSON.stringify(label)})`;
+}
+
+function visibleOutlineLayout(viewer: OutlineViewer): string {
+  const { maxWidth, gap } = OUTLINE_LAYOUTS[viewer];
+  return outlineLayoutCheck(
+    viewer,
+    `innerWidth >= ${OUTLINE_BREAKPOINT} && visible
+      && Math.abs(documentColumn.width - Math.min(${maxWidth}, layout.width - ${OUTLINE_RESERVED_WIDTH})) <= 1
+      && Math.abs(outline.getBoundingClientRect().left - documentColumn.right - ${gap}) <= 1`,
+  );
+}
+
+function hiddenOutlineLayout(viewer: OutlineViewer): string {
+  const { maxWidth } = OUTLINE_LAYOUTS[viewer];
+  return outlineLayoutCheck(
+    viewer,
+    `innerWidth < ${OUTLINE_BREAKPOINT} && !visible
+      && Math.abs(documentColumn.width - Math.min(${maxWidth}, layout.width)) <= 1
+      && Math.abs((documentColumn.left - layout.left) - (layout.right - documentColumn.right)) <= 1`,
+  );
+}
+
+function outlineLayoutCheck(viewer: OutlineViewer, assertion: string): string {
+  const { layoutSelector, documentColumnSelector } = OUTLINE_LAYOUTS[viewer];
+  return `(() => {
+    const layout = document.querySelector("${layoutSelector}")?.getBoundingClientRect();
+    const documentColumn = document.querySelector("${documentColumnSelector}")?.getBoundingClientRect();
+    const outline = document.querySelector("nav.outline");
+    if (!layout || !documentColumn || !outline) return false;
+    const visible = getComputedStyle(outline).display !== "none";
+    return ${assertion};
+  })()`;
+}
+
+async function outlinePreview(): Promise<FrameHandle> {
+  await selectPreview();
+  const frame = await untilViewerFrame(EXTENSION_IDS.markdown, "preview");
+  await until(
+    () => evalFrame<boolean>(frame, `Boolean(${outlineItem("Outline sample")})`),
+    "the heading outline in Preview",
+  );
+  return frame;
+}
+
+async function markdownOutline(): Promise<void> {
+  await openFileInTree("notes/outline.md");
+  const preview = await outlinePreview();
+  assert.deepEqual(await evalFrame(preview, OUTLINE_ITEMS), OUTLINE_EXPECTED);
+  await until(
+    () => evalFrame<boolean>(preview, visibleOutlineLayout("preview")),
+    "the Preview outline layout",
+  );
+  pass("Preview lists levels 1–4 and shows the outline beside the document");
+  await checkPreviewOutlineJumps(preview);
+  await checkPreviewOutlineScroll(preview);
+  await checkPreviewOutlineHeight(preview);
+  await checkPreviewOutlinePin(preview);
+  await checkMixedOutline();
+  await checkMixedEmptyOutline();
+  await checkOutlineBreakpoint();
+  await goToChat();
+}
+
+async function checkPreviewOutlineJumps(preview: FrameHandle): Promise<void> {
+  for (const [label, id] of [
+    ["Usage", "usage"],
+    ["中文 标题", "中文-标题"],
+  ]) {
+    await clickInFrame(preview, outlineItem(label), [], { scroll: false });
+    await until(
+      () =>
+        evalFrame<boolean>(
+          preview,
+          `Math.abs(document.getElementById(${JSON.stringify(id)}).getBoundingClientRect().top
+            - ${OUTLINE_JUMP_OFFSET}) <= 1
+            && ${CURRENT_OUTLINE_ITEM} === ${JSON.stringify(label)}`,
+        ),
+      `Preview to jump to ${label} and mark it current`,
+    );
+  }
+  pass(
+    "Preview outline buttons jump to the heading and mark it current, including a Chinese heading",
+  );
+}
+
+async function checkPreviewOutlineScroll(preview: FrameHandle): Promise<void> {
+  await evalFrame(
+    preview,
+    `window.scrollTo(0, scrollY + document.getElementById("usage").getBoundingClientRect().top + 100)`,
+  );
+  await until(
+    () => evalFrame<boolean>(preview, `${CURRENT_OUTLINE_ITEM} === "Usage"`),
+    "Usage current while scrolling between headings",
+  );
+  await evalFrame(preview, `window.scrollTo(0, document.documentElement.scrollHeight)`);
+  await until(
+    () => evalFrame<boolean>(preview, `${CURRENT_OUTLINE_ITEM} === "Last"`),
+    "the last heading current at the bottom",
+  );
+  pass("Preview follows the scroll position and makes the last heading current at the bottom");
+}
+
+type PreviewOutlineViewport = {
+  height: number;
+  scrollTop: number;
+  scrollHeight: number;
+  contentWidth: number;
+  contentHeight: number;
+  currentHeading: string | null;
+};
+
+const PREVIEW_OUTLINE_VIEWPORT = `(() => {
+  const { width, height } = document.querySelector(".markdown-body").getBoundingClientRect();
+  const { clientHeight, scrollTop, scrollHeight } = document.documentElement;
+  return {
+    height: clientHeight,
+    scrollTop,
+    scrollHeight,
+    contentWidth: width,
+    contentHeight: height,
+    currentHeading: ${CURRENT_OUTLINE_ITEM},
+  };
+})()`;
+
+async function checkPreviewOutlineHeight(preview: FrameHandle): Promise<void> {
+  const before = await evalFrame<PreviewOutlineViewport>(preview, PREVIEW_OUTLINE_VIEWPORT);
+  const window = hooks.mainWindow()!;
+  const [width, height] = window.getSize();
+  try {
+    window.setSize(width, height - 120);
+    await until(async () => {
+      const resized = await evalFrame<PreviewOutlineViewport>(preview, PREVIEW_OUTLINE_VIEWPORT);
+      return (
+        resized.height < before.height &&
+        resized.scrollTop === before.scrollTop &&
+        resized.contentWidth === before.contentWidth &&
+        resized.contentHeight === before.contentHeight &&
+        resized.scrollTop + resized.height < resized.scrollHeight - 1 &&
+        resized.currentHeading !== null &&
+        resized.currentHeading !== "Last"
+      );
+    }, "the current Preview heading to follow a height-only resize at the same scroll position");
+  } finally {
+    window.setSize(width, height);
+  }
+  await until(
+    () => evalFrame<boolean>(preview, `${CURRENT_OUTLINE_ITEM} === "Last"`),
+    "the last heading current again after restoring the height",
+  );
+  pass("Preview updates its current heading when only the window height changes");
+}
+
+async function checkPreviewOutlinePin(preview: FrameHandle): Promise<void> {
+  await clickInFrame(preview, outlineItem("Short end"), [], { scroll: false });
+  await until(
+    () =>
+      evalFrame<boolean>(
+        preview,
+        `${CURRENT_OUTLINE_ITEM} === "Short end"
+          && scrollY + innerHeight >= document.documentElement.scrollHeight - 1`,
+      ),
+    "Short end current while Preview remains at the bottom",
+  );
+  pass("Preview keeps a selected short section current at the bottom");
+}
+
+async function checkMixedOutline(): Promise<void> {
+  await selectViewer(MIXED_VIEWER);
+  const usage = mixedBlock("Usage", "h2");
+  const mixed = await mixedShowing(`Boolean(${usage})`, "notes/outline.md in Mixed");
+  assert.deepEqual(await evalFrame(mixed, OUTLINE_ITEMS), OUTLINE_EXPECTED);
+  await until(
+    () => evalFrame<boolean>(mixed, visibleOutlineLayout("mixed")),
+    "the Mixed outline layout",
+  );
+  await clickInFrame(mixed, outlineItem("Usage"), [], { scroll: false });
+  await until(
+    () =>
+      evalFrame<boolean>(
+        mixed,
+        `(() => {
+          const heading = ${usage};
+          const scroller = document.querySelector(".edit-scroll");
+          const selection = getSelection();
+          const top = heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+          return Math.abs(top - ${OUTLINE_JUMP_OFFSET}) <= 1 && document.activeElement === ${EDITOR}
+            && selection?.anchorOffset === 0 && heading.contains(selection.anchorNode)
+            && ${CURRENT_OUTLINE_ITEM} === "Usage";
+        })()`,
+      ),
+    "Mixed to jump to Usage and focus the start of the heading",
+  );
+  await typeIn(mixed, "Go ");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        mixed,
+        `Boolean(${mixedBlock("Go Usage", "h2")}) && Boolean(${outlineItem("Go Usage")})`,
+      ),
+    "the renamed heading in Mixed and its outline",
+  );
+  await untilHost(unsavedIn(MIXED_VIEWER), "the unsaved heading edit");
+  saveIn(mixed);
+  await untilHost(savedIn(MIXED_VIEWER), "the saved heading edit");
+  pass(
+    "Mixed jumps and focuses the heading start, and updates the outline when the heading is edited",
+  );
+}
+
+async function checkMixedEmptyOutline(): Promise<void> {
+  await openFileInTree("notes/plain.md");
+  await selectViewer(MIXED_VIEWER);
+  const lastParagraph = mixedBlock("Second plain paragraph.", "p");
+  const plain = await mixedShowing(
+    `Boolean(${lastParagraph}) && document.querySelector(".outline-empty")?.textContent === "No headings"`,
+    "the empty outline in Mixed",
+  );
+  const columnRect = `(() => {
+    const { left, width } = document.querySelector(".edit-column").getBoundingClientRect();
+    return { left, width };
+  })()`;
+  const before = await evalFrame<{ left: number; width: number }>(plain, columnRect);
+  await placeCaret(plain, lastParagraph);
+  pressKey(plain, "Enter");
+  await typeIn(plain, "/");
+  await clickInFrame(
+    plain,
+    `[...document.querySelectorAll('.slash-menu [role="option"]')]
+      .find((option) => option.textContent === "Heading 2")`,
+  );
+  await until(
+    () => evalFrame<boolean>(plain, `Boolean(document.querySelector(".ProseMirror > h2"))`),
+    "the new Heading 2 block",
+  );
+  await typeIn(plain, "Added");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        plain,
+        `JSON.stringify(${OUTLINE_ITEMS}) === '[["Added","0"]]' && ${CURRENT_OUTLINE_ITEM} === "Added"`,
+      ),
+    "the new current heading in the previously empty outline",
+  );
+  const after = await evalFrame<typeof before>(plain, columnRect);
+  assert.ok(Math.abs(after.left - before.left) <= 0.5);
+  assert.ok(Math.abs(after.width - before.width) <= 0.5);
+  saveIn(plain);
+  await untilHost(savedIn(MIXED_VIEWER), "the saved new heading");
+  pass("Mixed keeps the content column in place when its empty outline gains the first heading");
+}
+
+async function checkOutlineBreakpoint(): Promise<void> {
+  const window = hooks.mainWindow()!;
+  const [width, height] = window.getSize();
+  await openFileInTree("notes/outline.md");
+  let resizedMixed: FrameHandle;
+  try {
+    const [minWidth] = window.getMinimumSize();
+    window.setSize(minWidth, height);
+    const narrowPreview = await outlinePreview();
+    await until(
+      () => evalFrame<boolean>(narrowPreview, hiddenOutlineLayout("preview")),
+      "Preview centered with its outline hidden below 960px",
+    );
+    await selectViewer(MIXED_VIEWER);
+    resizedMixed = await mixedShowing(
+      `Boolean(${mixedBlock("Go Usage", "h2")})`,
+      "Mixed after resizing",
+    );
+    await until(
+      () => evalFrame<boolean>(resizedMixed, hiddenOutlineLayout("mixed")),
+      "Mixed centered with its outline hidden below 960px",
+    );
+  } finally {
+    window.setSize(width, height);
+  }
+  await until(
+    () => evalFrame<boolean>(resizedMixed, visibleOutlineLayout("mixed")),
+    "the Mixed outline visible again",
+  );
+  const resizedPreview = await outlinePreview();
+  await until(
+    () => evalFrame<boolean>(resizedPreview, visibleOutlineLayout("preview")),
+    "the Preview outline visible again",
+  );
+  pass(
+    "Preview and Mixed center the content and hide the outline below 960px, then restore the outline",
+  );
+}
+
+async function markdownOutlineBackdrop(): Promise<void> {
+  await openFileInTree("notes/outline.md");
+  await selectViewer(MIXED_VIEWER);
+  const mixed = await mixedShowing(
+    `Boolean(${mixedBlock("Outline sample", "h1")})`,
+    "Mixed with the backdrop",
+  );
+  const cardsMatch = (documentColumnSelector: string) => `(() => {
+    const outline = document.querySelector("nav.outline");
+    const documentColumn = document.querySelector("${documentColumnSelector}");
+    const outlineStyle = getComputedStyle(outline);
+    const documentColumnStyle = getComputedStyle(documentColumn);
+    return document.documentElement.hasAttribute("data-workspace-backdrop")
+      && outlineStyle.backgroundColor === documentColumnStyle.backgroundColor
+      && outlineStyle.borderTopLeftRadius === documentColumnStyle.borderTopLeftRadius
+      && Math.abs(outline.getBoundingClientRect().top - documentColumn.getBoundingClientRect().top) <= 1;
+  })()`;
+  await evalFrame(mixed, `document.querySelector(".edit-scroll").scrollTo(0, 0)`);
+  await until(
+    () => evalFrame<boolean>(mixed, cardsMatch(".edit-column")),
+    "the Mixed outline card to match the content card",
+  );
+  const preview = await outlinePreview();
+  await evalFrame(preview, `window.scrollTo(0, 0)`);
+  await until(
+    () => evalFrame<boolean>(preview, cardsMatch(".markdown-body")),
+    "the Preview outline card to match the content card",
+  );
+  pass(
+    "Warm Minimalism gives the outline the same background, corner radius and top as the content card",
   );
 }
 
@@ -10351,10 +10711,12 @@ async function run(): Promise<void> {
   await mixedInteractions();
   await textEditorTypography();
   await dragHandleFirstLine();
+  await markdownOutline();
   await hostScaling();
   await appearanceSettings();
   await themeSelection();
   await warmMinimalismTheme();
+  await markdownOutlineBackdrop();
   await sidebarThemes();
   await imagePreviewThemes();
   await memoryPreviewThemes();

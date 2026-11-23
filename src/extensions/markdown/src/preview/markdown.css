@@ -31,10 +31,17 @@ body {
   color: var(--muted-foreground);
 }
 
+.preview-layout {
+  --document-column-width: 980px;
+}
+
+.preview-layout > .outline {
+  margin-left: var(--outline-gutter);
+}
+
 .markdown-body {
   box-sizing: border-box;
-  max-width: 980px;
-  margin: 0 auto;
+  margin: 0;
   padding: 32px 40px 48px;
 }
 
@@ -50,17 +57,12 @@ body {
   background-attachment: fixed;
 }
 
-:root[data-workspace-backdrop] .markdown-body {
-  border-radius: var(--radius-xl);
-  background: var(--card);
-  color: var(--card-foreground);
-  box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--border) 60%, transparent),
-    0 18px 48px -12px color-mix(in oklab, var(--color-black) 18%, transparent);
+:root[data-workspace-backdrop] .preview-layout > .outline {
+  top: 32px;
 }
 
 .markdown-body :is(h1, h2, h3, h4, h5, h6) {
-  scroll-margin-top: 16px;
+  scroll-margin-top: var(--outline-heading-offset);
 }
 
 .markdown-body details {

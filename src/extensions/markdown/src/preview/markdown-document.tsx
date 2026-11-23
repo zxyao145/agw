@@ -1,9 +1,10 @@
 import type { ExtensionApi, FileViewerFile } from "@agw/extension-sdk";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { DocumentError } from "../shared/document-error";
+import { OutlinePanel, useActiveHeading } from "../shared/outline-panel";
 import { MarkdownContext, markdownComponents } from "./markdown-components";
-import { renderMarkdown } from "./markdown-pipeline";
+import { indexRenderedHeadings, renderMarkdown } from "./markdown-pipeline";
 
 type DocumentState =
   | { status: "loading" }
@@ -47,12 +48,6 @@ export function MarkdownDocument({
     return () => controller.abort();
   }, [api, file.uri, choice, shown]);
 
-  const text = state.status === "loaded" ? state.text : null;
-  const content = useMemo(
-    () => (text === null ? null : renderMarkdown(text, markdownComponents)),
-    [text],
-  );
-
   if (state.status === "loading") return <p className="status">Loading {file.name}…</p>;
   if (state.status === "error") {
     return (
@@ -69,9 +64,48 @@ export function MarkdownDocument({
   }
   return (
     <MarkdownContext value={context}>
-      <article className="markdown-body agw-prose" data-density="document">
-        {content}
-      </article>
+      <MarkdownDocumentLayout text={state.text} />
     </MarkdownContext>
+  );
+}
+
+function MarkdownDocumentLayout({ text }: { text: string }) {
+  const { element, outline: headings } = useMemo(
+    () => renderMarkdown(text, markdownComponents),
+    [text],
+  );
+  const [documentColumn, setDocumentColumn] = useState<HTMLElement | null>(null);
+  const headingElementsById = useRef<ReadonlyMap<string, HTMLElement>>(new Map());
+  useLayoutEffect(() => {
+    if (documentColumn) headingElementsById.current = indexRenderedHeadings(documentColumn);
+  }, [documentColumn, headings]);
+  const { active, pin } = useActiveHeading({
+    scroller: window,
+    documentColumn,
+    headingElements: () => headings.map(({ id }) => headingElementsById.current.get(id) ?? null),
+    headings,
+  });
+
+  function selectHeading(index: number): void {
+    headingElementsById.current.get(headings[index]!.id)!.scrollIntoView({ block: "start" });
+    pin(index);
+  }
+
+  return (
+    <div
+      className="preview-layout outline-layout"
+      data-outline={headings.length > 0 ? "" : undefined}
+    >
+      <article
+        ref={setDocumentColumn}
+        className="markdown-body agw-prose document-column"
+        data-density="document"
+      >
+        {element}
+      </article>
+      {headings.length > 0 ? (
+        <OutlinePanel headings={headings} active={active} onSelect={selectHeading} />
+      ) : null}
+    </div>
   );
 }

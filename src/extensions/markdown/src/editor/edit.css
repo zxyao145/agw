@@ -53,10 +53,13 @@ body {
   overflow-y: auto;
 }
 
+.edit-layout {
+  --document-column-width: calc(830px + 64px);
+}
+
 .edit-column {
   box-sizing: border-box;
-  max-width: calc(830px + 64px);
-  margin: 0 auto;
+  margin: 0;
   padding: 32px 32px 120px 32px;
 }
 
@@ -69,15 +72,17 @@ body {
   background-image: var(--agw-workspace-backdrop);
 }
 
+:root[data-workspace-backdrop] .edit-layout {
+  --document-column-width: calc(830px + 64px + 32px);
+}
+
+:root[data-workspace-backdrop] .edit-layout > .outline {
+  top: 32px;
+  margin-top: 32px;
+}
+
 :root[data-workspace-backdrop] .edit-column {
-  max-width: min(calc(830px + 64px), calc(100% - 32px));
-  margin: 32px auto 48px;
-  border-radius: var(--radius-xl);
-  background: var(--card);
-  color: var(--card-foreground);
-  box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--border) 60%, transparent),
-    0 18px 48px -12px color-mix(in oklab, var(--color-black) 18%, transparent);
+  margin: 32px 16px 48px;
 }
 
 /* 编辑区与块。The editing area and blocks. */
@@ -85,6 +90,10 @@ body {
   outline: none;
   overflow-wrap: break-word;
   white-space: pre-wrap;
+}
+
+.edit-content :is(h1, h2, h3, h4) {
+  scroll-margin-top: var(--outline-heading-offset);
 }
 
 .edit-content a {

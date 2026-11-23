@@ -13,6 +13,7 @@ import { publishHeaderItems } from "./header-items";
 import "../shared/document-error.css";
 import "../shared/editor-chrome.css";
 import "../shared/mermaid-diagram.css";
+import "../shared/outline.css";
 import "./edit.css";
 
 const container = document.getElementById("root");
