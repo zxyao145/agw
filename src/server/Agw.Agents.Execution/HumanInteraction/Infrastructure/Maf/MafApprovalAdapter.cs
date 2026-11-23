@@ -21,7 +21,9 @@ internal static class MafApprovalAdapter
     internal const string UserInputResponseProperty = "Agw.HumanInteraction.Response";
 
     // MAF names an agent's request port after its executor binding, not its business node ID.
-    internal static string GetWorkflowRequestScope(AIAgent agent) => $"{agent.BindAsExecutor().Id}_UserInput";
+    internal static string GetWorkflowRequestScope(AIAgent agent) => GetWorkflowRequestScope(agent.BindAsExecutor().Id);
+
+    internal static string GetWorkflowRequestScope(string executorId) => $"{executorId}_UserInput";
 
     /// <summary>
     /// The scope is the standalone node or the workflow SDK request port.

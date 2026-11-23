@@ -24,17 +24,18 @@ import {
   executionReconnectDelaysMs,
   executionSilentReconnectAttempts,
   getAgentMode,
+  getExecutionStatus,
   getExecutionReconnectDelay,
   getLatestAgentMode,
   getMessageStreamingScopeId,
   getTurnFinishedStatus,
   getTurnPosition,
-  isModeControlMessage,
   isTurnStartMessage,
   isUserTurnMessage,
   scopeStreamingMessage,
   type AgentMode,
   type ExecutionHubMethod,
+  type ExecutionStatusEvent,
   type ExecutionUserInput as CoreExecutionUserInput,
   type PermissionMode as CorePermissionMode,
   type TurnFinishedStatus,
@@ -127,7 +128,7 @@ export type ExecutionTrafficObserver = {
     method: ExecutionHubMethod,
     args: readonly unknown[],
   ): (outcome: { ok: true; value: unknown } | { ok: false; error: unknown }) => void;
-  /** handlers.onMessage 处理一条 ReceiveMessage 之后调用。Called after handlers.onMessage handles a ReceiveMessage. */
+  /** 处理 ReceiveMessage 后调用。Called after a ReceiveMessage has been handled. */
   message(message: AiMessage): void;
 };
 
@@ -140,7 +141,6 @@ export {
   DEFAULT_AGENT_MODE,
   getAgentMode,
   getLatestAgentMode,
-  isModeControlMessage,
   isUserTurnMessage,
 };
 export type { AgentMode };
@@ -172,6 +172,7 @@ export type ExecutionConfigurationResult = {
 export type ExecutionTarget = {
   agentId: string;
   agentType: number;
+  agentflowRevision?: number;
 };
 
 export type ExecutionRequest = ExecutionTarget & {
@@ -195,6 +196,7 @@ export type ExecutionSteerRequest = {
 
 export type ExecutionHubHandlers = {
   onMessage: (message: AiMessage) => void;
+  onStatus?: (status: ExecutionStatusEvent) => void;
   onError?: (error: Error) => void;
   onClose?: (error?: Error) => void;
   /** SignalR 进入重连，或准备下一次重试时触发。 */
@@ -1163,7 +1165,9 @@ export class ExecutionSession {
     }
 
     if (!this.disposed) {
-      this.handlers.onMessage(scopedMessage);
+      const status = getExecutionStatus(scopedMessage);
+      if (status) this.handlers.onStatus?.(status);
+      else this.handlers.onMessage(scopedMessage);
       this.observer?.message(message);
     }
     if (!position) return;

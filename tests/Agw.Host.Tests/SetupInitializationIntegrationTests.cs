@@ -239,7 +239,7 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Start_DeletedSeedData_PreservesUserChangesAcrossRestarts(bool deleteAll)
+    public async Task Start_BuiltInAgentflowMissing_RespectsRequiredAgentsAndPreservesUserData(bool deleteAll)
     {
         await using var app = await CreateAuthenticationAppAsync();
         await using var scope = app.Services.CreateAsyncScope();
@@ -253,8 +253,11 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
             .Settings.Where(setting => setting.Key == "server.identity" && setting.UserId == null)
             .Select(setting => setting.ValueJson)
             .SingleAsync(cancellationToken);
+        var agentflowId = await database.Agentflows.Select(flow => flow.Id).SingleAsync(cancellationToken);
+        await database.AgentflowBlockMembers.ExecuteDeleteAsync(cancellationToken);
         await database.AgentflowEdges.ExecuteDeleteAsync(cancellationToken);
         await database.AgentflowNodes.ExecuteDeleteAsync(cancellationToken);
+        await database.AgentflowRevisions.ExecuteDeleteAsync(cancellationToken);
         await database.Agentflows.ExecuteDeleteAsync(cancellationToken);
         await database.AgentSkillRelations.ExecuteDeleteAsync(cancellationToken);
         await database.AgentMcpToolServers.ExecuteDeleteAsync(cancellationToken);
@@ -287,16 +290,36 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
             using var server = ServerStartupTests.ServerProcess.Start(
                 _root,
                 AppContext.BaseDirectory,
-                ["serve", $"--AgwDataDir={_paths.Root}"]
+                ["serve", $"--AgwDataDir={_paths.Root}", $"--Extensions:Directory={Path.Combine(_root, "extensions")}"]
             );
-            await server.WaitUntilReadyAsync(_paths.ServerRuntimeFile);
-            Assert.True(await server.IsInitializedAsync());
-            await server.StopAsync();
-            Assert.Equal(0, server.ExitCode);
+            if (deleteAll)
+            {
+                var failure = await server.WaitForStartupFailureAsync();
+                Assert.Equal("HostStart", failure.GetProperty("stage").GetString());
+                Assert.Contains("Built-in Agent '", failure.GetProperty("message").GetString());
+                await server.AssertHttpUnavailableAsync();
+                Assert.Empty(await database.Agentflows.ToListAsync(cancellationToken));
+                Assert.Empty(await database.AgentflowRevisions.ToListAsync(cancellationToken));
+                Assert.Empty(await database.AgentflowNodes.ToListAsync(cancellationToken));
+                Assert.Empty(await database.AgentflowEdges.ToListAsync(cancellationToken));
+            }
+            else
+            {
+                await server.WaitUntilReadyAsync(_paths.ServerRuntimeFile);
+                Assert.True(await server.IsInitializedAsync());
+                await server.StopAsync();
+                Assert.Equal(0, server.ExitCode);
 
-            Assert.Empty(await database.Agentflows.ToListAsync(cancellationToken));
-            Assert.Empty(await database.AgentflowNodes.ToListAsync(cancellationToken));
-            Assert.Empty(await database.AgentflowEdges.ToListAsync(cancellationToken));
+                var agentflow = await database.Agentflows.AsNoTracking().SingleAsync(cancellationToken);
+                Assert.Equal(agentflowId, agentflow.Id);
+                Assert.Equal(1, agentflow.LatestRevision);
+                Assert.Equal(1, agentflow.PublishedRevision);
+                Assert.Equal(1, await database.AgentflowRevisions.CountAsync(cancellationToken));
+                Assert.Equal(4, await database.AgentflowNodes.CountAsync(cancellationToken));
+                Assert.Equal(3, await database.AgentflowEdges.CountAsync(cancellationToken));
+            }
+
+            Assert.Empty(await database.AgentflowBlockMembers.ToListAsync(cancellationToken));
             Assert.Empty(await database.AgentSkillRelations.ToListAsync(cancellationToken));
             Assert.Empty(await database.AgentMcpToolServers.ToListAsync(cancellationToken));
             Assert.False(await database.Skills.AnyAsync(skill => skill.Name == "xhs-explore", cancellationToken));

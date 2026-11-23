@@ -120,7 +120,8 @@ public class DbSeeder
             {
                 await SeedAgentSkillRelationAsync(agents["amap-poi-search"].Id, skill.Id);
             }
-            await SeedDefaultAgentflowAsync(agents);
+            await _context.SaveChangesAsync();
+            await EnsureBuiltInAgentflowAsync();
             await SeedQuickPromptsAsync();
             await SeedServerIdentityAsync();
 
@@ -141,9 +142,14 @@ public class DbSeeder
     public async Task MaintainSystemDataAsync()
     {
         using var systemScope = UserInfoUtil.PushSystemScope();
+        await using var transaction =
+            _context.Database.CurrentTransaction == null ? await _context.Database.BeginTransactionAsync() : null;
         await SeedBuiltInClassSkillsAsync();
         await UpgradeServerIdentityAsync();
+        await EnsureBuiltInAgentflowAsync();
         await _context.SaveChangesAsync();
+        if (transaction is not null)
+            await transaction.CommitAsync();
     }
 
     /// <summary>
@@ -917,19 +923,152 @@ public class DbSeeder
         _context.AgentSkillRelations.Add(new AgentSkillRelation { AgentId = agentId, SkillId = skillId });
     }
 
-    private async Task SeedDefaultAgentflowAsync(IReadOnlyDictionary<string, Agent> agents)
+    internal async Task EnsureBuiltInAgentflowAsync(CancellationToken cancellationToken = default)
     {
-        var existingAgentflow = await _context.Agentflows.FirstOrDefaultAsync(x =>
-            x.Id == XiaohongshuAgentflowId && x.CreateBy == Constants.AdminUserId
-            || x.Name == "Xiaohongshu Address Extraction" && x.CreateBy == Constants.AdminUserId
+        await using var transaction =
+            _context.Database.CurrentTransaction == null
+                ? await _context.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+        var existing = await _context.Agentflows.SingleOrDefaultAsync(
+            agentflow => agentflow.Id == XiaohongshuAgentflowId,
+            cancellationToken
         );
-        if (existingAgentflow != null)
+        if (existing is not null)
         {
-            return;
+            await ValidateExistingBuiltInAgentflowAsync(existing, cancellationToken);
+        }
+        else
+        {
+            await EnsureNoOrphanedBuiltInAgentflowRowsAsync(cancellationToken);
+            await SeedBuiltInAgentflowAsync(cancellationToken);
+        }
+
+        if (transaction is not null)
+            await transaction.CommitAsync(cancellationToken);
+    }
+
+    private async Task ValidateExistingBuiltInAgentflowAsync(Agentflow existing, CancellationToken cancellationToken)
+    {
+        if (!string.Equals(existing.CreateBy, Constants.AdminUserId, StringComparison.Ordinal))
+        {
+            throw new AgwException(
+                ErrorCodes.AgentflowDefinitionInvalid,
+                $"Built-in Agentflow '{XiaohongshuAgentflowId}' is owned by '{existing.CreateBy}'."
+            );
+        }
+
+        var revisionExists = await _context.AgentflowRevisions.AnyAsync(
+            revision => revision.AgentflowId == XiaohongshuAgentflowId && revision.Revision == 1,
+            cancellationToken
+        );
+        var nodes = await _context
+            .AgentflowNodes.Where(node => node.AgentflowId == XiaohongshuAgentflowId && node.AgentflowRevision == 1)
+            .ToListAsync(cancellationToken);
+        var edges = await _context
+            .AgentflowEdges.Where(edge => edge.AgentflowId == XiaohongshuAgentflowId && edge.AgentflowRevision == 1)
+            .ToListAsync(cancellationToken);
+        var membersExist = await _context.AgentflowBlockMembers.AnyAsync(
+            member => member.AgentflowId == XiaohongshuAgentflowId && member.AgentflowRevision == 1,
+            cancellationToken
+        );
+        if (!revisionExists || membersExist || !HasExpectedBuiltInAgentflowDefinition(nodes, edges))
+        {
+            throw new AgwException(
+                ErrorCodes.AgentflowDefinitionInvalid,
+                $"Built-in Agentflow '{XiaohongshuAgentflowId}' is incomplete."
+            );
+        }
+    }
+
+    private static bool HasExpectedBuiltInAgentflowDefinition(
+        IReadOnlyCollection<AgentflowNode> nodes,
+        IReadOnlyCollection<AgentflowEdge> edges
+    ) =>
+        nodes.Count == 4
+        && edges.Count == 3
+        && nodes.Any(node => node.NodeId == "input" && node.Kind == AgentflowNodeKind.Input)
+        && nodes.Any(node =>
+            node.NodeId == "0-1784023077088-4wxgi0"
+            && node.Kind == AgentflowNodeKind.Agent
+            && node.RelateId == GeneralAgentId
+        )
+        && nodes.Any(node =>
+            node.NodeId == "0-1784023208474-g5q65g"
+            && node.Kind == AgentflowNodeKind.Agent
+            && node.RelateId == LocationExtractorAgentId
+        )
+        && nodes.Any(node =>
+            node.NodeId == "0-1784030849721-zid7yj"
+            && node.Kind == AgentflowNodeKind.Agent
+            && node.RelateId == AmapPoiSearchAgentId
+        )
+        && edges.Any(edge => edge.EdgeId == "edge-input-0-1784023077088-4wxgi0-1784030770450")
+        && edges.Any(edge => edge.EdgeId == "edge-0-1784023077088-4wxgi0-0-1784023208474-g5q65g-1784030821565")
+        && edges.Any(edge => edge.EdgeId == "edge-0-1784023208474-g5q65g-0-1784030849721-zid7yj-1784030866867");
+
+    private async Task EnsureNoOrphanedBuiltInAgentflowRowsAsync(CancellationToken cancellationToken)
+    {
+        var hasOrphanedRows =
+            await _context.AgentflowRevisions.AnyAsync(
+                revision => revision.AgentflowId == XiaohongshuAgentflowId,
+                cancellationToken
+            )
+            || await _context.AgentflowNodes.AnyAsync(
+                node => node.AgentflowId == XiaohongshuAgentflowId,
+                cancellationToken
+            )
+            || await _context.AgentflowEdges.AnyAsync(
+                edge => edge.AgentflowId == XiaohongshuAgentflowId,
+                cancellationToken
+            )
+            || await _context.AgentflowBlockMembers.AnyAsync(
+                member => member.AgentflowId == XiaohongshuAgentflowId,
+                cancellationToken
+            );
+        if (hasOrphanedRows)
+        {
+            throw new AgwException(
+                ErrorCodes.AgentflowDefinitionInvalid,
+                $"Built-in Agentflow '{XiaohongshuAgentflowId}' has orphaned definition rows."
+            );
+        }
+    }
+
+    private async Task SeedBuiltInAgentflowAsync(CancellationToken cancellationToken)
+    {
+        var agentIds = new[] { GeneralAgentId, LocationExtractorAgentId, AmapPoiSearchAgentId };
+        var agents = await _context
+            .Agents.Where(agent => agent.CreateBy == Constants.AdminUserId && agentIds.Contains(agent.Id))
+            .ToDictionaryAsync(agent => agent.Id, cancellationToken);
+        var missingAgent = agentIds.FirstOrDefault(id => !agents.ContainsKey(id));
+        if (missingAgent != Guid.Empty)
+        {
+            throw new AgwException(
+                ErrorCodes.AgentflowDefinitionInvalid,
+                $"Built-in Agent '{missingAgent}' was not found."
+            );
         }
 
         var now = _timeProvider.GetUtcNow();
-        var agentflow = new Agentflow
+        _context.Agentflows.Add(CreateBuiltInAgentflow(now));
+        _context.AgentflowRevisions.Add(
+            new AgentflowRevision
+            {
+                AgentflowId = XiaohongshuAgentflowId,
+                Revision = 1,
+                CreateBy = Constants.AdminUserId,
+                CreateTime = now,
+                UpdateBy = Constants.AdminUserId,
+                UpdateTime = now,
+            }
+        );
+        _context.AgentflowNodes.AddRange(CreateBuiltInAgentflowNodes(agents, now));
+        _context.AgentflowEdges.AddRange(CreateBuiltInAgentflowEdges(now));
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private static Agentflow CreateBuiltInAgentflow(DateTimeOffset now) =>
+        new()
         {
             Id = XiaohongshuAgentflowId,
             Name = "Xiaohongshu Address Extraction",
@@ -950,107 +1089,138 @@ public class DbSeeder
                 4. 取搜索结果中的第一个 POI 作为最终结果。
                 5. 输出 POI 的名称、地址、经纬度（如有）以及与景点的关联。
                 """,
+            LatestRevision = 1,
+            PublishedRevision = 1,
             CreateBy = Constants.AdminUserId,
             CreateTime = now,
             UpdateBy = Constants.AdminUserId,
             UpdateTime = now,
-            Nodes =
-            [
-                new AgentflowNode
-                {
-                    NodeId = "input",
-                    Kind = AgentflowNodeKind.Input,
-                    Name = "Input",
-                    PositionJson = "{\"x\":12,\"y\":10.9481361426256}",
-                    CreateBy = Constants.AdminUserId,
-                    CreateTime = now,
-                    UpdateBy = Constants.AdminUserId,
-                    UpdateTime = now,
-                },
-                new AgentflowNode
-                {
-                    NodeId = "0-1784023077088-4wxgi0",
-                    Kind = AgentflowNodeKind.Agent,
-                    RelateId = agents["general-agent"].Id,
-                    Name = "general-agent",
-                    PositionJson = "{\"x\":332,\"y\":12}",
-                    Instructions = """
-                        从文字中识别出相关的 http 或 https 连接地址。
-
-                        然后从通过识别出来的 http 或 https 的地址，获取小红书的内容详情。
-
-                        只需要返回正文，不要返回其他的任何信息。
-                        """,
-                    CreateBy = Constants.AdminUserId,
-                    CreateTime = now,
-                    UpdateBy = Constants.AdminUserId,
-                    UpdateTime = now,
-                },
-                new AgentflowNode
-                {
-                    NodeId = "0-1784023208474-g5q65g",
-                    Kind = AgentflowNodeKind.Agent,
-                    RelateId = agents["location-extractor"].Id,
-                    Name = "location-extractor",
-                    PositionJson = "{\"x\":652,\"y\":12}",
-                    CreateBy = Constants.AdminUserId,
-                    CreateTime = now,
-                    UpdateBy = Constants.AdminUserId,
-                    UpdateTime = now,
-                },
-                new AgentflowNode
-                {
-                    NodeId = "0-1784030849721-zid7yj",
-                    Kind = AgentflowNodeKind.Agent,
-                    RelateId = agents["amap-poi-search"].Id,
-                    Name = "amap-poi-search",
-                    PositionJson = "{\"x\":972,\"y\":12}",
-                    CreateBy = Constants.AdminUserId,
-                    CreateTime = now,
-                    UpdateBy = Constants.AdminUserId,
-                    UpdateTime = now,
-                },
-            ],
-            Edges =
-            [
-                new AgentflowEdge
-                {
-                    EdgeId = "edge-input-0-1784023077088-4wxgi0-1784030770450",
-                    SourceNodeId = "input",
-                    TargetNodeId = "0-1784023077088-4wxgi0",
-                    Kind = AgentflowEdgeKind.FanOut,
-                    CreateBy = Constants.AdminUserId,
-                    CreateTime = now,
-                    UpdateBy = Constants.AdminUserId,
-                    UpdateTime = now,
-                },
-                new AgentflowEdge
-                {
-                    EdgeId = "edge-0-1784023077088-4wxgi0-0-1784023208474-g5q65g-1784030821565",
-                    SourceNodeId = "0-1784023077088-4wxgi0",
-                    TargetNodeId = "0-1784023208474-g5q65g",
-                    Kind = AgentflowEdgeKind.Direct,
-                    CreateBy = Constants.AdminUserId,
-                    CreateTime = now,
-                    UpdateBy = Constants.AdminUserId,
-                    UpdateTime = now,
-                },
-                new AgentflowEdge
-                {
-                    EdgeId = "edge-0-1784023208474-g5q65g-0-1784030849721-zid7yj-1784030866867",
-                    SourceNodeId = "0-1784023208474-g5q65g",
-                    TargetNodeId = "0-1784030849721-zid7yj",
-                    Kind = AgentflowEdgeKind.Direct,
-                    CreateBy = Constants.AdminUserId,
-                    CreateTime = now,
-                    UpdateBy = Constants.AdminUserId,
-                    UpdateTime = now,
-                },
-            ],
         };
 
-        _context.Agentflows.Add(agentflow);
-    }
+    private static AgentflowNode[] CreateBuiltInAgentflowNodes(
+        IReadOnlyDictionary<Guid, Agent> agents,
+        DateTimeOffset now
+    ) =>
+        [
+            CreateBuiltInAgentflowNode(
+                "input",
+                AgentflowNodeKind.Input,
+                "Input",
+                12,
+                10.9481361426256,
+                null,
+                null,
+                now
+            ),
+            CreateBuiltInAgentflowNode(
+                "0-1784023077088-4wxgi0",
+                AgentflowNodeKind.Agent,
+                "general-agent",
+                332,
+                12,
+                agents[GeneralAgentId].Id,
+                """
+                从文字中识别出相关的 http 或 https 连接地址。
+
+                然后从通过识别出来的 http 或 https 的地址，获取小红书的内容详情。
+
+                只需要返回正文，不要返回其他的任何信息。
+                """,
+                now
+            ),
+            CreateBuiltInAgentflowNode(
+                "0-1784023208474-g5q65g",
+                AgentflowNodeKind.Agent,
+                "location-extractor",
+                652,
+                12,
+                agents[LocationExtractorAgentId].Id,
+                null,
+                now
+            ),
+            CreateBuiltInAgentflowNode(
+                "0-1784030849721-zid7yj",
+                AgentflowNodeKind.Agent,
+                "amap-poi-search",
+                972,
+                12,
+                agents[AmapPoiSearchAgentId].Id,
+                null,
+                now
+            ),
+        ];
+
+    private static AgentflowEdge[] CreateBuiltInAgentflowEdges(DateTimeOffset now) =>
+        [
+            CreateBuiltInAgentflowEdge(
+                "edge-input-0-1784023077088-4wxgi0-1784030770450",
+                "input",
+                "0-1784023077088-4wxgi0",
+                now
+            ),
+            CreateBuiltInAgentflowEdge(
+                "edge-0-1784023077088-4wxgi0-0-1784023208474-g5q65g-1784030821565",
+                "0-1784023077088-4wxgi0",
+                "0-1784023208474-g5q65g",
+                now
+            ),
+            CreateBuiltInAgentflowEdge(
+                "edge-0-1784023208474-g5q65g-0-1784030849721-zid7yj-1784030866867",
+                "0-1784023208474-g5q65g",
+                "0-1784030849721-zid7yj",
+                now
+            ),
+        ];
+
+    private static AgentflowNode CreateBuiltInAgentflowNode(
+        string nodeId,
+        AgentflowNodeKind kind,
+        string name,
+        double positionX,
+        double positionY,
+        Guid? relateId,
+        string? instructions,
+        DateTimeOffset now
+    ) =>
+        new()
+        {
+            AgentflowId = XiaohongshuAgentflowId,
+            AgentflowRevision = 1,
+            NodeId = nodeId,
+            Kind = kind,
+            Name = name,
+            PositionX = positionX,
+            PositionY = positionY,
+            RoutingStrategy =
+                kind == AgentflowNodeKind.Input ? AgentflowRoutingStrategy.FanOut : AgentflowRoutingStrategy.Direct,
+            RelateId = relateId,
+            Instructions = instructions,
+            ConfigJson = "{}",
+            CreateBy = Constants.AdminUserId,
+            CreateTime = now,
+            UpdateBy = Constants.AdminUserId,
+            UpdateTime = now,
+        };
+
+    private static AgentflowEdge CreateBuiltInAgentflowEdge(
+        string edgeId,
+        string sourceNodeId,
+        string targetNodeId,
+        DateTimeOffset now
+    ) =>
+        new()
+        {
+            AgentflowId = XiaohongshuAgentflowId,
+            AgentflowRevision = 1,
+            EdgeId = edgeId,
+            SourceNodeId = sourceNodeId,
+            TargetNodeId = targetNodeId,
+            ConditionJson = "[]",
+            CreateBy = Constants.AdminUserId,
+            CreateTime = now,
+            UpdateBy = Constants.AdminUserId,
+            UpdateTime = now,
+        };
 
     private void EnsureDefaultSkillContent()
     {

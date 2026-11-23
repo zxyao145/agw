@@ -26,13 +26,15 @@ public sealed class AgentflowCheckpointRecord : BaseEntity
 
     public Guid AgentflowId { get; set; }
 
+    public int AgentflowRevision { get; set; }
+
+    public int RuntimeVersion { get; set; }
+
     public string UserId { get; set; } = string.Empty;
 
     public bool IsDurable { get; set; }
 
     public long BoundarySequence { get; set; }
-
-    public string DefinitionFingerprint { get; set; } = string.Empty;
 
     public string MarkersJson { get; set; } = "[]";
 

@@ -286,7 +286,10 @@ public sealed class ExecutionScopeTests
         var accessor = new HumanInteractionContextAccessor(new AgentExecutionContextAccessor());
         var turn = ExecutionTestScopes.Scope();
         var node = turn.CreateNodeScope(
-            new AgentflowNodeExecution(Guid.CreateVersion7(), "parent/child", "Child", 0, "child_UserInput"),
+            new AgentflowNodeExecution(Guid.CreateVersion7(), "parent", "Child", 0, "child_UserInput")
+            {
+                NodePath = "parent/child",
+            },
             Guid.CreateVersion7(),
             EngineKind.Maf
         );
@@ -299,7 +302,8 @@ public sealed class ExecutionScopeTests
                 Assert.Equal(
                     new InteractionSource
                     {
-                        NodeId = "parent/child",
+                        NodeId = "parent",
+                        NodePath = "parent/child",
                         NodeName = "Child",
                         ProviderScopeId = "child_UserInput",
                     },

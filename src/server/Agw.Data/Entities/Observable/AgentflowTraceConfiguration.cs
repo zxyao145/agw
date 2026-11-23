@@ -16,6 +16,12 @@ public class AgentflowTraceConfiguration : IEntityTypeConfiguration<AgentflowTra
         builder.Property(e => e.Input).IsRequired().HasColumnType("text");
         builder.Property(e => e.Status).HasConversion<int>();
         builder.Property(e => e.Error).HasColumnType("text");
+        builder
+            .Property(e => e.Extra)
+            .HasConversion(ExtraJson.Converter<AgentflowTraceExtra>())
+            .HasColumnType("text")
+            .IsRequired()
+            .HasDefaultValueSql("'{}'");
         builder.HasIndex(e => new
         {
             e.ProjectId,

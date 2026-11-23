@@ -1,3 +1,4 @@
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
 
@@ -10,6 +11,8 @@ namespace Agw.Agents.Execution.Turns;
 internal sealed record TurnInput(AgwUserInput UserInput)
 {
     public TurnResume? Resume { get; init; }
+
+    public AgentflowRevisionSnapshot? AgentflowSnapshot { get; init; }
 }
 
 /// <summary>

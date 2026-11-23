@@ -1,4 +1,4 @@
-import { getPermissionStatus, type InteractionResponse } from "@agw/execution-core";
+import type { ExecutionStatusEvent, InteractionResponse } from "@agw/execution-core";
 import {
   addTokenUsage,
   createUuidV7,
@@ -21,7 +21,6 @@ import {
   getLatestAgentMode,
   getMessageStreamingScopeId,
   getTurnFinishedStatus,
-  isModeControlMessage,
   isTurnStartMessage,
   isUserTurnMessage,
   markTurnMessage,
@@ -320,6 +319,7 @@ export class ConversationController {
     if (!this.session) {
       const handlers: ExecutionHubHandlers = {
         onMessage: (message) => this.receive(message),
+        onStatus: (status) => this.receiveStatus(status),
         onError: (error) => this.fail(error),
         onClose: (error) => {
           this.patch({ isExecuting: false, reconnectState: null });
@@ -352,20 +352,23 @@ export class ConversationController {
     return this.session;
   }
 
-  private receive(message: AiMessage): void {
-    const permissionStatus = getPermissionStatus(message);
-    if (permissionStatus) {
+  private receiveStatus(status: ExecutionStatusEvent): void {
+    if (status.type === "permission-status") {
       this.patch({
-        ...permissionStatus,
-        permissionMode: permissionStatus.nextPermissionMode ?? this.state.permissionMode,
+        activePermissionMode: status.activePermissionMode,
+        permissionChangePending: status.permissionChangePending,
+        permissionMode: status.nextPermissionMode ?? this.state.permissionMode,
       });
-      return;
+    } else if (status.type === "mode-status") {
+      this.patch({ agentMode: status.mode });
+    } else if (status.type === "mode-change-failed") {
+      this.patch({ error: status.message ?? "Failed to change agent mode." });
     }
+  }
+
+  private receive(message: AiMessage): void {
     const mode = getAgentMode(message);
-    if (mode) {
-      this.patch({ agentMode: mode });
-      if (isModeControlMessage(message)) return;
-    }
+    if (mode) this.patch({ agentMode: mode });
 
     const usage = getMessageTokenUsage(message);
     if (usage) this.patch({ usage: addTokenUsage(this.state.usage, usage) });

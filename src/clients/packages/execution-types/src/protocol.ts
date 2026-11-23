@@ -30,6 +30,7 @@ export type ExecutionCommandRequest<TInput = ExecutionUserInput> = {
   conversationId: string;
   agentId: string;
   agentType: number;
+  agentflowRevision?: number;
   turnId?: string;
   stream?: boolean;
   input: TInput;
@@ -62,8 +63,10 @@ export type TurnIdentity = {
 };
 
 export type ApprovalScope = "Once" | "AlwaysTool" | "AlwaysArguments";
+export type WorkflowGateChoice = { choiceId: string; label: string };
 export type InteractionSource = {
   nodeId?: string;
+  nodePath?: string;
   nodeName?: string;
   toolName?: string;
   callId?: string;
@@ -79,12 +82,17 @@ type InteractionRequestBase = {
 export type InteractionRequest = InteractionRequestBase &
   (
     | { kind: "tool-approval"; arguments?: unknown }
-    | { kind: "workflow-gate"; mode: string; inputPreview?: string }
+    | {
+        kind: "workflow-gate";
+        choices: WorkflowGateChoice[];
+        allowResponseText: boolean;
+        inputPreview?: string;
+      }
     | { kind: "user-input"; inputKind: string; payload: unknown }
   );
 export type InteractionResponse = { interactionId: string } & (
   | { kind: "tool-approval"; approved: boolean; scope: ApprovalScope }
-  | { kind: "workflow-gate"; approved: boolean; responseText?: string }
+  | { kind: "workflow-gate"; approved: boolean; choiceId?: string; responseText?: string }
   | { kind: "user-input"; cancelled: boolean; responseData?: unknown }
 );
 export type HumanResponseCommandInput = {

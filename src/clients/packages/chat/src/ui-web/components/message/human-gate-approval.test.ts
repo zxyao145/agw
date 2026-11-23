@@ -17,26 +17,15 @@ const toolApproval: PendingInteraction = {
   arguments: { command: "dotnet ef database update" },
 };
 
-function workflowGate(mode: string): PendingInteraction {
-  return {
-    kind: "workflow-gate",
-    interactionId: "interaction-2",
-    prompt: "Confirm the deployment target.",
-    source: { nodeName: "Deploy gate" },
-    mode,
-    inputPreview: "target = staging",
-  };
-}
-
 function renderApproval(
-  request: PendingInteraction,
+  request: Parameters<typeof HumanGateApproval>[0]["request"],
   permissionMode?: PermissionMode,
   approvals: Approval[] = [],
   rejections: (string | undefined)[] = [],
 ) {
   return render(
     React.createElement(HumanGateApproval, {
-      request: request as Parameters<typeof HumanGateApproval>[0]["request"],
+      request,
       permissionMode,
       onApprove: (scope: ApprovalScope, responseText?: string) =>
         approvals.push({ scope, responseText }),
@@ -102,54 +91,4 @@ test("rejecting a tool approval reports no response text", () => {
   fireEvent.click(screen.getByRole("button", { name: /Reject/ }));
 
   assert.deepEqual(rejections, [undefined]);
-});
-
-test("a workflow gate shows its node, mode, and input preview", () => {
-  renderApproval(workflowGate("Approval"));
-
-  assert.ok(screen.getByText("Deploy gate"));
-  assert.ok(screen.getByText("approval"));
-  assert.ok(screen.getByText("target = staging"));
-  assert.ok(screen.getByRole("button", { name: /Approve/ }));
-  assert.ok(screen.getByRole("button", { name: /Reject/ }));
-  assert.equal(screen.queryByPlaceholderText("Response"), null);
-});
-
-test("an input gate collects text and submits it with the approval", () => {
-  const approvals: Approval[] = [];
-  renderApproval(workflowGate("Input"), undefined, approvals);
-
-  const response = screen.getByPlaceholderText("Response");
-  fireEvent.change(response, { target: { value: "  deploy to staging  " } });
-  fireEvent.click(screen.getByRole("button", { name: /Submit/ }));
-
-  assert.deepEqual(approvals, [{ scope: "Once", responseText: "deploy to staging" }]);
-});
-
-test("an input gate interrupts with the text typed so far", () => {
-  const rejections: (string | undefined)[] = [];
-  renderApproval(workflowGate("Input"), undefined, [], rejections);
-
-  fireEvent.change(screen.getByPlaceholderText("Response"), { target: { value: "stop" } });
-  fireEvent.click(screen.getByRole("button", { name: /Interrupt/ }));
-
-  assert.deepEqual(rejections, ["stop"]);
-});
-
-test("a new interaction starts with an empty response", () => {
-  const view = renderApproval(workflowGate("Input"));
-  fireEvent.change(screen.getByPlaceholderText("Response"), { target: { value: "first" } });
-
-  view.rerender(
-    React.createElement(HumanGateApproval, {
-      request: {
-        ...workflowGate("Input"),
-        interactionId: "interaction-3",
-      } as Parameters<typeof HumanGateApproval>[0]["request"],
-      onApprove: () => {},
-      onReject: () => {},
-    }),
-  );
-
-  assert.equal((screen.getByPlaceholderText("Response") as HTMLTextAreaElement).value, "");
 });

@@ -29,6 +29,7 @@ namespace Agw.Infrastructure.Data;
 public partial class AgwDbContext
     : EFContext,
         IAgentsDbContext,
+        IAgentConversationChangesWriter,
         IProjectsDbContext,
         IAuthDbContext,
         ISettingsDbContext,
@@ -113,6 +114,8 @@ public partial class AgwDbContext
     public DbSet<AgentMcpServerRelation> AgentMcpToolServers => Set<AgentMcpServerRelation>();
 
     public DbSet<Agentflow> Agentflows => Set<Agentflow>();
+    public DbSet<AgentflowRevision> AgentflowRevisions => Set<AgentflowRevision>();
+    public DbSet<AgentflowBlockMember> AgentflowBlockMembers => Set<AgentflowBlockMember>();
     public DbSet<AgentflowNode> AgentflowNodes => Set<AgentflowNode>();
     public DbSet<AgentflowEdge> AgentflowEdges => Set<AgentflowEdge>();
     public DbSet<AgentflowTrace> AgentflowNodeExecutionTraces => Set<AgentflowTrace>();

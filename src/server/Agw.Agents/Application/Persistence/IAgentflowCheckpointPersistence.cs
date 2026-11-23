@@ -63,6 +63,7 @@ public interface IAgentflowCheckpointPersistenceSession
     Task AcceptResumeTurnAsync(
         Guid turnId,
         AgentflowCheckpointRecord checkpoint,
+        AgentflowRevisionSnapshot snapshot,
         CancellationToken cancellationToken = default
     );
 }

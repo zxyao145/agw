@@ -1,41 +1,88 @@
-using Agw.Shared.Data.Entities.Agentflows;
+using System.Text.Json.Serialization;
+using Agw.Agents.Definitions.Domain;
 
 namespace Agw.Agents.Definitions.Contracts;
 
-public record AgentflowNodeRequest(
-    string NodeId,
-    AgentflowNodeKind Kind,
-    Guid? RelateId,
-    string? Name,
-    string? PositionJson,
-    string? Instructions,
-    string? ConfigJson
-);
+public sealed record AgentflowDto
+{
+    [JsonConstructor]
+    public AgentflowDto(
+        Guid id,
+        string name,
+        string? description,
+        bool enable,
+        int latestRevision,
+        int publishedRevision,
+        DateTimeOffset createTime,
+        DateTimeOffset updateTime
+    )
+    {
+        Id = id;
+        Name = name;
+        Description = description;
+        Enable = enable;
+        LatestRevision = latestRevision;
+        PublishedRevision = publishedRevision;
+        CreateTime = createTime;
+        UpdateTime = updateTime;
+    }
 
-public record AgentflowEdgeRequest(
-    string EdgeId,
-    string SourceNodeId,
-    string TargetNodeId,
-    AgentflowEdgeKind Kind,
-    string? Label,
-    string? ConditionJson,
-    string? ConfigJson
-);
+    public Guid Id { get; init; }
 
-public record AgentflowCreateRequest(
-    string Name,
-    string? Description,
-    IReadOnlyList<AgentflowNodeRequest> Nodes,
-    IReadOnlyList<AgentflowEdgeRequest> Edges,
-    Guid? SummaryModelProviderId = null
-);
+    public string Name { get; init; }
+
+    public string? Description { get; init; }
+
+    public bool Enable { get; init; }
+
+    public int LatestRevision { get; init; }
+
+    public int PublishedRevision { get; init; }
+
+    public DateTimeOffset CreateTime { get; init; }
+
+    public DateTimeOffset UpdateTime { get; init; }
+}
+
+public sealed record AgentflowCreateRequest(string Name, string? Description, AgentflowDefinitionDto Definition);
+
+public sealed record AgentflowSaveRevisionRequest
+{
+    [JsonConstructor]
+    public AgentflowSaveRevisionRequest(
+        Guid agentflowId,
+        int baseRevision,
+        string name,
+        string? description,
+        AgentflowDefinitionDto definition
+    )
+    {
+        AgentflowId = agentflowId;
+        BaseRevision = baseRevision;
+        Name = name;
+        Description = description;
+        Definition = definition;
+    }
+
+    public Guid AgentflowId { get; init; }
+
+    public int BaseRevision { get; init; }
+
+    public string Name { get; init; }
+
+    public string? Description { get; init; }
+
+    public AgentflowDefinitionDto Definition { get; init; }
+}
+
+public sealed record AgentflowPublishRequest(Guid AgentflowId, int Revision);
+
+public sealed record AgentflowValidateRequest(Guid? AgentflowId, string Name, AgentflowDefinitionDto Definition);
+
+public sealed record AgentflowValidateResponse(IReadOnlyList<AgentflowProblem> Problems);
+
+public sealed record AgentflowDetailResponse(AgentflowDto Agentflow, int Revision, AgentflowDefinitionDto Definition);
+
+public sealed record AgentflowRevisionDto(int Revision, DateTimeOffset CreateTime);
 
 public sealed record AgentflowEnabledUpdateRequest(Guid AgentflowId, bool Enable);
-
-public record AgentflowUpdateRequest(
-    string Name,
-    string? Description,
-    IReadOnlyList<AgentflowNodeRequest> Nodes,
-    IReadOnlyList<AgentflowEdgeRequest> Edges,
-    Guid? SummaryModelProviderId = null
-);

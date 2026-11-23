@@ -69,6 +69,7 @@ export function AgentflowsTable({
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Description</TableHead>
+            <TableHead>Version</TableHead>
             <TableHead>Enabled</TableHead>
             <TableHead>Updated</TableHead>
             <TableHead className="text-right">Actions</TableHead>
@@ -84,6 +85,16 @@ export function AgentflowsTable({
                 </div>
               </TableCell>
               <TableCell className="max-w-xs truncate">{agentflow.description || "-"}</TableCell>
+              <TableCell>
+                {agentflow.publishedRevision > 0
+                  ? `v${agentflow.publishedRevision}`
+                  : "Not published"}
+                {agentflow.latestRevision > agentflow.publishedRevision ? (
+                  <div className="text-xs text-muted-foreground">
+                    v{agentflow.latestRevision} not published
+                  </div>
+                ) : null}
+              </TableCell>
               <TableCell>
                 <Switch
                   className="cursor-pointer"
@@ -104,6 +115,7 @@ export function AgentflowsTable({
                       className="cursor-pointer"
                       size="icon-sm"
                       onClick={() => onExecute(agentflow)}
+                      disabled={!agentflow.enable || agentflow.publishedRevision === 0}
                       title="Run agentflow"
                     >
                       <Play className="w-4 h-4" />

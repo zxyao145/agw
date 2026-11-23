@@ -36,7 +36,13 @@ InProcess 连接的控制查询与后台 Runtime 使用独立的 DI scope，避�
 | `AgentflowCheckpointSupport` | Checkpoint 启动/恢复、Marker 映射、记录、Continue 与日志 | Scoped；不保存执行状态 |
 | `AgentflowMessageMapper` | Framework 内容事件、HumanGate 和失败结果的协议映射；新控制消息 ID 由调用方提供 | 无服务依赖的确定性静态映射 |
 
-构建图、HumanGate 元数据和 Checkpoint 节点名共用一次节点查询。Lease 携带这些元数据的不可变快照，Runner 使用该次构建的快照；下一次执行重新构建，不建立跨执行缓存。Checkpoint 指纹验证仍使用既有持久化读取。
+构建图、HumanGate 元数据和 Checkpoint 节点名共用一次 revision 查询。Lease 携带这些元数据的不可变快照，Runner 使用该次构建的快照；下一次执行重新构建，不建立跨执行缓存。执行过程的 `agentflow-node-status` 消息随 Turn 输出并参与 Durable 回放，不写入对话历史。
+
+### Agentflow revision 快照
+
+Turn 受理时，`TurnAcceptanceWriter` 在 Serializable 事务内固定根 Agentflow revision，并沿 Workflow as Agent 节点与 Block 成员展开已发布的嵌套 revision。完整快照写入 Turn 的 `extra` 和 Durable manifest；runtime 编译、后续分段、重试与 checkpoint 恢复都使用同一份快照。相同 `turnId` 的重发沿用已保存快照。旧 Durable manifest 缺少依赖快照时按冲突结束。
+
+Agentflow checkpoint 记录其根 `AgentflowRevision` 和 `RuntimeVersion`。可恢复判断还会校验来源 Turn 与 Durable manifest 的根 revision 和依赖列表一致，并确认快照中的定义及其 Agent 仍可读取。恢复分支复制来源快照，继续使用原根与嵌套 revision。
 
 Runtime 拥有 Workflow Lease，Runner 拥有当前 `StreamingRun`；Durable Runner 还拥有该段的人工交互作用域。释放顺序为 Run、人工交互作用域、Workflow Lease。Factory 构建失败时清理已经创建的 Agent 和嵌套 Lease，清理异常不能覆盖构建异常。
 
@@ -163,7 +169,7 @@ Agw.Agents.Execution/
 │   ├── Runners/
 │   │   ├── InProcess/
 │   │   └── Durable/
-│   ├── Checkpoints/        # 检查点存储、恢复、指纹和数据类型
+│   ├── Checkpoints/        # 检查点存储、恢复和数据类型
 │   │   └── Durable/        # DurableAgentflowCheckpointStore 和快照
 │   ├── Messaging/          # 消息转换和协议映射
 │   └── Observability/      # 节点追踪
@@ -376,6 +382,8 @@ flowchart TB
 权限策略的初始值由 `SettingCommand.permissionMode` 保存。`SetPermissionModeCommand` 只修改下一 turn 的设置；当前 turn、待处理审批以及同一 Distributed turn 的恢复均使用启动时快照。权限版本随选择变化递增，因此 `A → B → A` 也会在下一轮使旧授权失效。外部 SDK 实例需要变更模式时，在下一轮开始前重建并恢复 provider session，不重放用户输入。Agentflow 所有节点共享本轮快照，权限变更不删除已有 checkpoint。
 
 `GET /api/agents/permission-capabilities?type=0&id=<agentId>` 返回 `supportedPermissionModes` 与 `reason`；`type=1` 查询 Agentflow，包括嵌套图的能力交集。查询及执行前校验遵守目标用户归属。`permission-status` 控制消息携带 `activePermissionMode`、`nextPermissionMode`、`permissionChangePending`，客户端据此分别显示本轮与下轮权限，不能因选择 Full access 隐藏当前审批。
+
+Agentflow 权限查询默认使用已发布的 revision。编辑器的 Run 面板通过正数 `agentflowRevision` 查询即将运行的根 revision，已保存的草稿也适用。
 
 内置 Agent 与 Claude Code 支持三种权限；Codex/Pi 当前 SDK 接入仅开放 Full access，显式选择其他模式会失败。未指定权限的既有调用保留原配置。Claude Code 通过 `CanUseTool` 将原生工具审批接入统一交互，Always ask 每次决定，Allow same arguments 仅复用当前存活会话中相同用户、项目会话、Agent/节点、工作目录和参数的授权。授权不写入永久白名单或数据库，重启后重新询问。普通工具审批与 AskUserQuestion/HumanGate 分开处理。
 

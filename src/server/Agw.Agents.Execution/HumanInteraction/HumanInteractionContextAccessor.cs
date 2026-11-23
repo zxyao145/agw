@@ -25,6 +25,7 @@ public sealed class HumanInteractionContextAccessor : IHumanInteractionContextAc
             ? new InteractionSource
             {
                 NodeId = node.NodeId,
+                NodePath = node.NodePath ?? node.NodeId,
                 NodeName = node.NodeName,
                 ProviderScopeId = node.ProviderScopeId,
             }

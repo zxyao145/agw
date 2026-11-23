@@ -29,6 +29,8 @@ public sealed record AcceptConversationTurnRequest
     public Guid? TaskId { get; init; }
     public required Guid TargetId { get; init; }
     public required ConversationTurnTargetType TargetType { get; init; }
+    public int AgentflowRevision { get; init; }
+    public IReadOnlyList<AgentflowDependencyRevisionDto>? AgentflowDependencies { get; init; }
     public ConversationTurnInput? Input { get; init; }
 }
 
@@ -51,7 +53,9 @@ public sealed record ConversationTurnSnapshot(
     int StepCount,
     DateTimeOffset StartedAt,
     DateTimeOffset? FinishedAt,
-    string? ErrorCode
+    string? ErrorCode,
+    int AgentflowRevision,
+    IReadOnlyList<AgentflowDependencyRevisionDto>? AgentflowDependencies
 );
 
 /// <summary>

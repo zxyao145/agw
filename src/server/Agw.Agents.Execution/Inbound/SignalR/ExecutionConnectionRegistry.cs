@@ -4,6 +4,7 @@ using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound.SignalR;
+using Agw.Auth.Contracts;
 using Agw.Shared.Exceptions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
@@ -95,6 +96,23 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
         }
 
         return connection.GetAgentflowCheckpointsAsync(agentflowId, cancellationToken);
+    }
+
+    internal IReadOnlySet<Guid> GetInProcessCheckpointOccurrenceIds()
+    {
+        var userId = UserInfoUtil.RequiredUserId;
+        var occurrences = new HashSet<Guid>();
+        foreach (var connection in _connections.Values)
+        {
+            if (!string.Equals(connection.UserId, userId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            occurrences.UnionWith(connection.GetInProcessCheckpointOccurrenceIds());
+        }
+
+        return occurrences;
     }
 
     public async Task<string?> FindInProcessExecutionAsync(

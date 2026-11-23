@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Reflection;
 using Agw.Infrastructure.Data;
+using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Auth;
@@ -135,11 +136,35 @@ public class EntityTypeConfigurationTests
     {
         AssertConfigured(
             typeof(Agentflow),
+            typeof(AgentflowRevision),
+            typeof(AgentflowBlockMember),
             typeof(AgentflowNode),
             typeof(AgentflowEdge),
             typeof(AgentflowTrace),
             typeof(AgentUsage)
         );
+    }
+
+    [Fact]
+    public void Extra_EmptyObject_ReadsRevisionZero()
+    {
+        var converter = ExtraJson.Converter<ProjectConversationTurnExtra>();
+        var convertFromProvider = converter.ConvertFromProviderExpression.Compile();
+        var convertToProvider = converter.ConvertToProviderExpression.Compile();
+
+        var empty = convertFromProvider("{}");
+        var withDependencies = new ProjectConversationTurnExtra { AgentflowRevision = 3, AgentflowDependencies = [] };
+        var serialized = convertToProvider(withDependencies);
+        var traceConverter = ExtraJson.Converter<AgentflowTraceExtra>();
+        var traceSerialized = traceConverter.ConvertToProviderExpression.Compile()(
+            new AgentflowTraceExtra { AgentflowRevision = 3 }
+        );
+
+        Assert.Equal(0, empty.AgentflowRevision);
+        Assert.Null(empty.AgentflowDependencies);
+        Assert.Equal("{\"agentflowRevision\":3,\"agentflowDependencies\":[]}", serialized);
+        Assert.Empty(convertFromProvider(serialized).AgentflowDependencies!);
+        Assert.Equal("{\"agentflowRevision\":3}", traceSerialized);
     }
 
     [Fact]
@@ -189,7 +214,7 @@ public class EntityTypeConfigurationTests
             .OrderBy(type => type.FullName)
             .ToArray();
 
-        Assert.Equal(56, entityTypes.Length);
+        Assert.Equal(58, entityTypes.Length);
         AssertConfigured(entityTypes);
     }
 

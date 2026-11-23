@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Domain.Services;
+using Agw.Agents.Definitions.Facades;
 using Agw.Agents.Definitions.Persistence;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Commands.Setting;
@@ -15,11 +16,13 @@ using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Application;
 using Agw.Files;
+using Agw.Files.Abstracts;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Settings;
 using Agw.Integrations.Application.Facades;
+using Agw.Projects;
 using Agw.Projects.Application;
 using Agw.Projects.Application.Facades;
 using Agw.Projects.Application.Persistence;
@@ -64,6 +67,7 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
 
     private readonly List<AsyncServiceScope> _scopes = [];
     private readonly Func<ValueTask> _dropDatabase;
+    private ServiceProvider? _projectRuntimeServices;
 
     private TurnPersistenceTestKit(
         DbContextOptions<AgwDbContext> dbOptions,
@@ -92,7 +96,9 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
         services.AddSingleton<IApplicationLock>(Locks);
         services.AddScoped(_ => new AgwDbContext(DbOptions));
         services.AddScoped<IAgentsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IAgentConversationChangesWriter>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IProjectsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IAgentflowRevisionSnapshotReader, AgentflowRevisionSnapshotReader>();
         services.AddScoped<IDurableExecutionScopeMaintenance, DurableExecutionScopeMaintenance>();
         services.AddScoped<IExtensionExecutionUsage, DurableExecutionScopeMaintenance>();
         services.AddScoped<IDurableExecutionEventSequence, DurableExecutionEventSequence>();
@@ -184,7 +190,8 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
     public static async Task<TurnPersistenceTestKit> CreatePostgresAsync(
         string adminConnectionString,
         ExecutionRuntimeOptions? executionOptions = null,
-        Action<IServiceCollection>? configure = null
+        Action<IServiceCollection>? configure = null,
+        params IInterceptor[] interceptors
     )
     {
         var token = TestContext.Current.CancellationToken;
@@ -200,6 +207,7 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
         settings.Database = database;
         var options = new DbContextOptionsBuilder<AgwDbContext>();
         AgwDbContextOptionsConfigurator.Configure(options, DatabaseProvider.Postgres, settings.ConnectionString);
+        options.AddInterceptors(interceptors);
         var kit = new TurnPersistenceTestKit(
             options.Options,
             async () =>
@@ -254,13 +262,26 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
     public async Task SeedAgentflowAsync(Guid agentflowId, string userId = UserId)
     {
         await using var context = CreateContext();
+        var now = Clock.GetUtcNow();
         context.Agentflows.Add(
             new Agentflow
             {
                 Id = agentflowId,
                 Name = $"test-agentflow-{agentflowId:N}",
+                LatestRevision = 1,
+                PublishedRevision = 1,
                 CreateBy = userId,
-                CreateTime = Clock.GetUtcNow(),
+                CreateTime = now,
+            }
+        );
+        context.AgentflowRevisions.Add(
+            new AgentflowRevision
+            {
+                AgentflowId = agentflowId,
+                Revision = 1,
+                CreateBy = userId,
+                CreateTime = now,
+                UpdateBy = userId,
             }
         );
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -379,6 +400,52 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
             new TaskAppService(dbContext, projectResolver, taskExecution, userInfo),
             userInfo
         );
+    }
+
+    /// <summary>
+    /// 使用 Projects 模块的真实服务创建运行时 Facade。
+    /// Creates the runtime facade with the Projects module's production services.
+    /// </summary>
+    public IProjectRuntimeFacade CreateProjectRuntime()
+    {
+        var projectServices = _projectRuntimeServices;
+        if (projectServices is null)
+        {
+            var configuration = new ConfigurationBuilder().Build();
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddSingleton(Services.GetRequiredService<AgwDataPaths>());
+            services.AddFiles(configuration);
+            services.AddProjects(configuration);
+            projectServices = services.BuildServiceProvider();
+            _projectRuntimeServices = projectServices;
+        }
+
+        var scope = Services.CreateAsyncScope();
+        _scopes.Add(scope);
+        var dbContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        var currentUser = new UserInfoService();
+        var workspaceAccess = projectServices.GetRequiredService<IProjectWorkspaceAccess>();
+        var projectService = new ProjectAppService(
+            dbContext,
+            new ProjectResourceBindingDomainService(
+                new AgentCatalogFacade(dbContext, currentUser),
+                new SkillReferenceFacade(dbContext, currentUser),
+                new ConnectionReferenceFacade(dbContext, currentUser)
+            ),
+            new ProjectDeletionCoordinator(
+                dbContext,
+                Locks,
+                scope.ServiceProvider.GetRequiredService<IDurableExecutionScopeMaintenance>(),
+                Clock
+            ),
+            new ProjectResolver(dbContext, currentUser),
+            currentUser,
+            Services.GetRequiredService<AgwDataPaths>(),
+            workspaceAccess,
+            projectServices.GetRequiredService<ProjectOwnershipCache>()
+        );
+        return new ProjectRuntimeFacade(projectService, workspaceAccess);
     }
 
     /// <summary>
@@ -503,12 +570,19 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
             modelProviderReferences,
             skillReferences,
             currentUser,
-            new AgentDeletionCoordinator(context, applicationLock),
+            new AgentDeletionCoordinator(context, applicationLock, CreateRevisionUsageReader(context)),
             applicationLock,
             TestAgentAppService.CardClient,
             TimeProvider.System
         );
     }
+
+    internal static IAgentflowRevisionUsageReader CreateRevisionUsageReader(AgwDbContext context) =>
+        new Agw.Agents.Execution.Agentflows.Checkpoints.AgentflowRevisionUsageReader(
+            context,
+            new Agw.Projects.Infrastructure.ConversationTurnStore(context, TimeProvider.System),
+            new AgentflowRevisionSnapshotReader(context)
+        );
 
     /// <summary>
     /// 为直接交给协调器的请求写入对话、Turn 行与本 Turn 的广播，与受理事务提交后的状态一致；请求不带输入行。
@@ -599,6 +673,8 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
     {
         foreach (var scope in _scopes)
             await scope.DisposeAsync();
+        if (_projectRuntimeServices is not null)
+            await _projectRuntimeServices.DisposeAsync();
         await Services.DisposeAsync();
         await _dropDatabase();
     }

@@ -8,12 +8,6 @@ namespace Agw.Agents.Application.Persistence;
 
 public interface IAgentsDbContext : IModuleDbContext
 {
-    Task<int> SaveConversationChangesAsync(
-        Guid conversationId,
-        int expectedGeneration,
-        CancellationToken cancellationToken = default
-    );
-
     DbSet<Agent> Agents { get; }
 
     DbSet<AgentA2AEndpoint> AgentA2AEndpoints { get; }
@@ -31,6 +25,10 @@ public interface IAgentsDbContext : IModuleDbContext
     DbSet<McpServer> McpToolServers { get; }
 
     DbSet<Agentflow> Agentflows { get; }
+
+    DbSet<AgentflowRevision> AgentflowRevisions { get; }
+
+    DbSet<AgentflowBlockMember> AgentflowBlockMembers { get; }
 
     DbSet<AgentflowNode> AgentflowNodes { get; }
 

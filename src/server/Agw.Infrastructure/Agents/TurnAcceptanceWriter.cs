@@ -1,4 +1,6 @@
+using System.Data;
 using Agw.Agents.Application.Persistence;
+using Agw.Auth.Contracts;
 using Agw.Extensions.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Contracts;
@@ -9,6 +11,7 @@ using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 
 namespace Agw.Infrastructure.Agents;
 
@@ -49,38 +52,45 @@ public sealed class TurnAcceptanceWriter : ITurnAcceptanceWriter
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
         var turns = scope.ServiceProvider.GetRequiredService<IConversationTurnStore>();
+        var scopedServices = new ScopedAcceptanceServices
+        {
+            DbContext = dbContext,
+            Turns = turns,
+            SnapshotReader = scope.ServiceProvider.GetRequiredService<IAgentflowRevisionSnapshotReader>(),
+            ServiceProvider = scope.ServiceProvider,
+        };
+        await using var definitionLease =
+            turn.TargetType == ConversationTurnTargetType.Agentflow
+                ? await AgentDefinitionLock
+                    .AcquireScopeAsync(_applicationLock, UserInfoUtil.RequiredUserId, cancellationToken)
+                    .ConfigureAwait(false)
+                : null;
+        var transactionToken = definitionLease?.Token ?? cancellationToken;
+        return await AcceptInScopeAsync(write, scopedServices, transactionToken, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<TurnAcceptanceResult> AcceptInScopeAsync(
+        TurnAcceptanceWrite write,
+        ScopedAcceptanceServices scopedServices,
+        CancellationToken transactionToken,
+        CancellationToken cancellationToken
+    )
+    {
         try
         {
-            await using var transaction = await dbContext
-                .Database.BeginTransactionAsync(cancellationToken)
-                .ConfigureAwait(false);
-            if (write.ExtensionIds.Count > 0)
-            {
-                await scope
-                    .ServiceProvider.GetRequiredService<IExtensionAdmissionValidator>()
-                    .ValidateEnabledAsync(write.ExtensionIds, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            var acceptance = await turns.AcceptAsync(turn, cancellationToken).ConfigureAwait(false);
-            var durable = write.Durable switch
-            {
-                null => null,
-                { } registration when acceptance.Created => await RegisterAsync(
-                        dbContext,
-                        turn,
-                        registration,
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false),
-                _ => await LoadDurableAsync(dbContext, turn.TurnId, cancellationToken).ConfigureAwait(false),
-            };
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return new TurnAcceptanceResult(acceptance.Turn, acceptance.Created, durable);
+            return await AcceptTransactionAsync(write, scopedServices, transactionToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException exception)
+            when (exception.InnerException
+                    is not PostgresException { SqlState: PostgresErrorCodes.SerializationFailure }
+            )
         {
             // 主键冲突说明另一个受理先提交了这个 turnId；只有同一用户、同一对话的记录可见并匹配。
             // A key conflict means another acceptance committed this turnId first; only a record of the same user and conversation is visible and matches.
+            var dbContext = scopedServices.DbContext;
+            var turns = scopedServices.Turns;
+            var turn = write.Turn;
             dbContext.ChangeTracker.Clear();
             var existing = await turns.GetAsync(turn.TurnId, cancellationToken).ConfigureAwait(false);
             if (existing == null || existing.ConversationId != turn.ConversationId)
@@ -88,11 +98,135 @@ public sealed class TurnAcceptanceWriter : ITurnAcceptanceWriter
             return new TurnAcceptanceResult(
                 existing,
                 Created: false,
-                write.Durable == null
-                    ? null
-                    : await LoadDurableAsync(dbContext, turn.TurnId, cancellationToken).ConfigureAwait(false)
+                await LoadDurableIfExistsAsync(dbContext, turn.TurnId, cancellationToken).ConfigureAwait(false)
             );
         }
+    }
+
+    private async Task<TurnAcceptanceResult> AcceptTransactionAsync(
+        TurnAcceptanceWrite write,
+        ScopedAcceptanceServices scopedServices,
+        CancellationToken transactionToken
+    )
+    {
+        var turn = write.Turn;
+        var dbContext = scopedServices.DbContext;
+        var turns = scopedServices.Turns;
+        await using var transaction =
+            turn.TargetType == ConversationTurnTargetType.Agentflow
+                ? await dbContext
+                    .Database.BeginTransactionAsync(IsolationLevel.Serializable, transactionToken)
+                    .ConfigureAwait(false)
+                : await dbContext.Database.BeginTransactionAsync(transactionToken).ConfigureAwait(false);
+        var existing = await turns.GetAsync(turn.TurnId, transactionToken).ConfigureAwait(false);
+        if (existing is not null)
+        {
+            if (existing.ConversationId != turn.ConversationId)
+                throw new AgwException(ErrorCodes.ResourceNotFound);
+            var existingDurable = await LoadDurableIfExistsAsync(dbContext, turn.TurnId, transactionToken)
+                .ConfigureAwait(false);
+            await transaction.CommitAsync(transactionToken).ConfigureAwait(false);
+            return new TurnAcceptanceResult(existing, Created: false, existingDurable);
+        }
+
+        var result = await AcceptNewTurnAsync(write, scopedServices, transactionToken).ConfigureAwait(false);
+        await transaction.CommitAsync(transactionToken).ConfigureAwait(false);
+        return result;
+    }
+
+    private async Task<TurnAcceptanceResult> AcceptNewTurnAsync(
+        TurnAcceptanceWrite write,
+        ScopedAcceptanceServices scopedServices,
+        CancellationToken cancellationToken
+    )
+    {
+        var turn = write.Turn;
+        var snapshot = await ResolveSnapshotAsync(write, scopedServices.SnapshotReader, cancellationToken)
+            .ConfigureAwait(false);
+        var acceptedTurn = WithSnapshot(turn, snapshot);
+        var registration = await write.Register(snapshot, cancellationToken).ConfigureAwait(false);
+        if (registration.ExtensionIds.Count > 0)
+        {
+            await scopedServices
+                .ServiceProvider.GetRequiredService<IExtensionAdmissionValidator>()
+                .ValidateEnabledAsync(registration.ExtensionIds, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var acceptance = await scopedServices.Turns.AcceptAsync(acceptedTurn, cancellationToken).ConfigureAwait(false);
+        var durable = await RegisterDurableAsync(
+                scopedServices.DbContext,
+                turn,
+                acceptedTurn,
+                registration.Durable,
+                acceptance.Created,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return new TurnAcceptanceResult(acceptance.Turn, acceptance.Created, durable);
+    }
+
+    private static async Task<AgentflowRevisionSnapshot?> ResolveSnapshotAsync(
+        TurnAcceptanceWrite write,
+        IAgentflowRevisionSnapshotReader snapshotReader,
+        CancellationToken cancellationToken
+    )
+    {
+        if (write.Turn.TargetType != ConversationTurnTargetType.Agentflow)
+        {
+            return null;
+        }
+        if (write.PinnedSnapshot is { } pinnedSnapshot)
+        {
+            return pinnedSnapshot;
+        }
+
+        return await snapshotReader
+            .CreateRevisionSnapshotAsync(write.Turn.TargetId, write.RequestedAgentflowRevision, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static AcceptConversationTurnRequest WithSnapshot(
+        AcceptConversationTurnRequest turn,
+        AgentflowRevisionSnapshot? snapshot
+    ) =>
+        snapshot is null
+            ? turn
+            : turn with
+            {
+                AgentflowRevision = snapshot.RootRevision,
+                AgentflowDependencies = snapshot
+                    .Dependencies.Select(AgentflowDependencyRevisionMapping.ToDto)
+                    .ToArray(),
+            };
+
+    private async Task<DurableTurnAcceptance?> RegisterDurableAsync(
+        AgwDbContext dbContext,
+        AcceptConversationTurnRequest turn,
+        AcceptConversationTurnRequest acceptedTurn,
+        DurableTurnRegistration? registration,
+        bool acceptanceCreated,
+        CancellationToken cancellationToken
+    ) =>
+        registration switch
+        {
+            null => null,
+            { } durableRegistration when acceptanceCreated => await RegisterAsync(
+                    dbContext,
+                    acceptedTurn,
+                    durableRegistration,
+                    cancellationToken
+                )
+                .ConfigureAwait(false),
+            _ => await LoadDurableIfExistsAsync(dbContext, turn.TurnId, cancellationToken).ConfigureAwait(false),
+        };
+
+    private sealed class ScopedAcceptanceServices
+    {
+        public required AgwDbContext DbContext { get; init; }
+        public required IConversationTurnStore Turns { get; init; }
+        public required IAgentflowRevisionSnapshotReader SnapshotReader { get; init; }
+        public required IServiceProvider ServiceProvider { get; init; }
     }
 
     private async Task<DurableTurnAcceptance> RegisterAsync(
@@ -103,8 +237,25 @@ public sealed class TurnAcceptanceWriter : ITurnAcceptanceWriter
     )
     {
         var now = await DatabaseClock.GetUtcNowAsync(dbContext, _timeProvider, cancellationToken).ConfigureAwait(false);
+        var record = CreateDurableExecutionRecord(turn, registration, now);
+        dbContext.DurableExecutions.Add(record);
+        dbContext.DurableExecutionEvents.Add(CreateStartEvent(turn, registration, record));
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         var local = !string.IsNullOrWhiteSpace(registration.WorkerId);
-        var record = new DurableExecutionRecord
+        return new DurableTurnAcceptance(
+            record.Status,
+            local ? new DurableLease(record.Id, record.WorkerId!, record.LeaseEpoch) : null
+        );
+    }
+
+    private static DurableExecutionRecord CreateDurableExecutionRecord(
+        AcceptConversationTurnRequest turn,
+        DurableTurnRegistration registration,
+        DateTimeOffset now
+    )
+    {
+        var local = !string.IsNullOrWhiteSpace(registration.WorkerId);
+        return new DurableExecutionRecord
         {
             Id = turn.TurnId,
             UserId = registration.UserId,
@@ -123,41 +274,41 @@ public sealed class TurnAcceptanceWriter : ITurnAcceptanceWriter
             LeaseExpiresAt = local ? now + registration.LeaseDuration : null,
             LastEventSequence = 1,
         };
-        dbContext.DurableExecutions.Add(record);
-        dbContext.DurableExecutionEvents.Add(
-            new DurableExecutionEventRecord
-            {
-                Id = registration.StartEventId,
-                TurnId = turn.TurnId,
-                TurnSequence = 1,
-                LeaseEpoch = record.LeaseEpoch,
-                SegmentIndex = 0,
-                PayloadJson = registration.StartEventPayloadJson,
-                CreateBy = registration.UserId,
-                UpdateBy = registration.UserId,
-            }
-        );
-        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return new DurableTurnAcceptance(
-            record.Status,
-            local ? new DurableLease(record.Id, record.WorkerId!, record.LeaseEpoch) : null
-        );
     }
 
-    private static async Task<DurableTurnAcceptance> LoadDurableAsync(
+    private static DurableExecutionEventRecord CreateStartEvent(
+        AcceptConversationTurnRequest turn,
+        DurableTurnRegistration registration,
+        DurableExecutionRecord record
+    ) =>
+        new()
+        {
+            Id = registration.StartEventId,
+            TurnId = turn.TurnId,
+            TurnSequence = 1,
+            LeaseEpoch = record.LeaseEpoch,
+            SegmentIndex = 0,
+            PayloadJson = registration.StartEventPayloadJson,
+            CreateBy = registration.UserId,
+            UpdateBy = registration.UserId,
+        };
+
+    private static async Task<DurableTurnAcceptance?> LoadDurableIfExistsAsync(
         AgwDbContext dbContext,
         Guid turnId,
         CancellationToken cancellationToken
     )
     {
-        var record =
-            await dbContext
-                .DurableExecutions.AsNoTracking()
-                .Where(item => item.Id == turnId)
-                .Select(item => new { item.Status })
-                .SingleOrDefaultAsync(cancellationToken)
-                .ConfigureAwait(false)
-            ?? throw new AgwException(ErrorCodes.ResourceNotFound);
+        var record = await dbContext
+            .DurableExecutions.AsNoTracking()
+            .Where(item => item.Id == turnId)
+            .Select(item => new { item.Status })
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (record is null)
+        {
+            return null;
+        }
         // 重发只返回当前状态；租约属于最初受理的执行。
         // A resend only returns the current status; the lease belongs to the original execution.
         return new DurableTurnAcceptance(record.Status, Lease: null);

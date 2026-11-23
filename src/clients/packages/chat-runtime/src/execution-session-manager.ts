@@ -1,4 +1,4 @@
-import type { HumanResponseCommandInput } from "@agw/execution-core";
+import type { ExecutionStatusEvent, HumanResponseCommandInput } from "@agw/execution-core";
 import { chatHttpClient } from "./chat-http-client";
 import {
   ExecutionSession,
@@ -136,6 +136,7 @@ type ActiveTurnState = ActiveTurnSnapshot & {
 export type ActiveTurnSnapshot = {
   streamingScopeId: string;
   messages: AiMessage[];
+  statuses: ExecutionStatusEvent[];
 };
 
 export type TurnFinishedEvent = {
@@ -225,6 +226,7 @@ export class ExecutionSessionManager {
       const client = this.createClient(
         {
           onMessage: (message) => this.handleMessage(nextEntry, message),
+          onStatus: (status) => this.handleStatus(nextEntry, status),
           onError: (error) => nextEntry.handler?.onError?.(error),
           onClose: (error) => this.handleClose(nextEntry, error),
           onReconnecting: (state) => this.handleReconnecting(nextEntry, state),
@@ -542,6 +544,11 @@ export class ExecutionSessionManager {
     this.supersededTurnListeners.add(listener);
     return () => this.supersededTurnListeners.delete(listener);
   };
+
+  private handleStatus(entry: Entry, status: ExecutionStatusEvent): void {
+    entry.handler?.onStatus?.(status);
+    entry.activeTurn?.statuses.push({ ...status });
+  }
 
   private handleMessage(entry: Entry, message: AiMessage): void {
     this.captureActiveTurnMessage(entry, message);
@@ -868,8 +875,7 @@ export class ExecutionSessionManager {
     const input = toExecutionUserInput(message);
     const request: ExecutionRequest = {
       conversationId: entry.key.conversationId,
-      agentId: item.target.agentId,
-      agentType: item.target.agentType,
+      ...item.target,
       turnId: item.turnId,
       stream: true,
       input,
@@ -955,6 +961,7 @@ export class ExecutionSessionManager {
       streamingScopeId,
       replayable: true,
       messages: [scopeStreamingMessage(message, streamingScopeId)],
+      statuses: [],
     };
     entry.pendingMessages = [];
     entry.pendingInteractions.clear();
@@ -968,6 +975,7 @@ export class ExecutionSessionManager {
           streamingScopeId: explicitScopeId,
           replayable: false,
           messages: [],
+          statuses: [],
         };
       }
     }
@@ -989,6 +997,7 @@ export class ExecutionSessionManager {
     return {
       streamingScopeId: entry.activeTurn.streamingScopeId,
       messages: entry.activeTurn.messages.map((message) => cloneMessage(message)),
+      statuses: entry.activeTurn.statuses.map((status) => ({ ...status })),
     };
   }
 

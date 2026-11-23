@@ -160,7 +160,12 @@ public sealed class TurnUsageSettlementMigrationTests
 
         var turns = await context
             .ProjectConversationTurns.IgnoreQueryFilters()
-            .AsNoTracking()
+            .Select(turn => new
+            {
+                turn.Id,
+                turn.FinishedAt,
+                turn.UsageSettlesAt,
+            })
             .ToDictionaryAsync(turn => turn.Id, token);
         return (turns[finished].FinishedAt, turns[finished].UsageSettlesAt, turns[running].UsageSettlesAt);
     }

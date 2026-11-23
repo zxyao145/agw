@@ -10,6 +10,7 @@ import {
 import { X } from "lucide-react";
 import type { AgentflowDto } from "../../../../types/agentflow";
 import { Chat } from "@agw/chat";
+import { AGENTFLOW_RUN_PROJECT_ID } from "./utils";
 
 interface ExecuteAgentflowDrawerProps {
   open: boolean;
@@ -43,8 +44,7 @@ export function ExecuteAgentflowDrawer({
     [agentflow?.id, resetSignal],
   );
 
-  if (!agentflow) return null;
-  const projectId = "11111111-1111-1111-1111-000000000001";
+  if (!agentflow || agentflow.publishedRevision === 0) return null;
 
   return (
     <Drawer direction="right" open={open} onOpenChange={onOpenChange} modal={true}>
@@ -67,7 +67,7 @@ export function ExecuteAgentflowDrawer({
         <Chat
           className="h-[calc(100vh-62px)]"
           target={{ id: agentflow.id, type: "agentflow" }}
-          projectId={projectId}
+          projectId={AGENTFLOW_RUN_PROJECT_ID}
           conversationId={null}
           active={open}
           sessionSeed={sessionSeed}

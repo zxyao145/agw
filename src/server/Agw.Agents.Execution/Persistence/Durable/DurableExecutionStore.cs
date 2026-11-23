@@ -103,18 +103,21 @@ internal static class DurableExecutionSnapshotExtensions
 internal sealed class DurableExecutionStore
 {
     private readonly IAgentsDbContext _dbContext;
+    private readonly IAgentConversationChangesWriter _conversationChangesWriter;
     private readonly TimeProvider _timeProvider;
     private readonly IApplicationLock _applicationLock;
     private readonly IDurableExecutionScopeMaintenance _scopeMaintenance;
 
     public DurableExecutionStore(
         IAgentsDbContext dbContext,
+        IAgentConversationChangesWriter conversationChangesWriter,
         TimeProvider timeProvider,
         IApplicationLock applicationLock,
         IDurableExecutionScopeMaintenance scopeMaintenance
     )
     {
         _dbContext = dbContext;
+        _conversationChangesWriter = conversationChangesWriter;
         _timeProvider = timeProvider;
         _applicationLock = applicationLock;
         _scopeMaintenance = scopeMaintenance;
@@ -132,6 +135,8 @@ internal sealed class DurableExecutionStore
                 UserId = request.UserId,
                 AgentId = request.Target.AgentId,
                 AgentType = request.Target.AgentType,
+                AgentflowRevision = request.Target.AgentflowRevision,
+                AgentflowDependencies = request.AgentflowSnapshot?.Dependencies,
                 Input = request.Input,
                 Task = DurableExecutionMapper.FromProjection(request.Task),
                 Settings = DurableExecutionMapper.FromSettings(request.Settings),
@@ -709,7 +714,7 @@ internal sealed class DurableExecutionStore
 
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal(record.UserId));
         var task = ToSnapshot(record).Manifest.Task;
-        await _dbContext
+        await _conversationChangesWriter
             .SaveConversationChangesAsync(task.ProjectConversationId, task.Generation, cancellationToken)
             .ConfigureAwait(false);
     }

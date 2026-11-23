@@ -674,12 +674,32 @@ public sealed class ProviderModelDeletionTests : IDisposable
     {
         if (usage == "agentflow-summary")
         {
+            var agentflowId = Guid.CreateVersion7();
             dbContext.Agentflows.Add(
                 new Agentflow
                 {
-                    Id = Guid.CreateVersion7(),
+                    Id = agentflowId,
                     Name = "flow",
-                    SystemPrompt = string.Empty,
+                    LatestRevision = 1,
+                    PublishedRevision = 1,
+                    CreateBy = "tester",
+                }
+            );
+            dbContext.AgentflowRevisions.Add(
+                new AgentflowRevision
+                {
+                    AgentflowId = agentflowId,
+                    Revision = 1,
+                    CreateBy = "tester",
+                }
+            );
+            dbContext.AgentflowNodes.Add(
+                new AgentflowNode
+                {
+                    AgentflowId = agentflowId,
+                    AgentflowRevision = 1,
+                    NodeId = "output",
+                    Kind = AgentflowNodeKind.Output,
                     SummaryModelProviderId = relationId,
                     CreateBy = "tester",
                 }

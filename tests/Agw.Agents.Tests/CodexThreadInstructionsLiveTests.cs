@@ -7,6 +7,7 @@ using Agw.Shared.Data.Entities.Agentflows;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging.Abstractions;
 using OpenAI.CodexSdk.AppServer;
 using OpenAI.CodexSdk.AppServer.MAF;
 using OpenAI.CodexSdk.AppServer.Protocol;
@@ -124,23 +125,27 @@ public sealed class CodexThreadInstructionsLiveTests : IDisposable
             },
         };
         return Assert.IsType<Workflow>(
-            new AgentflowWorkflowCompiler().Compile(
-                new Agentflow { Id = Guid.CreateVersion7(), Name = "codex-instructions" },
-                nodes,
-                [
-                    new AgentflowEdge
+            new AgentflowWorkflowCompiler(NullLogger<AgentflowWorkflowCompiler>.Instance)
+                .Compile(
+                    new Agentflow { Id = Guid.CreateVersion7(), Name = "codex-instructions" },
+                    1,
+                    nodes,
+                    [
+                        new AgentflowEdge
+                        {
+                            EdgeId = "a-b",
+                            SourceNodeId = "a",
+                            TargetNodeId = "b",
+                        },
+                    ],
+                    [],
+                    new Dictionary<string, AIAgent>
                     {
-                        EdgeId = "a-b",
-                        SourceNodeId = "a",
-                        TargetNodeId = "b",
-                    },
-                ],
-                new Dictionary<string, AIAgent>
-                {
-                    ["a"] = new CodexProviderSessionTrackingAgent(client, options, null, false),
-                    ["b"] = new CodexProviderSessionTrackingAgent(client, options, null, false),
-                }
-            )
+                        ["a"] = new CodexProviderSessionTrackingAgent(client, options, null, false),
+                        ["b"] = new CodexProviderSessionTrackingAgent(client, options, null, false),
+                    }
+                )
+                ?.Workflow
         );
     }
 

@@ -290,7 +290,8 @@ test("controller completes parallel gates individually without server re-publica
           interactionId,
           source: { nodeId: interactionId },
           prompt: "Continue?",
-          mode: "approval",
+          choices: [{ choiceId: "continue", label: "Continue" }],
+          allowResponseText: false,
         },
       },
     });
@@ -300,12 +301,14 @@ test("controller completes parallel gates individually without server re-publica
     kind: "workflow-gate",
     interactionId: "second",
     approved: true,
+    choiceId: "continue",
   });
   assert.equal(controller.getSnapshot().pendingInteraction?.interactionId, "first");
   await controller.submitHumanResponse({
     kind: "workflow-gate",
     interactionId: "first",
     approved: true,
+    choiceId: "continue",
   });
 
   assert.equal(controller.getSnapshot().pendingInteraction, null);
@@ -313,7 +316,7 @@ test("controller completes parallel gates individually without server re-publica
     submissions,
     ["second", "first"].map((interactionId) => ({
       turnId: "turn-1",
-      response: { kind: "workflow-gate", interactionId, approved: true },
+      response: { kind: "workflow-gate", interactionId, approved: true, choiceId: "continue" },
     })),
   );
   await controller.dispose();
@@ -548,15 +551,11 @@ test("selecting Full access preserves the current tool approval and consumes ser
     configure: async () => ({ restoredDurableExecution: false }),
     execute: async () => undefined,
     setPermissionMode: async () =>
-      handlers.onMessage({
-        messageId: "status",
-        contents: [],
-        additionalProperties: {
-          type: "permission-status",
-          activePermissionMode: "alwaysAsk",
-          nextPermissionMode: "fullAccess",
-          permissionChangePending: true,
-        },
+      handlers.onStatus?.({
+        type: "permission-status",
+        activePermissionMode: "alwaysAsk",
+        nextPermissionMode: "fullAccess",
+        permissionChangePending: true,
       }),
     dispose: async () => undefined,
   } as unknown as ExecutionSession;

@@ -1790,7 +1790,13 @@ for (const provider of ["InProcess", "Distributed"] as const) {
       for (const write of [
         () => session.send({ target: { type: "agent", id: "agent-1" }, text: "hi" }),
         () => session.interrupt(),
-        () => session.respond({ kind: "workflow-gate", interactionId: "gate", approved: true }),
+        () =>
+          session.respond({
+            kind: "workflow-gate",
+            interactionId: "gate",
+            approved: true,
+            choiceId: "continue",
+          }),
         () => session.setPermissionMode("fullAccess"),
       ]) {
         await assert.rejects(write(), { code: "ERR_CONVERSATION_READ_ONLY" });

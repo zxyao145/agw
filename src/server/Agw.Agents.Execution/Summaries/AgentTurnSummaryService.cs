@@ -131,7 +131,8 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService, IAgentSt
         {
             if (!string.IsNullOrWhiteSpace(node.NodeName))
                 additionalProperties["nodeName"] = node.NodeName.Trim();
-            additionalProperties["interactionNodeId"] = node.NodeId;
+            additionalProperties[AgwMessageClassifier.NodeIdKey] = node.NodeId;
+            additionalProperties[AgwMessageClassifier.NodePathKey] = node.NodePath ?? node.NodeId;
         }
 
         return new ChatMessage(ChatRole.Assistant, [new TextContent(text)])

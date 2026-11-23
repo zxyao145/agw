@@ -34,7 +34,7 @@ Commands are registered through the typed handler and JSON-discriminator seam. T
 | Command | Purpose |
 | --- | --- |
 | `SettingCommand` | Binds the connection to a required, client-generated, non-empty GUID `conversationId` (official clients use UUIDv7) and sets Project, environment variables, and the initial permission policy. Configuring a draft conversation does not create it. The optional `extensionId` names the Desktop extension the connection represents; see [Extension requesters](#extension-requesters). |
-| `ExecCommand` | Selects an Agent or Agentflow and starts a turn. `conversationId` is required and must equal the configured conversation; distributed clients also supply a stable `turnId`, and distributed execution requires `stream=true`. |
+| `ExecCommand` | Selects an Agent or Agentflow and starts a turn. `conversationId` is required and must equal the configured conversation. Distributed clients also supply a stable `turnId` and require `stream=true`. `agentflowRevision` defaults to `0`, which resolves to the published revision when the turn is accepted. A positive value selects an explicit root revision for editor runs. |
 | `InterruptCommand` | Interrupts the active in-process turn or the identified durable execution. An identified execution that is not attached must belong to the configured conversation. |
 | `SetModeCommand` | Changes the mode of an Agent that supports runtime modes. |
 | `SetPermissionModeCommand` | Selects the next turn's permission mode. The active turn and pending interactions keep their original snapshot; an external runtime is rebuilt before the next turn when its permission version changes. |
@@ -71,9 +71,12 @@ Query the authenticated management endpoint before offering a permission choice:
 ```http
 GET /api/agents/permission-capabilities?type=0&id={agentId}
 GET /api/agents/permission-capabilities?type=1&id={agentflowId}
+GET /api/agents/permission-capabilities?type=1&id={agentflowId}&agentflowRevision={revision}
 ```
 
 The endpoint returns a Bens.Results envelope. After unwrapping, `supportedPermissionModes` contains `fullAccess`, `alwaysAsk`, or `allowSameArguments`; `reason` explains a restriction when present. System Agents and Claude Code support all three. Codex and Pi support only `fullAccess`. Agentflows intersect the capabilities of their Agent and nested-Agentflow targets. Foreign/missing targets are unavailable; explicitly requesting an unsupported mode fails validation.
+
+An Agentflow lookup defaults to the published revision. The editor's Run panel supplies a positive `agentflowRevision` to query the same root revision it will run, including a saved draft.
 
 `permission-status` messages report `activePermissionMode`, `nextPermissionMode`, and `permissionChangePending`. A change affects the next turn, including when made during a durable wait; it must not hide or auto-answer an existing approval. User input and explicit HumanGate requests still need a response under Full access.
 
@@ -107,10 +110,16 @@ sequenceDiagram
 
 Turn state is part of the `AgwMessage` protocol:
 
-- `additionalProperties.type = "turn-start"` precedes runtime output.
+- `additionalProperties.type = "agw-turn-start"` precedes runtime output.
 - `interaction-request` messages carry typed requests with `kind = tool-approval | workflow-gate | user-input` and a stable `interactionId`. `HumanResponseCommand.response` must match both fields; each variant carries its own decision or response data.
-- `additionalProperties.type = "turn-finished"` carries `status = completed | interrupted | failed`.
+- `additionalProperties.type = "agw-turn-finished"` carries `status = completed | interrupted | failed`.
 - Durable lifecycle messages also carry `turnId`; streamed messages use a stable scope so replay and checkpoint branches merge with the correct user turn.
+
+An `interaction-request` with `kind = "workflow-gate"` includes a `source` with `nodeId`, `nodePath`, and `nodeName`, a `choices` array of `{ choiceId, label }`, and `allowResponseText`. It may include `inputPreview`. An approved `workflow-gate` response includes the selected `choiceId` and optional `responseText`. A rejected response uses `approved: false` and stops the workflow.
+
+Agentflow node output carries `nodeId` and `nodePath` in `additionalProperties`. `nodeId` is the top-level node ID for the current turn. `nodePath` identifies the nested node path, with `/` between Agentflow levels. The `agentflow-checkpoint` message uses `nodeId`.
+
+Agentflow execution emits `agentflow-node-status` messages between `agw-turn-start` and `agw-turn-finished`. Their `contents` array is empty. `additionalProperties` includes `nodeId` and one of `running`, `waiting`, `completed`, or `failed`, plus `interactionId` when a human interaction changes the state. A node can report multiple `running` and `completed` events during one turn. Clients use the last status and process Durable replay in the original order after reconnecting. These messages are streamed outside conversation history.
 
 When `stream=false`, the in-process provider buffers ordinary output until completion but forwards human-interaction control messages immediately. The distributed provider rejects non-streaming execution because a durable buffer across multiple human-interaction segments has no defined compatibility contract.
 
@@ -146,7 +155,7 @@ Distributed execution is at-least-once, not exactly-once. A Tool with external s
 
 ## Agentflow checkpoint branches
 
-Checkpoint markers emit visible `agentflow-checkpoint` messages and persist occurrence metadata. `GetAgentflowCheckpoints` reports whether each occurrence is still resumable. `ResumeCheckpointCommand` validates the authenticated user, the configured Project and conversation (through the conversation's saved `contextId`), Agentflow ID, definition fingerprint, and snapshot before removing history after the saved boundary and starting the new branch. In-process occurrences require the original runtime to remain alive; distributed occurrences survive reconnects and Server restarts.
+Checkpoint markers emit visible `agentflow-checkpoint` messages and persist occurrence metadata. `GetAgentflowCheckpoints` reports whether each occurrence is still resumable. A checkpoint is available when its runtime version is current, its source Turn has a revision snapshot, and the pinned definitions and referenced Agents remain available. Durable checkpoints also require the manifest to contain the same root revision and dependencies as the source Turn. `ResumeCheckpointCommand` validates the authenticated user, the configured Project and conversation (through the conversation's saved `contextId`), Agentflow ID, revisions, and snapshot before removing history after the saved boundary and starting the new branch. The branch keeps the source Turn's root and nested revisions. In-process occurrences require the original runtime to remain alive. Distributed occurrences survive reconnects and Server restarts.
 
 ## Client input queue
 

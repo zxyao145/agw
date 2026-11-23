@@ -38,6 +38,11 @@ public sealed record DurableExecutionManifest
     /// </summary>
     public required AgentRuntimeType AgentType { get; init; }
 
+    public int AgentflowRevision { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<AgentflowDependencyRevision>? AgentflowDependencies { get; init; }
+
     /// <summary>
     /// 获取首个执行分段消费的原始用户输入。
     /// </summary>

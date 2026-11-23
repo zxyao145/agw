@@ -12,8 +12,9 @@ internal sealed class AgentflowBlockBuildContext
     /// </summary>
     public AgentflowBlockBuildContext(
         Guid agentflowId,
+        int agentflowRevision,
         AgentflowNode blockNode,
-        IReadOnlyDictionary<string, AgentflowNode> nodeMap,
+        IReadOnlyList<AgentflowBlockMember> members,
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
         IReadOnlyDictionary<string, EngineKind> nodeEngineKinds,
         IReadOnlyDictionary<string, AgentflowNodeResultOptions> nodeResultOptions,
@@ -24,8 +25,9 @@ internal sealed class AgentflowBlockBuildContext
     )
     {
         AgentflowId = agentflowId;
+        AgentflowRevision = agentflowRevision;
         BlockNode = blockNode;
-        NodeMap = nodeMap;
+        Members = members;
         NodeIdToAgent = nodeIdToAgent;
         NodeEngineKinds = nodeEngineKinds;
         NodeResultOptions = nodeResultOptions;
@@ -37,9 +39,11 @@ internal sealed class AgentflowBlockBuildContext
 
     public Guid AgentflowId { get; }
 
+    public int AgentflowRevision { get; }
+
     public AgentflowNode BlockNode { get; }
 
-    public IReadOnlyDictionary<string, AgentflowNode> NodeMap { get; }
+    public IReadOnlyList<AgentflowBlockMember> Members { get; }
 
     public IReadOnlyDictionary<string, AIAgent> NodeIdToAgent { get; }
 
@@ -54,29 +58,4 @@ internal sealed class AgentflowBlockBuildContext
     public AgentflowSummaryContext? SummaryContext { get; }
 
     public AIAgentHostOptions AgentHostOptions { get; }
-}
-
-internal sealed record AgentflowBlockConfig
-{
-    public string[]? ParticipantNodeIds { get; init; }
-
-    public string? ManagerNodeId { get; init; }
-
-    public int? MaxRounds { get; init; }
-
-    public int? MaxStalls { get; init; }
-
-    public int? MaxResets { get; init; }
-
-    public bool? RequirePlanSignoff { get; init; }
-
-    public string? HandoffInstructions { get; init; }
-
-    public bool? EnableReturnToPrevious { get; init; }
-
-    public bool? Autonomous { get; init; }
-
-    public int? AutonomousTurnLimit { get; init; }
-
-    public string? ContinuationPrompt { get; init; }
 }

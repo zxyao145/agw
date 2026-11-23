@@ -77,6 +77,29 @@ public class ResultOnlyMessageSinkTests
     }
 
     [Fact]
+    public async Task WriteAsync_AgentflowNodeStatusMessage_IsDropped()
+    {
+        var inner = new CapturingSink();
+        var sink = new ResultOnlyMessageSink(inner);
+        var message = new AgwMessage(
+            Guid.CreateVersion7().ToString("D"),
+            Agw.Shared.Constants.DefaultAgentAuthor,
+            AiRole.System,
+            [],
+            new AdditionalPropertiesDictionary
+            {
+                ["type"] = AgwMessageTypes.AgentflowNodeStatus,
+                ["nodeId"] = "node",
+                ["status"] = AgwAgentflowNodeStatus.Running,
+            }
+        );
+
+        await sink.WriteAsync(message, TestContext.Current.CancellationToken);
+
+        Assert.Empty(inner.Messages);
+    }
+
+    [Fact]
     public async Task Wrap_WithoutResultOnly_ForwardsEveryMessage()
     {
         var inner = new CapturingSink();

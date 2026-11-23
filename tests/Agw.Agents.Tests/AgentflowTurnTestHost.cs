@@ -20,6 +20,8 @@ namespace Agw.Agents.Tests;
 /// </summary>
 internal sealed class AgentflowTurnTestHost
 {
+    internal static AgentflowRevisionSnapshot FirstRevision { get; } = new(1, []);
+
     public AgentflowTurnTestHost(AgentflowRuntimeFactory factory, AgentflowTurnExecutor executor)
     {
         Factory = factory;
@@ -49,7 +51,8 @@ internal sealed class AgentflowTurnTestHost
         Guid? taskId = null,
         IInteractionHandler? interactionHandler = null,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
-        Guid? conversationId = null
+        Guid? conversationId = null,
+        AgentflowRevisionSnapshot? snapshot = null
     )
     {
         var task = CreateTask(projectId, contextId, taskId, conversationId);
@@ -62,7 +65,10 @@ internal sealed class AgentflowTurnTestHost
         await foreach (
             var message in RunAsync(
                 runtime,
-                new TurnInput(AgentflowRuntimeFactory.CreateUserInput(input)),
+                new TurnInput(AgentflowRuntimeFactory.CreateUserInput(input))
+                {
+                    AgentflowSnapshot = snapshot ?? FirstRevision,
+                },
                 interactionHandler,
                 cancellationToken
             )
@@ -96,7 +102,7 @@ internal sealed class AgentflowTurnTestHost
         await foreach (
             var message in RunAsync(
                 runtime,
-                new TurnInput(AgentflowRuntimeFactory.CreateUserInput(input)),
+                new TurnInput(AgentflowRuntimeFactory.CreateUserInput(input)) { AgentflowSnapshot = FirstRevision },
                 new UnattendedInteractionHandler(),
                 cancellationToken
             )
@@ -111,7 +117,8 @@ internal sealed class AgentflowTurnTestHost
         AgentflowRuntime runtime,
         TurnInput input,
         IInteractionHandler? interactionHandler,
-        [EnumeratorCancellation] CancellationToken cancellationToken
+        [EnumeratorCancellation] CancellationToken cancellationToken,
+        Guid? turnId = null
     )
     {
         var parent = ExecutionScope.Current;
@@ -124,7 +131,7 @@ internal sealed class AgentflowTurnTestHost
             Generation = runtime.Task.Generation,
             WorkspaceSnapshot =
                 parent?.WorkspaceSnapshot ?? new ProjectWorkspaceSnapshot("/workspace", [], "fingerprint"),
-            TurnId = Guid.CreateVersion7(),
+            TurnId = turnId ?? Guid.CreateVersion7(),
             TurnTargetId = runtime.AgentflowId,
             RuntimeType = AgentRuntimeType.Agentflow,
             PermissionMode = parent?.Context.PermissionMode,
@@ -156,13 +163,11 @@ internal sealed class AgentflowTurnTestHost
         CancellationToken cancellationToken
     ) => Executor.ExecuteDurableSegmentInScopeAsync(manifest, input, sink, cancellationToken);
 
-    public Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default) =>
-        Factory.GetMermaidAsync(agentflowId, cancellationToken);
-
     public Task<AgentflowWorkflowLease?> CreateAiWorkflow(
         Guid agentflowId,
+        AgentflowRevisionSnapshot snapshot,
         CancellationToken cancellationToken = default
-    ) => Factory.CreateAiWorkflow(agentflowId, cancellationToken);
+    ) => Factory.CreateAiWorkflow(agentflowId, snapshot.RootRevision, snapshot, cancellationToken);
 
     private static AgentExecutionTask CreateTask(
         Guid? projectId,

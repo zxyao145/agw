@@ -2073,7 +2073,11 @@ public sealed class ExtensionRuntimeTests
             modelProviderReferences,
             skillReferences,
             userInfo,
-            new AgentDeletionCoordinator(dbContext, Agw.Shared.Coordination.InMemoryApplicationLock.Shared),
+            new AgentDeletionCoordinator(
+                dbContext,
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                scope.ServiceProvider.GetRequiredService<IAgentflowRevisionUsageReader>()
+            ),
             Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
             agentServices.GetRequiredService<IA2AAgentCardClient>(),
             TimeProvider.System

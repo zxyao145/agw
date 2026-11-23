@@ -1,110 +1,127 @@
-using Agw.Agents.Contracts.Catalog;
+using Agw.Agents.Definitions.Facades;
+using Agw.Agents.Definitions.Persistence;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Data.Entities.Agents;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
 public partial class AgentflowTurnExecutorTests
 {
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Mermaid_ReadOnlyCompiler_RespectsTargetOwnershipWithoutRuntime(bool owned)
+    [Fact]
+    public async Task GetMermaidAsync_ExplicitRevision_RendersThatRevision()
     {
+        using var database = new TestAgentDatabase();
         var id = Guid.CreateVersion7();
-        var flow = new Agentflow
-        {
-            Id = id,
-            Name = "diagram",
-            CreateBy = "tester",
-        };
-        var nodes = new[]
-        {
-            new AgentflowNode
+        var agentId = Guid.CreateVersion7();
+        var now = DateTimeOffset.UnixEpoch;
+        database.Context.Agentflows.Add(
+            new Agentflow
             {
-                AgentflowId = id,
-                NodeId = "input",
-                Kind = AgentflowNodeKind.Input,
-            },
-            new AgentflowNode
-            {
-                AgentflowId = id,
-                NodeId = "worker",
-                Name = "Worker",
-                Kind = AgentflowNodeKind.Agent,
-                RelateId = Guid.CreateVersion7(),
-            },
-            new AgentflowNode
-            {
-                AgentflowId = id,
-                NodeId = "output",
-                Kind = AgentflowNodeKind.Output,
-            },
-        };
-        var edges = new[]
-        {
-            new AgentflowEdge
-            {
-                AgentflowId = id,
-                EdgeId = "first",
-                SourceNodeId = "input",
-                TargetNodeId = "worker",
-            },
-            new AgentflowEdge
-            {
-                AgentflowId = id,
-                EdgeId = "last",
-                SourceNodeId = "worker",
-                TargetNodeId = "output",
-            },
-        };
-        var definitions = new TestAgentflowDefinitionReader(
-            new TestRepository<Agentflow>([flow], item => item.Id),
-            new TestRepository<AgentflowNode>(nodes.ToList(), item => (item.AgentflowId, item.NodeId)),
-            new TestRepository<AgentflowEdge>(edges.ToList(), item => (item.AgentflowId, item.EdgeId))
+                Id = id,
+                Name = "diagram",
+                LatestRevision = 2,
+                PublishedRevision = 1,
+                CreateBy = "tester",
+                CreateTime = now,
+            }
         );
-        var provider = new AgentflowMermaidProvider(definitions, new DiagramCatalog(owned));
-        var diagram = await provider.GetMermaidAsync(id, TestContext.Current.CancellationToken);
-        if (!owned)
-            Assert.Null(diagram);
-        else
+        database.Context.AgentflowRevisions.AddRange(
+            new AgentflowRevision
+            {
+                AgentflowId = id,
+                Revision = 1,
+                CreateBy = "tester",
+                CreateTime = now,
+            },
+            new AgentflowRevision
+            {
+                AgentflowId = id,
+                Revision = 2,
+                CreateBy = "tester",
+                CreateTime = now,
+            }
+        );
+        database.Context.Agents.Add(
+            new Agent
+            {
+                Id = agentId,
+                Name = "worker",
+                DisplayName = "Worker",
+                Type = AgentType.System,
+                CreateBy = "tester",
+                CreateTime = now,
+            }
+        );
+        foreach (var revision in new[] { 1, 2 })
         {
-            Assert.NotNull(diagram);
-            Assert.Contains("worker", diagram, StringComparison.OrdinalIgnoreCase);
+            var workerNodeId = $"worker-{revision}";
+            var workerName = revision == 1 ? "Revision One" : "Revision Two";
+            database.Context.AgentflowNodes.AddRange(
+                new AgentflowNode
+                {
+                    AgentflowId = id,
+                    AgentflowRevision = revision,
+                    CreateBy = "tester",
+                    NodeId = "input",
+                    Kind = AgentflowNodeKind.Input,
+                },
+                new AgentflowNode
+                {
+                    AgentflowId = id,
+                    AgentflowRevision = revision,
+                    CreateBy = "tester",
+                    NodeId = workerNodeId,
+                    Name = workerName,
+                    Kind = AgentflowNodeKind.Agent,
+                    RelateId = agentId,
+                },
+                new AgentflowNode
+                {
+                    AgentflowId = id,
+                    AgentflowRevision = revision,
+                    CreateBy = "tester",
+                    NodeId = "output",
+                    Kind = AgentflowNodeKind.Output,
+                }
+            );
+            database.Context.AgentflowEdges.AddRange(
+                new AgentflowEdge
+                {
+                    AgentflowId = id,
+                    AgentflowRevision = revision,
+                    CreateBy = "tester",
+                    EdgeId = "first",
+                    SourceNodeId = "input",
+                    TargetNodeId = workerNodeId,
+                },
+                new AgentflowEdge
+                {
+                    AgentflowId = id,
+                    AgentflowRevision = revision,
+                    CreateBy = "tester",
+                    EdgeId = "last",
+                    SourceNodeId = workerNodeId,
+                    TargetNodeId = "output",
+                }
+            );
         }
-    }
+        await database.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-    private sealed class DiagramCatalog : IAgentCatalogFacade
-    {
-        private readonly bool _owned;
+        var userInfo = new TestUserInfoService();
+        var definitions = new AgentflowDefinitionReader(database.Context);
+        var catalog = new AgentCatalogFacade(database.Context, userInfo);
+        var provider = new AgentflowMermaidProvider(
+            definitions,
+            catalog,
+            NullLogger<AgentflowWorkflowCompiler>.Instance
+        );
 
-        public DiagramCatalog(bool owned)
-        {
-            _owned = owned;
-        }
+        var diagram = await provider.GetMermaidAsync(id, 2, TestContext.Current.CancellationToken);
 
-        public Task<bool> IsOwnedTargetAsync(
-            AgentRuntimeType type,
-            Guid id,
-            string ownerUserId,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult(_owned);
-
-        public Task<IReadOnlyList<AgentDescriptor>> ListDiscoverableAsync(
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public Task<AgentDescriptor?> FindDiscoverableByNameAsync(
-            string name,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public Task<IReadOnlySet<Guid>> FilterExistingMcpServerIdsAsync(
-            IReadOnlyCollection<Guid> serverIds,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+        Assert.NotNull(diagram);
+        Assert.Contains("worker-2", diagram, StringComparison.Ordinal);
+        Assert.DoesNotContain("worker-1", diagram, StringComparison.Ordinal);
     }
 }

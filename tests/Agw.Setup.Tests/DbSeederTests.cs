@@ -13,19 +13,24 @@ using Agw.Providers.Contracts;
 using Agw.Settings.Application;
 using Agw.Shared;
 using Agw.Shared.Configuration;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
 using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
+using Agw.Tests;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 using Xunit;
 
 namespace Agw.Setup.Tests;
@@ -41,6 +46,8 @@ public class DbSeederTests : IDisposable
     private static readonly Guid JobManagementSkillId = Guid.Parse("11111111-1111-1111-8888-000000000002");
     private static readonly Guid PiAgentId = Guid.Parse("11111111-1111-1111-2222-000000000004");
     private readonly IDisposable _systemScope = UserInfoUtil.PushSystemScope();
+
+    public static bool PostgresEnabled => IsolatedTestConnections.Postgres is not null;
 
     public void Dispose() => _systemScope.Dispose();
 
@@ -87,6 +94,7 @@ public class DbSeederTests : IDisposable
                 CreateBy = "user-a",
             };
             context.Skills.Add(userSkill);
+            AddBuiltInAgentReferences(context);
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             context.ChangeTracker.Clear();
             var seeder = new DbSeeder(
@@ -103,19 +111,27 @@ public class DbSeederTests : IDisposable
             await seeder.MaintainSystemDataAsync();
             context.ChangeTracker.Clear();
 
-            var builtIn = await context.Skills.SingleAsync(skill => skill.Id == registration.Id);
+            var builtIn = await context.Skills.SingleAsync(
+                skill => skill.Id == registration.Id,
+                TestContext.Current.CancellationToken
+            );
             Assert.Equal(registration.Name, builtIn.Name);
             Assert.Equal(registration.Description, builtIn.Description);
             Assert.Equal(SkillKind.BuiltIn, builtIn.Kind);
             Assert.Equal(
                 "User content",
-                (await context.Skills.SingleAsync(skill => skill.Id == userSkill.Id)).Description
+                (
+                    await context.Skills.SingleAsync(
+                        skill => skill.Id == userSkill.Id,
+                        TestContext.Current.CancellationToken
+                    )
+                ).Description
             );
-            Assert.Equal(2, await context.Skills.CountAsync());
-            Assert.Empty(await context.Agents.ToListAsync());
-            Assert.Empty(await context.Agentflows.ToListAsync());
-            Assert.Empty(await context.Projects.ToListAsync());
-            Assert.Empty(await context.Settings.ToListAsync());
+            Assert.Equal(2, await context.Skills.CountAsync(TestContext.Current.CancellationToken));
+            Assert.Equal(3, await context.Agents.CountAsync(TestContext.Current.CancellationToken));
+            Assert.Single(await context.Agentflows.ToListAsync(TestContext.Current.CancellationToken));
+            Assert.Empty(await context.Projects.ToListAsync(TestContext.Current.CancellationToken));
+            Assert.Empty(await context.Settings.ToListAsync(TestContext.Current.CancellationToken));
             Assert.False(Directory.Exists(Path.Combine(paths.SkillsDirectory, "xhs-explore")));
         }
         finally
@@ -274,23 +290,355 @@ public class DbSeederTests : IDisposable
             Assert.Contains("\"stdout\": subprocess.DEVNULL", skillCliContent, StringComparison.Ordinal);
             Assert.Contains("\"stderr\": subprocess.DEVNULL", skillCliContent, StringComparison.Ordinal);
 
-            var agentflow = await context
-                .Agentflows.Include(x => x.Nodes)
-                .Include(x => x.Edges)
-                .SingleAsync(x => x.Id == AgentflowId, TestContext.Current.CancellationToken);
+            var agentflow = await context.Agentflows.SingleAsync(
+                item => item.Id == AgentflowId,
+                TestContext.Current.CancellationToken
+            );
+            var nodes = await context
+                .AgentflowNodes.Where(node => node.AgentflowId == AgentflowId && node.AgentflowRevision == 1)
+                .ToArrayAsync(TestContext.Current.CancellationToken);
+            var edges = await context
+                .AgentflowEdges.Where(edge => edge.AgentflowId == AgentflowId && edge.AgentflowRevision == 1)
+                .ToArrayAsync(TestContext.Current.CancellationToken);
             Assert.Equal("Xiaohongshu Address Extraction", agentflow.Name);
+            Assert.Equal(1, agentflow.LatestRevision);
+            Assert.Equal(1, agentflow.PublishedRevision);
             Assert.Equal(Constants.AdminUserId, agentflow.CreateBy);
             Assert.Equal(Constants.AdminUserId, agentflow.UpdateBy);
-            Assert.Equal(4, agentflow.Nodes.Count);
-            Assert.Equal(3, agentflow.Edges.Count);
-            Assert.All(agentflow.Nodes, node => Assert.Equal(Constants.AdminUserId, node.CreateBy));
-            Assert.All(agentflow.Nodes, node => Assert.Equal(Constants.AdminUserId, node.UpdateBy));
-            Assert.All(agentflow.Edges, edge => Assert.Equal(Constants.AdminUserId, edge.CreateBy));
-            Assert.All(agentflow.Edges, edge => Assert.Equal(Constants.AdminUserId, edge.UpdateBy));
-            Assert.Contains(agentflow.Nodes, node => node.Kind == AgentflowNodeKind.Input);
-            Assert.Contains(agentflow.Nodes, node => node.RelateId == GeneralAgentId);
-            Assert.Contains(agentflow.Nodes, node => node.RelateId == LocationExtractorAgentId);
-            Assert.Contains(agentflow.Nodes, node => node.RelateId == AmapPoiSearchAgentId);
+            Assert.Equal(4, nodes.Length);
+            Assert.Equal(3, edges.Length);
+            Assert.Equal(
+                1,
+                await context.AgentflowRevisions.CountAsync(
+                    revision => revision.AgentflowId == AgentflowId,
+                    TestContext.Current.CancellationToken
+                )
+            );
+            Assert.All(nodes, node => Assert.Equal(1, node.AgentflowRevision));
+            Assert.Equal(
+                AgentflowRoutingStrategy.FanOut,
+                nodes.Single(node => node.Kind == AgentflowNodeKind.Input).RoutingStrategy
+            );
+            Assert.All(nodes, node => Assert.Equal(Constants.AdminUserId, node.CreateBy));
+            Assert.All(nodes, node => Assert.Equal(Constants.AdminUserId, node.UpdateBy));
+            Assert.All(edges, edge => Assert.Equal(Constants.AdminUserId, edge.CreateBy));
+            Assert.All(edges, edge => Assert.Equal(Constants.AdminUserId, edge.UpdateBy));
+            Assert.Contains(nodes, node => node.Kind == AgentflowNodeKind.Input);
+            Assert.Contains(nodes, node => node.RelateId == GeneralAgentId);
+            Assert.Contains(nodes, node => node.RelateId == LocationExtractorAgentId);
+            Assert.Contains(nodes, node => node.RelateId == AmapPoiSearchAgentId);
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public Task MaintainSystemDataAsync_BuiltinMissing_CreatesPublishedRevisionOne() =>
+        VerifySqliteAgentflowMaintenanceAsync(migrate: false);
+
+    [Fact]
+    public Task MaintainSystemDataAsync_InitializedSqliteAfterMigration_SeedsBuiltinPublishedRevisionOne() =>
+        VerifySqliteAgentflowMaintenanceAsync(migrate: true);
+
+    [Fact(SkipUnless = nameof(PostgresEnabled), Skip = "Requires an isolated PostgreSQL test server.")]
+    public async Task MaintainSystemDataAsync_InitializedPostgresAfterMigration_SeedsBuiltinPublishedRevisionOne()
+    {
+        var admin = new NpgsqlConnectionStringBuilder(IsolatedTestConnections.Postgres) { Pooling = false };
+        var database = $"agw_builtin_agentflow_test_{Guid.NewGuid():N}";
+        var target = new NpgsqlConnectionStringBuilder(admin.ConnectionString) { Database = database };
+        var paths = CreatePaths();
+        try
+        {
+            var options = new DbContextOptionsBuilder<AgwDbContext>();
+            AgwDbContextOptionsConfigurator.Configure(options, DatabaseProvider.Postgres, target.ConnectionString);
+            await using var context = new AgwDbContext(options.Options);
+            await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
+            await VerifyAgentflowMaintenanceAsync(context, paths);
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+            await using var connection = new NpgsqlConnection(admin.ConnectionString);
+            await connection.OpenAsync(CancellationToken.None);
+            await using var command = new NpgsqlCommand(
+                $"DROP DATABASE IF EXISTS \"{database}\" WITH (FORCE)",
+                connection
+            );
+            await command.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+    }
+
+    private static async Task VerifySqliteAgentflowMaintenanceAsync(bool migrate)
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var options = new DbContextOptionsBuilder<AgwDbContext>();
+            var connectionString = $"Data Source={Path.Combine(paths.Root, "builtin-maintenance.db")}";
+            AgwDbContextOptionsConfigurator.Configure(options, DatabaseProvider.Sqlite, connectionString);
+            await using var context = new AgwDbContext(options.Options);
+            var token = TestContext.Current.CancellationToken;
+            if (migrate)
+                await context.Database.MigrateAsync(token);
+            else
+                await context.Database.EnsureCreatedAsync(token);
+            await VerifyAgentflowMaintenanceAsync(context, paths);
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    private static async Task VerifyAgentflowMaintenanceAsync(AgwDbContext context, AgwDataPaths paths)
+    {
+        var token = TestContext.Current.CancellationToken;
+        var seeder = new DbSeeder(
+            context,
+            NullLogger<DbSeeder>.Instance,
+            TimeProvider.System,
+            paths,
+            CreateWorkspaceAccess(paths),
+            CreateAuthentication(context),
+            [new TestSkillRegistration()]
+        );
+        await seeder.SeedAsync();
+        var job = NewAgentflowSubscription(EventManagedBy.Job);
+        var subscription = NewAgentflowSubscription(EventManagedBy.User);
+        context.EventSubscriptions.AddRange(job, subscription);
+        await context.SaveChangesAsync(token);
+        await DeleteBuiltInAgentflowAsync(context, token);
+
+        await seeder.MaintainSystemDataAsync();
+
+        await AssertBuiltInAgentflowAsync(context, token);
+        var references = await context
+            .EventSubscriptions.Where(item => item.Id == job.Id || item.Id == subscription.Id)
+            .Select(item => item.AgentId)
+            .ToArrayAsync(token);
+        Assert.Equal(2, references.Length);
+        Assert.All(references, reference => Assert.Equal(AgentflowId, reference));
+    }
+
+    private static EventSubscription NewAgentflowSubscription(string managedBy) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            Name = $"Agentflow {managedBy} target",
+            Enabled = true,
+            SourceIdsJson = "[]",
+            EventTypesJson = "[]",
+            TargetKind = EventSubscriptionTargetKind.Agentflow,
+            AgentId = AgentflowId,
+            ManagedBy = managedBy,
+            ManagedKey = managedBy == EventManagedBy.Job ? Guid.CreateVersion7().ToString("D") : null,
+            CreateBy = Constants.AdminUserId,
+        };
+
+    private static async Task DeleteBuiltInAgentflowAsync(AgwDbContext context, CancellationToken token)
+    {
+        await context.AgentflowEdges.Where(edge => edge.AgentflowId == AgentflowId).ExecuteDeleteAsync(token);
+        await context.AgentflowNodes.Where(node => node.AgentflowId == AgentflowId).ExecuteDeleteAsync(token);
+        await context
+            .AgentflowBlockMembers.Where(member => member.AgentflowId == AgentflowId)
+            .ExecuteDeleteAsync(token);
+        await context
+            .AgentflowRevisions.Where(revision => revision.AgentflowId == AgentflowId)
+            .ExecuteDeleteAsync(token);
+        await context.Agentflows.Where(flow => flow.Id == AgentflowId).ExecuteDeleteAsync(token);
+        context.ChangeTracker.Clear();
+    }
+
+    private static async Task AssertBuiltInAgentflowAsync(AgwDbContext context, CancellationToken token)
+    {
+        var restored = await context.Agentflows.SingleAsync(flow => flow.Id == AgentflowId, token);
+        Assert.Equal(1, restored.PublishedRevision);
+        Assert.Equal(1, restored.LatestRevision);
+        Assert.Equal(Constants.AdminUserId, restored.CreateBy);
+        Assert.Equal(
+            1,
+            await context.AgentflowRevisions.CountAsync(revision => revision.AgentflowId == AgentflowId, token)
+        );
+        Assert.Equal(4, await context.AgentflowNodes.CountAsync(node => node.AgentflowId == AgentflowId, token));
+        Assert.Equal(3, await context.AgentflowEdges.CountAsync(edge => edge.AgentflowId == AgentflowId, token));
+        var inputRoutingStrategy = await context
+            .AgentflowNodes.Where(node => node.AgentflowId == AgentflowId && node.Kind == AgentflowNodeKind.Input)
+            .Select(node => node.RoutingStrategy)
+            .SingleAsync(token);
+        Assert.Equal(AgentflowRoutingStrategy.FanOut, inputRoutingStrategy);
+    }
+
+    [Fact]
+    public async Task MaintainSystemDataAsync_RepeatedStartup_DoesNotDuplicateOrResetBuiltinRevisions()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(paths.Root, "builtin-revisions.db")}")
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            var seeder = new DbSeeder(
+                context,
+                NullLogger<DbSeeder>.Instance,
+                TimeProvider.System,
+                paths,
+                CreateWorkspaceAccess(paths),
+                CreateAuthentication(context),
+                [new TestSkillRegistration()]
+            );
+            var token = TestContext.Current.CancellationToken;
+            await seeder.SeedAsync();
+
+            var now = TimeProvider.System.GetUtcNow();
+            context.AgentflowRevisions.Add(
+                new AgentflowRevision
+                {
+                    AgentflowId = AgentflowId,
+                    Revision = 2,
+                    CreateBy = Constants.AdminUserId,
+                    CreateTime = now,
+                    UpdateBy = Constants.AdminUserId,
+                    UpdateTime = now,
+                }
+            );
+            context.AgentflowNodes.Add(
+                new AgentflowNode
+                {
+                    AgentflowId = AgentflowId,
+                    AgentflowRevision = 2,
+                    NodeId = "revision-2-input",
+                    Kind = AgentflowNodeKind.Input,
+                    Name = "Input",
+                    ConfigJson = "{}",
+                    CreateBy = Constants.AdminUserId,
+                    CreateTime = now,
+                    UpdateBy = Constants.AdminUserId,
+                    UpdateTime = now,
+                }
+            );
+            var flow = await context.Agentflows.SingleAsync(item => item.Id == AgentflowId, token);
+            flow.LatestRevision = 2;
+            flow.PublishedRevision = 2;
+            flow.Enable = false;
+            await context.SaveChangesAsync(token);
+            context.ChangeTracker.Clear();
+
+            var revisionCount = await context.AgentflowRevisions.CountAsync(token);
+            var nodeCount = await context.AgentflowNodes.CountAsync(token);
+            var edgeCount = await context.AgentflowEdges.CountAsync(token);
+            await seeder.MaintainSystemDataAsync();
+            await seeder.MaintainSystemDataAsync();
+            context.ChangeTracker.Clear();
+
+            var maintained = await context.Agentflows.SingleAsync(item => item.Id == AgentflowId, token);
+            Assert.Equal(2, maintained.LatestRevision);
+            Assert.Equal(2, maintained.PublishedRevision);
+            Assert.False(maintained.Enable);
+            Assert.Equal(revisionCount, await context.AgentflowRevisions.CountAsync(token));
+            Assert.Equal(nodeCount, await context.AgentflowNodes.CountAsync(token));
+            Assert.Equal(edgeCount, await context.AgentflowEdges.CountAsync(token));
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task MaintainSystemDataAsync_BuiltinIdentityConflict_FailsBeforeServing()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(paths.Root, "builtin-owner.db")}")
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            var seeder = new DbSeeder(
+                context,
+                NullLogger<DbSeeder>.Instance,
+                TimeProvider.System,
+                paths,
+                CreateWorkspaceAccess(paths),
+                CreateAuthentication(context),
+                [new TestSkillRegistration()]
+            );
+            var token = TestContext.Current.CancellationToken;
+            await seeder.SeedAsync();
+            await context
+                .Agentflows.Where(item => item.Id == AgentflowId)
+                .ExecuteUpdateAsync(update => update.SetProperty(item => item.CreateBy, "another-user"), token);
+            context.ChangeTracker.Clear();
+            var revisionCount = await context.AgentflowRevisions.CountAsync(token);
+            var nodeCount = await context.AgentflowNodes.CountAsync(token);
+            var edgeCount = await context.AgentflowEdges.CountAsync(token);
+
+            var exception = await Assert.ThrowsAsync<AgwException>(() => seeder.MaintainSystemDataAsync());
+
+            Assert.Equal(ErrorCodes.AgentflowDefinitionInvalid.Code, exception.Code);
+            Assert.Contains(AgentflowId.ToString(), exception.Message, StringComparison.Ordinal);
+            Assert.Equal(
+                "another-user",
+                await context
+                    .Agentflows.Where(item => item.Id == AgentflowId)
+                    .Select(item => item.CreateBy)
+                    .SingleAsync(token)
+            );
+            Assert.Equal(revisionCount, await context.AgentflowRevisions.CountAsync(token));
+            Assert.Equal(nodeCount, await context.AgentflowNodes.CountAsync(token));
+            Assert.Equal(edgeCount, await context.AgentflowEdges.CountAsync(token));
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task MaintainSystemDataAsync_BuiltinAgentMissing_FailsBeforePublishing()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(paths.Root, "builtin-agent-missing.db")}")
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            var seeder = new DbSeeder(
+                context,
+                NullLogger<DbSeeder>.Instance,
+                TimeProvider.System,
+                paths,
+                CreateWorkspaceAccess(paths),
+                CreateAuthentication(context),
+                [new TestSkillRegistration()]
+            );
+            var token = TestContext.Current.CancellationToken;
+            await seeder.SeedAsync();
+            await context.AgentflowEdges.Where(item => item.AgentflowId == AgentflowId).ExecuteDeleteAsync(token);
+            await context.AgentflowNodes.Where(item => item.AgentflowId == AgentflowId).ExecuteDeleteAsync(token);
+            await context.AgentflowRevisions.Where(item => item.AgentflowId == AgentflowId).ExecuteDeleteAsync(token);
+            await context.Agentflows.Where(item => item.Id == AgentflowId).ExecuteDeleteAsync(token);
+            await context.Agents.Where(item => item.Id == LocationExtractorAgentId).ExecuteDeleteAsync(token);
+            context.ChangeTracker.Clear();
+
+            var exception = await Assert.ThrowsAsync<AgwException>(() => seeder.MaintainSystemDataAsync());
+
+            Assert.Equal(ErrorCodes.AgentflowDefinitionInvalid.Code, exception.Code);
+            Assert.Contains(LocationExtractorAgentId.ToString(), exception.Message, StringComparison.Ordinal);
+            Assert.Empty(await context.Agentflows.ToListAsync(token));
+            Assert.Empty(await context.AgentflowRevisions.ToListAsync(token));
+            Assert.Empty(await context.AgentflowNodes.ToListAsync(token));
+            Assert.Empty(await context.AgentflowEdges.ToListAsync(token));
         }
         finally
         {
@@ -597,6 +945,36 @@ public class DbSeederTests : IDisposable
         {
             Directory.Delete(paths.Root, recursive: true);
         }
+    }
+
+    private static void AddBuiltInAgentReferences(AgwDbContext context)
+    {
+        context.Agents.AddRange(
+            new Agent
+            {
+                Id = GeneralAgentId,
+                Name = "general-agent",
+                DisplayName = "General Agent",
+                Type = AgentType.System,
+                CreateBy = Constants.AdminUserId,
+            },
+            new Agent
+            {
+                Id = LocationExtractorAgentId,
+                Name = "location-extractor",
+                DisplayName = "Location Extractor",
+                Type = AgentType.System,
+                CreateBy = Constants.AdminUserId,
+            },
+            new Agent
+            {
+                Id = AmapPoiSearchAgentId,
+                Name = "amap-poi-search",
+                DisplayName = "Amap POI Search",
+                Type = AgentType.System,
+                CreateBy = Constants.AdminUserId,
+            }
+        );
     }
 
     private static List<ToolValueObject> CreateGeneralAgentTools(bool includesFileAccess)

@@ -1,4 +1,5 @@
 using System.Reflection;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Microsoft.Agents.AI;
@@ -190,19 +191,22 @@ public class AgentflowMessageMapperTests
 
     [Theory]
     [InlineData(" accepted ", "accepted")]
-    [InlineData(" ", "")]
-    [InlineData(null, "")]
+    [InlineData(" ", "Approve")]
+    [InlineData(null, "Approve")]
     public void CreateHumanGateResponseMessages_AppendsHumanReplyWithoutMutatingRequest(string? text, string expected)
     {
         var original = new ChatMessage(ChatRole.Assistant, "review");
         var messages = new[] { original };
+        var request = InteractionTestData.Gate("request", choices: [new WorkflowGateChoice("choice-1", "Approve")]);
 
         var result = AgentflowMessageMapper.CreateHumanGateResponseMessages(
             messages,
+            request,
             new WorkflowGateDecision
             {
                 InteractionId = "request",
                 Approved = true,
+                ChoiceId = "choice-1",
                 ResponseText = text,
             }
         );
@@ -213,12 +217,49 @@ public class AgentflowMessageMapperTests
         Assert.Equal(ChatRole.User, result[1].Role);
         Assert.Equal("human", result[1].AuthorName);
         Assert.Equal(expected, result[1].Text);
+        Assert.Equal("choice-1", result[1].AdditionalProperties!["choiceId"]);
+    }
+
+    [Fact]
+    public void CreateHumanGateResponseMessages_EmptyResponseText_UsesChoiceLabel()
+    {
+        var request = InteractionTestData.Gate("request", choices: [new WorkflowGateChoice("choice-1", "Approve")]);
+
+        var result = AgentflowMessageMapper.CreateHumanGateResponseMessages(
+            [],
+            request,
+            new WorkflowGateDecision
+            {
+                InteractionId = "request",
+                Approved = true,
+                ChoiceId = "choice-1",
+            }
+        );
+
+        var reply = Assert.Single(result);
+        Assert.Equal("Approve", reply.Text);
+        Assert.Equal("human", reply.AuthorName);
+        Assert.Equal("choice-1", reply.AdditionalProperties!["choiceId"]);
+    }
+
+    [Fact]
+    public void CreateNodeStatusMessage_WithoutInteraction_OmitsInteractionId()
+    {
+        var message = AgentflowMessageMapper.CreateNodeStatusMessage("node", "running", null, "status");
+
+        Assert.Equal("status", message.MessageId);
+        Assert.Equal(AiRole.System, message.Role);
+        Assert.Empty(message.Contents);
+        Assert.Equal(AgwMessageTypes.AgentflowNodeStatus, message.AdditionalProperties!["type"]);
+        Assert.Equal("node", message.AdditionalProperties["nodeId"]);
+        Assert.Equal(AgwAgentflowNodeStatus.Running, message.AdditionalProperties["status"]);
+        Assert.False(message.AdditionalProperties.ContainsKey("interactionId"));
     }
 
     [Fact]
     public void CreateHumanGateMessages_PreserveProtocolFieldsAndErrors()
     {
-        var request = InteractionTestData.Gate("request", "node", null, "approval", "Approve?", []);
+        var request = InteractionTestData.Gate("request", "node", prompt: "Approve?");
 
         var mapped = InteractionMessageMapper.Create(request, "request-message");
         var rejected = AgentflowMessageMapper.CreateHumanGateRejectedMessage(request, "rejected-message");
@@ -241,8 +282,8 @@ public class AgentflowMessageMapperTests
     [Fact]
     public void ControlMessageMapping_ExplicitIds_ProducesDeterministicPayloads()
     {
-        var request = InteractionTestData.Gate("request", "node", "Node", "approval", "Approve?", []);
-        var node = new AgentflowHumanGateNode("node", "Node", null);
+        var request = InteractionTestData.Gate("request", "node", "Node", prompt: "Approve?");
+        var node = new AgentflowHumanGateNode("node", "Node", new HumanGateOptions(null, [], AllowResponseText: false));
         var tool = new ToolApprovalRequestContent("tool-request", new FunctionCallContent("call", "tool"));
         AgwMessage[] Map() =>
             [

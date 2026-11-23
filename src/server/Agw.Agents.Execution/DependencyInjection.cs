@@ -1,3 +1,4 @@
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agentflows.Observability;
@@ -25,7 +26,6 @@ using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -77,6 +77,7 @@ public static class DependencyInjection
         services.TryAddScoped<ICodexImagePathReader, CodexImagePathReader>();
         services.AddSingleton<IAgentExecutionContextAccessor, AgentExecutionContextAccessor>();
         services.AddScoped<IAgentflowMermaidProvider, AgentflowMermaidProvider>();
+        services.AddScoped<IAgentflowRevisionUsageReader, AgentflowRevisionUsageReader>();
         services.AddSingleton<AgentflowCheckpointStore>();
         if (!registrationOptions.AddRuntime && executionOptions.Provider != ExecutionProvider.Distributed)
             throw new AgwException(

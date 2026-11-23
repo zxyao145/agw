@@ -63,7 +63,10 @@ public sealed record AgentflowNodeExecution(
     string? NodeName,
     int ActivationIndex,
     string ProviderScopeId
-);
+)
+{
+    public string? NodePath { get; init; }
+}
 
 /// <summary>
 /// 读取当前执行数据：MAF 调用链内读取运行选项，其他阶段读取 Host 执行作用域。

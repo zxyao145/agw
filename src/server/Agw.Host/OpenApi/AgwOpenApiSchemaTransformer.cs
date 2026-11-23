@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Text.Json.Serialization;
 using Agw.Shared.Tooling;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
@@ -24,7 +26,15 @@ public sealed class AgwOpenApiSchemaTransformer : IOpenApiSchemaTransformer
             schema.Pattern = null;
         }
 
-        if (type != typeof(ToolValueObject) && typeof(ToolValueObject).IsAssignableFrom(type))
+        var discriminator = type
+            .BaseType?.GetCustomAttribute<JsonPolymorphicAttribute>()
+            ?.TypeDiscriminatorPropertyName;
+        if (discriminator != null)
+        {
+            schema.Required ??= new HashSet<string>();
+            schema.Required.Add(discriminator);
+        }
+        else if (type != typeof(ToolValueObject) && typeof(ToolValueObject).IsAssignableFrom(type))
         {
             schema.Required ??= new HashSet<string>();
             schema.Required.Add("kind");

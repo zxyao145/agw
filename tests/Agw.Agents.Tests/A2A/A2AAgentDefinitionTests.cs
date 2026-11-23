@@ -375,7 +375,11 @@ public sealed class A2AAgentDefinitionTests
                 new ModelProviderReferenceFacade(Db, userInfo),
                 new SkillReferenceFacade(Db, userInfo),
                 userInfo,
-                new AgentDeletionCoordinator(Db, InMemoryApplicationLock.Shared),
+                new AgentDeletionCoordinator(
+                    Db,
+                    InMemoryApplicationLock.Shared,
+                    TurnPersistenceTestKit.CreateRevisionUsageReader(Db)
+                ),
                 _services.GetRequiredService<IA2AAgentCardClient>(),
                 Clock
             );

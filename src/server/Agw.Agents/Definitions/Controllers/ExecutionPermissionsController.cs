@@ -22,6 +22,7 @@ public sealed class ExecutionPermissionsController : ControllerBase
     public async Task<IActionResult> GetAsync(
         [FromQuery] AgentRuntimeType type,
         [FromQuery] Guid id,
-        CancellationToken cancellationToken
-    ) => ApiResult.Ok(await _permissions.GetAsync(type, id, cancellationToken));
+        CancellationToken cancellationToken,
+        [FromQuery] int? agentflowRevision = null
+    ) => ApiResult.Ok(await _permissions.GetAsync(type, id, agentflowRevision, cancellationToken));
 }

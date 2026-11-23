@@ -1,3 +1,5 @@
+using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Microsoft.Agents.AI.Workflows;
 
 namespace Agw.Agents.Execution.Agentflows.Workflows.Builders;
@@ -15,7 +17,7 @@ internal static class GroupChatBlockBuilder
             return null;
         }
 
-        var config = AgentflowBlockBuildSupport.ReadConfig(context.BlockNode);
+        var config = AgentflowDefinitionJson.ReadOptions<GroupChatBlockOptions>(context.BlockNode);
         var maxRounds = Math.Max(1, config.MaxRounds ?? 10);
         var workflow = AgentWorkflowBuilder
             .CreateGroupChatBuilderWith(agents =>

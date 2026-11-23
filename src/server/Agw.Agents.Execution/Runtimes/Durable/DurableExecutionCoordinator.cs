@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Turns;
@@ -205,7 +207,37 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
+        var snapshot = await store.GetAuthorizedAsync(turnId, userId, cancellationToken).ConfigureAwait(false);
+        var permissions = scope.ServiceProvider.GetRequiredService<ExecutionPermissionService>();
+        var agentflowSnapshot = GetPinnedAgentflowSnapshot(snapshot.Manifest);
+        var capabilities = await permissions
+            .GetForTargetAsync(
+                snapshot.Manifest.AgentType,
+                snapshot.Manifest.AgentId,
+                agentflowSnapshot,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        ExecutionPermissionService.Validate(capabilities, mode);
         await store.SetPermissionModeAsync(turnId, userId, mode, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static AgentflowRevisionSnapshot? GetPinnedAgentflowSnapshot(DurableExecutionManifest manifest)
+    {
+        if (manifest.AgentType != AgentRuntimeType.Agentflow)
+        {
+            return null;
+        }
+
+        if (manifest.AgentflowRevision <= 0 || manifest.AgentflowDependencies is null)
+        {
+            throw new AgwException(
+                ErrorCodes.DurableExecutionConflict,
+                "The durable turn does not contain its pinned Agentflow snapshot."
+            );
+        }
+
+        return new AgentflowRevisionSnapshot(manifest.AgentflowRevision, manifest.AgentflowDependencies);
     }
 
     /// <summary>
@@ -316,7 +348,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     /// 原子截断历史并登记新的恢复分支；来源执行必须已经结束。
     /// Atomically truncates history and registers a new resume branch; the source execution must have finished.
     /// </summary>
-    public async Task ResumeCheckpointAsync(
+    public async Task<AgentflowCheckpointSnapshot> ResumeCheckpointAsync(
         Guid occurrenceId,
         Guid resumeTurnId,
         Guid projectId,
@@ -324,7 +356,8 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
         Guid agentflowId,
         string userId,
         CancellationToken cancellationToken,
-        DurableExecutionSettings? permissionSettings = null
+        DurableExecutionSettings? permissionSettings = null,
+        Func<AgentflowRevisionSnapshot, CancellationToken, Task>? validateSnapshot = null
     )
     {
         var checkpointStore =
@@ -333,7 +366,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                 ErrorCodes.DurableExecutionUnavailable,
                 "Agentflow checkpoint services are not configured."
             );
-        await checkpointStore
+        return await checkpointStore
             .PrepareDistributedResumeAsync(
                 occurrenceId,
                 resumeTurnId,
@@ -342,7 +375,8 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                 agentflowId,
                 userId,
                 cancellationToken,
-                permissionSettings
+                permissionSettings,
+                validateSnapshot
             )
             .ConfigureAwait(false);
     }
@@ -1136,10 +1170,26 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     /// 首个 Segment 使用清单中的用户输入；其余 Segment 附带已保存的回答与 Workflow 存档，新恢复分支的首个 Segment 放行清单中的 CheckpointMarker。
     /// The first segment uses the manifest input; later segments carry the saved answers and Workflow checkpoint, and the first segment of a resume branch passes the manifest's CheckpointMarkers.
     /// </summary>
-    private static TurnInput CreateTurnInput(DurableExecutionManifest manifest, DurableExecutionSegmentInput input) =>
-        input.SegmentIndex == 0 && input.ResolvedInteractions.Count == 0
-            ? new TurnInput(manifest.Input)
-            : new TurnInput(manifest.Input)
+    private static TurnInput CreateTurnInput(DurableExecutionManifest manifest, DurableExecutionSegmentInput input)
+    {
+        AgentflowRevisionSnapshot? snapshot = null;
+        if (manifest.AgentType == AgentRuntimeType.Agentflow)
+        {
+            if (manifest.AgentflowDependencies is null)
+            {
+                throw new AgwException(
+                    ErrorCodes.DurableExecutionConflict,
+                    "The execution manifest has no Agentflow revision snapshot."
+                );
+            }
+
+            snapshot = new AgentflowRevisionSnapshot(manifest.AgentflowRevision, manifest.AgentflowDependencies);
+        }
+
+        var turnInput = new TurnInput(manifest.Input) { AgentflowSnapshot = snapshot };
+        return input.SegmentIndex == 0 && input.ResolvedInteractions.Count == 0
+            ? turnInput
+            : turnInput with
             {
                 Resume = new TurnResume
                 {
@@ -1151,6 +1201,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                             : new HashSet<string>(StringComparer.Ordinal),
                 },
             };
+    }
 
     /// <summary>
     /// 受理时写入的输入行：有输入内容的 Turn 以输入消息 ID 作为行 Id。

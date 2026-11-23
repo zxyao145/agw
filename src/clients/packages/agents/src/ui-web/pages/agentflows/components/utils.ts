@@ -1,44 +1,13 @@
-import type { AiMessage } from "@agw/api";
-import type {
-  AgentflowDetailDto,
-  AgentflowEdgeDto,
-  AgentflowNodeDto,
-} from "../../../../types/agentflow";
 import { apiGet } from "@agw/api";
-import {
-  getMessageTextContent,
-  mergeStreamingMessage,
-  mergeStreamingMessagesById,
-} from "@agw/execution-core";
+import type { AgentflowDetailResponse } from "../../../../types/agentflow";
 
-export function getTextContent(message: AiMessage): string {
-  return getMessageTextContent(message);
-}
+export const AGENTFLOW_RUN_PROJECT_ID = "11111111-1111-1111-1111-000000000001";
 
-export function mergeTextContent(existing: AiMessage, incoming: AiMessage): void {
-  const merged = mergeStreamingMessage([existing], incoming);
-  if (merged.length > 0) {
-    existing.contents = merged[0].contents;
-  }
-}
-
-export function mergeMessages(messages: AiMessage[]): AiMessage[] {
-  return mergeStreamingMessagesById(messages);
-}
-
-export async function fetchAgentflowDetails(id: string): Promise<AgentflowDetailDto> {
-  const [nodes, edges] = await Promise.all([
-    apiGet("/api/agentflows/{id}/nodes", {
-      params: { path: { id } },
-    }),
-    apiGet("/api/agentflows/{id}/edges", {
-      params: { path: { id } },
-    }),
-  ]);
-
-  return {
-    id,
-    nodes: (nodes as unknown as AgentflowNodeDto[]) || [],
-    edges: (edges as unknown as AgentflowEdgeDto[]) || [],
-  } as AgentflowDetailDto;
+export async function fetchAgentflowDetails(
+  id: string,
+  revision: number,
+): Promise<AgentflowDetailResponse> {
+  const detail = await apiGet("/api/agentflows/detail", { params: { query: { id, revision } } });
+  if (!detail) throw new Error("Agentflow details were not returned.");
+  return detail;
 }

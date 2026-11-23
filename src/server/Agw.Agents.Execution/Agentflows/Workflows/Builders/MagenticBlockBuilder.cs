@@ -1,3 +1,5 @@
+using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Microsoft.Agents.AI.Workflows;
 
 namespace Agw.Agents.Execution.Agentflows.Workflows.Builders;
@@ -15,29 +17,11 @@ internal static class MagenticBlockBuilder
             return null;
         }
 
-        var config = AgentflowBlockBuildSupport.ReadConfig(context.BlockNode);
-        var managerNodeId = participants[0].NodeId;
-        var manager = participants[0].Agent;
-        var team = participants.Skip(1).Select(participant => participant.Agent).ToList();
-        if (!string.IsNullOrWhiteSpace(config.ManagerNodeId))
-        {
-            var configuredManager = AgentflowBlockBuildSupport.CreateParticipant(
-                context,
-                config.ManagerNodeId,
-                $"{context.BlockNode.NodeId}.{config.ManagerNodeId}.manager"
-            );
-            if (configuredManager == null)
-            {
-                return null;
-            }
-
-            manager = configuredManager;
-            managerNodeId = config.ManagerNodeId;
-            team = participants
-                .Where(participant => !string.Equals(participant.NodeId, managerNodeId, StringComparison.Ordinal))
-                .Select(participant => participant.Agent)
-                .ToList();
-        }
+        var config = AgentflowDefinitionJson.ReadOptions<MagenticBlockOptions>(context.BlockNode);
+        var manager = participants.Single(participant => participant.Member.IsManager).Agent;
+        var team = participants
+            .Where(participant => !participant.Member.IsManager)
+            .Select(participant => participant.Agent);
 
         var builder = AgentWorkflowBuilder.CreateMagenticBuilderWith(manager).AddParticipants(team);
         if (config.MaxRounds.HasValue)

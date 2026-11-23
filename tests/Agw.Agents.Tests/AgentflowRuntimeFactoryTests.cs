@@ -1,4 +1,5 @@
 using Agw.Agents.Execution.Agentflows.Runtime;
+using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -69,13 +70,13 @@ public class AgentflowRuntimeFactoryTests
 
     private static AgentflowRuntimeFactory CreateFactory(IConversationHandoffProvider? handoffProvider = null) =>
         new(
-            NullLogger<AgentflowRuntimeFactory>.Instance,
             definitions: null!,
             agentRuntimeFactory: null!,
             summaryService: null!,
-            new ProviderState(),
+            providerSessionState: new ProviderState(),
             projectDefaults: null!,
             projects: null!,
+            workflowCompilerLogger: NullLogger<AgentflowWorkflowCompiler>.Instance,
             conversationHandoffProvider: handoffProvider
         );
 

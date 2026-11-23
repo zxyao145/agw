@@ -31,6 +31,7 @@ import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-
 import {
   buildQuestionResponse,
   buildConversationRenderModel,
+  buildWorkflowGateResponse,
   createAutoScrollState,
   formatWorkedDuration,
   createQuestionSelections,
@@ -333,6 +334,7 @@ function NativeRenderItem({
   if (item.type === "human-interaction") {
     return (
       <NativeHumanInteraction
+        key={item.request.interactionId}
         request={item.request}
         permissionMode={permissionMode}
         onResponse={onHumanResponse}
@@ -822,20 +824,53 @@ function NativeHumanInteraction({
       </View>
     );
   }
-  const respond = (approved: boolean, scope: ApprovalScope = "Once") =>
-    onResponse?.(
-      request.kind === "tool-approval"
-        ? { kind: request.kind, interactionId: request.interactionId, approved, scope }
-        : {
-            kind: request.kind,
-            interactionId: request.interactionId,
-            approved,
-            responseText: responseText.trim() || undefined,
-          },
+  if (request.kind === "workflow-gate") {
+    return (
+      <View style={styles.interactionCard}>
+        <Text style={styles.interactionTitle}>{request.source.nodeName || "Human Gate"}</Text>
+        <Text style={styles.interactionPrompt}>{request.prompt}</Text>
+        {request.inputPreview ? (
+          <Text style={styles.interactionPrompt}>{request.inputPreview}</Text>
+        ) : null}
+        {request.allowResponseText ? (
+          <TextInput
+            accessibilityLabel="Response"
+            value={responseText}
+            onChangeText={setResponseText}
+            multiline
+            placeholder="Response"
+            style={styles.responseInput}
+          />
+        ) : null}
+        <View style={styles.actions}>
+          <ActionButton
+            label="Stop workflow"
+            icon={X}
+            secondary
+            onPress={() => onResponse?.(buildWorkflowGateResponse(request))}
+            styles={styles}
+            theme={theme}
+          />
+          {request.choices.map((choice, index) => (
+            <ActionButton
+              key={choice.choiceId}
+              label={choice.label}
+              icon={Check}
+              secondary={index > 0}
+              onPress={() =>
+                onResponse?.(buildWorkflowGateResponse(request, choice.choiceId, responseText))
+              }
+              styles={styles}
+              theme={theme}
+            />
+          ))}
+        </View>
+      </View>
     );
-  const mode = request.kind === "workflow-gate" ? request.mode.toLowerCase() : "tool-approval";
-  const toolApproval = request.kind === "tool-approval";
-  if (toolApproval && permissionMode === "fullAccess") return null;
+  }
+  const respond = (approved: boolean, scope: ApprovalScope = "Once") =>
+    onResponse?.({ kind: request.kind, interactionId: request.interactionId, approved, scope });
+  if (permissionMode === "fullAccess") return null;
   return (
     <View style={styles.interactionCard}>
       <View style={styles.specialHeader}>
@@ -845,31 +880,22 @@ function NativeHumanInteraction({
         </Text>
       </View>
       <Text style={styles.interactionPrompt}>{request.prompt}</Text>
-      {request.kind === "tool-approval" && request.arguments != null ? (
+      {request.arguments != null ? (
         <NativeMarkdown
           value={`\`\`\`json\n${JSON.stringify(request.arguments, null, 2)}\n\`\`\``}
           theme={theme}
         />
       ) : null}
-      {mode === "input" ? (
-        <TextInput
-          value={responseText}
-          onChangeText={setResponseText}
-          multiline
-          placeholder="Response"
-          style={styles.responseInput}
-        />
-      ) : null}
       <View style={styles.actions}>
         <ActionButton
-          label={mode === "input" ? "Interrupt" : "Reject"}
+          label="Reject"
           icon={X}
           secondary
           onPress={() => respond(false)}
           styles={styles}
           theme={theme}
         />
-        {toolApproval && permissionMode !== "alwaysAsk" ? (
+        {permissionMode !== "alwaysAsk" ? (
           <ActionButton
             label="Allow same arguments"
             icon={Check}
@@ -880,7 +906,7 @@ function NativeHumanInteraction({
           />
         ) : null}
         <ActionButton
-          label={toolApproval ? "Allow once" : mode === "input" ? "Submit" : "Approve"}
+          label="Allow once"
           icon={Check}
           onPress={() => respond(true)}
           styles={styles}

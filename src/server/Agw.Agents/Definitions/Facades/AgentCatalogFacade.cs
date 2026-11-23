@@ -158,14 +158,52 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
                 ),
             cancellationToken
         );
-        return usedByAgent
-            || await _dbContext.Agentflows.AnyAsync(
-                agentflow =>
-                    agentflow.CreateBy == ownerUserId
-                    && agentflow.SummaryModelProviderId.HasValue
-                    && ids.Contains(agentflow.SummaryModelProviderId.Value),
-                cancellationToken
-            );
+        if (usedByAgent)
+        {
+            return true;
+        }
+
+        var revisionsByAgentflow = await _dbContext
+            .Agentflows.AsNoTracking()
+            .Where(agentflow => agentflow.CreateBy == ownerUserId)
+            .Select(agentflow => new
+            {
+                agentflow.Id,
+                agentflow.LatestRevision,
+                agentflow.PublishedRevision,
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (
+            var revisionGroup in revisionsByAgentflow
+                .SelectMany(agentflow => new[] { agentflow.LatestRevision, agentflow.PublishedRevision })
+                .Where(revision => revision > 0)
+                .Distinct()
+        )
+        {
+            var agentflowIds = revisionsByAgentflow
+                .Where(agentflow =>
+                    agentflow.LatestRevision == revisionGroup || agentflow.PublishedRevision == revisionGroup
+                )
+                .Select(agentflow => agentflow.Id)
+                .ToArray();
+            if (
+                await _dbContext.AgentflowNodes.AnyAsync(
+                    node =>
+                        agentflowIds.Contains(node.AgentflowId)
+                        && node.AgentflowRevision == revisionGroup
+                        && node.Kind == AgentflowNodeKind.Output
+                        && node.SummaryModelProviderId.HasValue
+                        && ids.Contains(node.SummaryModelProviderId.Value),
+                    cancellationToken
+                )
+            )
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public async Task EnsureCompatibleAsync(
@@ -266,25 +304,33 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
             return true;
         }
 
-        if (
-            !await _dbContext
-                .Agentflows.AsNoTracking()
-                .AnyAsync(flow => flow.Id == agentflowId && flow.CreateBy == ownerUserId, cancellationToken)
-                .ConfigureAwait(false)
-        )
+        var flow = await _dbContext
+            .Agentflows.AsNoTracking()
+            .Where(item => item.Id == agentflowId && item.CreateBy == ownerUserId)
+            .Select(item => new { item.PublishedRevision })
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (flow == null || flow.PublishedRevision < 1)
         {
             return false;
         }
 
         var nodes = await _dbContext
             .AgentflowNodes.AsNoTracking()
-            .Where(node => node.AgentflowId == agentflowId && node.CreateBy == ownerUserId)
+            .Where(node => node.AgentflowId == agentflowId && node.AgentflowRevision == flow.PublishedRevision)
             .Select(node => new { node.Kind, node.RelateId })
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var members = await _dbContext
+            .AgentflowBlockMembers.AsNoTracking()
+            .Where(member => member.AgentflowId == agentflowId && member.AgentflowRevision == flow.PublishedRevision)
+            .Select(member => new { member.Kind, member.RelateId })
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
         var agentIds = nodes
             .Where(node => node.Kind == AgentflowNodeKind.Agent && node.RelateId.HasValue)
             .Select(node => node.RelateId!.Value)
+            .Concat(members.Where(member => member.Kind == AgentflowNodeKind.Agent).Select(member => member.RelateId))
             .Distinct()
             .ToArray();
         if (agentIds.Length > 0)
@@ -311,6 +357,11 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
             var nestedAgentflowId in nodes
                 .Where(node => node.Kind == AgentflowNodeKind.WorkflowAsAgent && node.RelateId.HasValue)
                 .Select(node => node.RelateId!.Value)
+                .Concat(
+                    members
+                        .Where(member => member.Kind == AgentflowNodeKind.WorkflowAsAgent)
+                        .Select(member => member.RelateId)
+                )
                 .Distinct()
         )
         {

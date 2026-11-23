@@ -1758,9 +1758,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentflow[]"];
-            "application/json": components["schemas"]["ApiResultOfAgentflow[]"];
-            "text/json": components["schemas"]["ApiResultOfAgentflow[]"];
+            "text/plain": components["schemas"]["ApiResultOfAgentflowDto[]"];
+            "application/json": components["schemas"]["ApiResultOfAgentflowDto[]"];
+            "text/json": components["schemas"]["ApiResultOfAgentflowDto[]"];
           };
         };
       };
@@ -1787,14 +1787,37 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentflow"];
-            "application/json": components["schemas"]["ApiResultOfAgentflow"];
-            "text/json": components["schemas"]["ApiResultOfAgentflow"];
+            "text/plain": components["schemas"]["ApiResultOfAgentflowDto"];
+            "application/json": components["schemas"]["ApiResultOfAgentflowDto"];
+            "text/json": components["schemas"]["ApiResultOfAgentflowDto"];
           };
         };
       };
     };
-    delete?: never;
+    delete: {
+      parameters: {
+        query?: {
+          id?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
     options?: never;
     head?: never;
     patch?: never;
@@ -1825,9 +1848,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfPagedResultOfAgentflow"];
-            "application/json": components["schemas"]["ApiResultOfPagedResultOfAgentflow"];
-            "text/json": components["schemas"]["ApiResultOfPagedResultOfAgentflow"];
+            "text/plain": components["schemas"]["ApiResultOfPagedResultOfAgentflowDto"];
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfAgentflowDto"];
+            "text/json": components["schemas"]["ApiResultOfPagedResultOfAgentflowDto"];
           };
         };
       };
@@ -1840,7 +1863,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/agentflows/{id}": {
+  "/api/agentflows/detail": {
     parameters: {
       query?: never;
       header?: never;
@@ -1849,11 +1872,12 @@ export interface paths {
     };
     get: {
       parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
+        query?: {
+          id?: string;
+          revision?: number;
         };
+        header?: never;
+        path?: never;
         cookie?: never;
       };
       requestBody?: never;
@@ -1864,27 +1888,65 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentflow"];
-            "application/json": components["schemas"]["ApiResultOfAgentflow"];
-            "text/json": components["schemas"]["ApiResultOfAgentflow"];
+            "text/plain": components["schemas"]["ApiResultOfAgentflowDetailResponse"];
+            "application/json": components["schemas"]["ApiResultOfAgentflowDetailResponse"];
+            "text/json": components["schemas"]["ApiResultOfAgentflowDetailResponse"];
           };
         };
       };
     };
-    put: {
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/agentflows/revisions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          id?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfAgentflowRevisionDto[]"];
+            "application/json": components["schemas"]["ApiResultOfAgentflowRevisionDto[]"];
+            "text/json": components["schemas"]["ApiResultOfAgentflowRevisionDto[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post: {
       parameters: {
         query?: never;
         header?: never;
-        path: {
-          id: string;
-        };
+        path?: never;
         cookie?: never;
       };
       requestBody: {
         content: {
-          "application/json": components["schemas"]["AgentflowUpdateRequest"];
-          "text/json": components["schemas"]["AgentflowUpdateRequest"];
-          "application/*+json": components["schemas"]["AgentflowUpdateRequest"];
+          "application/json": components["schemas"]["AgentflowSaveRevisionRequest"];
+          "text/json": components["schemas"]["AgentflowSaveRevisionRequest"];
+          "application/*+json": components["schemas"]["AgentflowSaveRevisionRequest"];
         };
       };
       responses: {
@@ -1894,60 +1956,41 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentflow"];
-            "application/json": components["schemas"]["ApiResultOfAgentflow"];
-            "text/json": components["schemas"]["ApiResultOfAgentflow"];
+            "text/plain": components["schemas"]["ApiResultOfAgentflowDto"];
+            "application/json": components["schemas"]["ApiResultOfAgentflowDto"];
+            "text/json": components["schemas"]["ApiResultOfAgentflowDto"];
           };
         };
       };
     };
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  "/api/agentflows/mermaid/{id}": {
+  "/api/agentflows/published": {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    get: {
+    get?: never;
+    put: {
       parameters: {
         query?: never;
         header?: never;
-        path: {
-          id: string;
-        };
+        path?: never;
         cookie?: never;
       };
-      requestBody?: never;
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["AgentflowPublishRequest"];
+          "text/json": components["schemas"]["AgentflowPublishRequest"];
+          "application/*+json": components["schemas"]["AgentflowPublishRequest"];
+        };
+      };
       responses: {
         /** @description OK */
         200: {
@@ -1955,14 +1998,13 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfstring"];
-            "application/json": components["schemas"]["ApiResultOfstring"];
-            "text/json": components["schemas"]["ApiResultOfstring"];
+            "text/plain": components["schemas"]["ApiResultOfAgentflowDto"];
+            "application/json": components["schemas"]["ApiResultOfAgentflowDto"];
+            "text/json": components["schemas"]["ApiResultOfAgentflowDto"];
           };
         };
       };
     };
-    put?: never;
     post?: never;
     delete?: never;
     options?: never;
@@ -1970,23 +2012,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/agentflows/{id}/nodes": {
+  "/api/agentflows/validate": {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    get: {
+    get?: never;
+    put?: never;
+    post: {
       parameters: {
         query?: never;
         header?: never;
-        path: {
-          id: string;
-        };
+        path?: never;
         cookie?: never;
       };
-      requestBody?: never;
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["AgentflowValidateRequest"];
+          "text/json": components["schemas"]["AgentflowValidateRequest"];
+          "application/*+json": components["schemas"]["AgentflowValidateRequest"];
+        };
+      };
       responses: {
         /** @description OK */
         200: {
@@ -1994,54 +2042,13 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentflowNode[]"];
-            "application/json": components["schemas"]["ApiResultOfAgentflowNode[]"];
-            "text/json": components["schemas"]["ApiResultOfAgentflowNode[]"];
+            "text/plain": components["schemas"]["ApiResultOfAgentflowValidateResponse"];
+            "application/json": components["schemas"]["ApiResultOfAgentflowValidateResponse"];
+            "text/json": components["schemas"]["ApiResultOfAgentflowValidateResponse"];
           };
         };
       };
     };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/agentflows/{id}/edges": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentflowEdge[]"];
-            "application/json": components["schemas"]["ApiResultOfAgentflowEdge[]"];
-            "text/json": components["schemas"]["ApiResultOfAgentflowEdge[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -2077,13 +2084,53 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentflow"];
-            "application/json": components["schemas"]["ApiResultOfAgentflow"];
-            "text/json": components["schemas"]["ApiResultOfAgentflow"];
+            "text/plain": components["schemas"]["ApiResultOfAgentflowDto"];
+            "application/json": components["schemas"]["ApiResultOfAgentflowDto"];
+            "text/json": components["schemas"]["ApiResultOfAgentflowDto"];
           };
         };
       };
     };
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/agentflows/mermaid": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          id?: string;
+          revision?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfstring"];
+            "application/json": components["schemas"]["ApiResultOfstring"];
+            "text/json": components["schemas"]["ApiResultOfstring"];
+          };
+        };
+      };
+    };
+    put?: never;
     post?: never;
     delete?: never;
     options?: never;
@@ -2544,6 +2591,7 @@ export interface paths {
         query?: {
           type?: components["schemas"]["AgentRuntimeType"];
           id?: string;
+          agentflowRevision?: null | number;
         };
         header?: never;
         path?: never;
@@ -7935,97 +7983,269 @@ export interface components {
       agentId: string;
       enable: boolean;
     };
-    Agentflow: {
+    AgentflowBlockMemberDto: {
+      memberId: string;
+      kind: components["schemas"]["AgentflowBlockMemberKind"];
       /** Format: uuid */
-      id: string;
+      relateId: null | string;
       name: string;
-      description?: null | string;
-      enable: boolean;
-      systemPrompt: string;
-      /** Format: uuid */
-      summaryModelProviderId?: null | string;
-      nodes?: components["schemas"]["AgentflowNode"][];
-      edges?: components["schemas"]["AgentflowEdge"][];
-      /** Format: date-time */
-      createTime: string;
-      createBy?: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy?: null | string;
+      instructions: null | string;
+      isManager: boolean;
+    };
+    /** @enum {unknown} */
+    AgentflowBlockMemberKind: "agent" | "workflowAsAgent";
+    /** @enum {unknown} */
+    AgentflowConditionField:
+      | "contains"
+      | "notContains"
+      | "equals"
+      | "author"
+      | "role"
+      | "minMessages"
+      | "result";
+    AgentflowConditionRuleDto: {
+      field: components["schemas"]["AgentflowConditionField"];
+      value: string;
+      path: string;
     };
     AgentflowCreateRequest: {
       name: string;
       description: null | string;
-      nodes: components["schemas"]["AgentflowNodeRequest"][];
-      edges: components["schemas"]["AgentflowEdgeRequest"][];
-      /** Format: uuid */
-      summaryModelProviderId?: null | string;
+      definition: components["schemas"]["AgentflowDefinitionDto"];
     };
-    AgentflowEdge: {
+    AgentflowDefinitionDto: {
+      nodes: components["schemas"]["AgentflowNodeDto"][];
+      edges: components["schemas"]["AgentflowEdgeDto"][];
+    };
+    AgentflowDetailResponse: {
+      agentflow: components["schemas"]["AgentflowDto"];
+      /** Format: int32 */
+      revision: number;
+      definition: components["schemas"]["AgentflowDefinitionDto"];
+    };
+    AgentflowDto: {
       /** Format: uuid */
-      agentflowId: string;
-      edgeId: string;
-      sourceNodeId: string;
-      targetNodeId: string;
-      kind: components["schemas"]["AgentflowEdgeKind"];
-      label?: null | string;
-      conditionJson?: null | string;
-      configJson?: null | string;
-      sourceNode?: components["schemas"]["AgentflowNode"];
-      targetNode?: components["schemas"]["AgentflowNode"];
+      id: string;
+      name: string;
+      description: null | string;
+      enable: boolean;
+      /** Format: int32 */
+      latestRevision: number;
+      /** Format: int32 */
+      publishedRevision: number;
       /** Format: date-time */
       createTime: string;
-      createBy?: null | string;
       /** Format: date-time */
-      updateTime?: null | string;
-      updateBy?: null | string;
+      updateTime: string;
     };
-    AgentflowEdgeKind: number;
-    AgentflowEdgeRequest: {
+    AgentflowEdgeDto: {
       edgeId: string;
       sourceNodeId: string;
       targetNodeId: string;
-      kind: components["schemas"]["AgentflowEdgeKind"];
+      isFanInBarrier: boolean;
+      isSwitchDefault: boolean;
+      /** Format: int32 */
+      switchCaseOrder: number;
+      choiceId: null | string;
       label: null | string;
-      conditionJson: null | string;
-      configJson: null | string;
+      conditions: components["schemas"]["AgentflowConditionRuleDto"][];
     };
     AgentflowEnabledUpdateRequest: {
       /** Format: uuid */
       agentflowId: string;
       enable: boolean;
     };
-    AgentflowNode: {
+    AgentflowGateChoiceDto: {
+      choiceId: string;
+      label: string;
+    };
+    AgentflowNodeDto:
+      | components["schemas"]["AgentflowNodeDtoAgentflowInputNodeDto"]
+      | components["schemas"]["AgentflowNodeDtoAgentflowAgentNodeDto"]
+      | components["schemas"]["AgentflowNodeDtoAgentflowWorkflowAsAgentNodeDto"]
+      | components["schemas"]["AgentflowNodeDtoAgentflowPromptAdapterNodeDto"]
+      | components["schemas"]["AgentflowNodeDtoAgentflowClearMessagesNodeDto"]
+      | components["schemas"]["AgentflowNodeDtoAgentflowHumanGateNodeDto"]
+      | components["schemas"]["AgentflowNodeDtoAgentflowCheckpointMarkerNodeDto"]
+      | components["schemas"]["AgentflowNodeDtoAgentflowOutputNodeDto"]
+      | components["schemas"]["AgentflowNodeDtoAgentflowConcurrentBlockNodeDto"]
+      | components["schemas"]["AgentflowNodeDtoAgentflowHandoffBlockNodeDto"]
+      | components["schemas"]["AgentflowNodeDtoAgentflowGroupChatBlockNodeDto"]
+      | components["schemas"]["AgentflowNodeDtoAgentflowMagenticBlockNodeDto"];
+    AgentflowNodeDtoAgentflowAgentNodeDto: {
+      /** @enum {string} */
+      kind: "agent";
       /** Format: uuid */
-      agentflowId: string;
+      relateId: null | string;
+      instructions: null | string;
       nodeId: string;
-      kind: components["schemas"]["AgentflowNodeKind"];
+      name: null | string;
+      position: components["schemas"]["AgentflowPositionDto"];
+      routingStrategy: components["schemas"]["AgentflowRoutingStrategy"];
+    };
+    AgentflowNodeDtoAgentflowCheckpointMarkerNodeDto: {
+      /** @enum {string} */
+      kind: "checkpointMarker";
+      checkpointName: null | string;
+      nodeId: string;
+      name: null | string;
+      position: components["schemas"]["AgentflowPositionDto"];
+      routingStrategy: components["schemas"]["AgentflowRoutingStrategy"];
+    };
+    AgentflowNodeDtoAgentflowClearMessagesNodeDto: {
+      /** @enum {string} */
+      kind: "clearMessages";
+      nodeId: string;
+      name: null | string;
+      position: components["schemas"]["AgentflowPositionDto"];
+      routingStrategy: components["schemas"]["AgentflowRoutingStrategy"];
+    };
+    AgentflowNodeDtoAgentflowConcurrentBlockNodeDto: {
+      /** @enum {string} */
+      kind: "concurrentBlock";
+      instructions: null | string;
+      members: components["schemas"]["AgentflowBlockMemberDto"][];
+      nodeId: string;
+      name: null | string;
+      position: components["schemas"]["AgentflowPositionDto"];
+      routingStrategy: components["schemas"]["AgentflowRoutingStrategy"];
+    };
+    AgentflowNodeDtoAgentflowGroupChatBlockNodeDto: {
+      /** @enum {string} */
+      kind: "groupChatBlock";
+      instructions: null | string;
+      members: components["schemas"]["AgentflowBlockMemberDto"][];
+      /** Format: int32 */
+      maxRounds: null | number;
+      nodeId: string;
+      name: null | string;
+      position: components["schemas"]["AgentflowPositionDto"];
+      routingStrategy: components["schemas"]["AgentflowRoutingStrategy"];
+    };
+    AgentflowNodeDtoAgentflowHandoffBlockNodeDto: {
+      /** @enum {string} */
+      kind: "handoffBlock";
+      instructions: null | string;
+      members: components["schemas"]["AgentflowBlockMemberDto"][];
+      handoffInstructions: null | string;
+      enableReturnToPrevious: null | boolean;
+      autonomous: null | boolean;
+      /** Format: int32 */
+      autonomousTurnLimit: null | number;
+      continuationPrompt: null | string;
+      nodeId: string;
+      name: null | string;
+      position: components["schemas"]["AgentflowPositionDto"];
+      routingStrategy: components["schemas"]["AgentflowRoutingStrategy"];
+    };
+    AgentflowNodeDtoAgentflowHumanGateNodeDto: {
+      /** @enum {string} */
+      kind: "humanGate";
+      humanPrompt: null | string;
+      choices: components["schemas"]["AgentflowGateChoiceDto"][];
+      allowResponseText: boolean;
+      nodeId: string;
+      name: null | string;
+      position: components["schemas"]["AgentflowPositionDto"];
+      routingStrategy: components["schemas"]["AgentflowRoutingStrategy"];
+    };
+    AgentflowNodeDtoAgentflowInputNodeDto: {
+      /** @enum {string} */
+      kind: "input";
+      nodeId: string;
+      name: null | string;
+      position: components["schemas"]["AgentflowPositionDto"];
+      routingStrategy: components["schemas"]["AgentflowRoutingStrategy"];
+    };
+    AgentflowNodeDtoAgentflowMagenticBlockNodeDto: {
+      /** @enum {string} */
+      kind: "magenticBlock";
+      instructions: null | string;
+      members: components["schemas"]["AgentflowBlockMemberDto"][];
+      /** Format: int32 */
+      maxRounds: null | number;
+      /** Format: int32 */
+      maxStalls: null | number;
+      /** Format: int32 */
+      maxResets: null | number;
+      requirePlanSignoff: null | boolean;
+      nodeId: string;
+      name: null | string;
+      position: components["schemas"]["AgentflowPositionDto"];
+      routingStrategy: components["schemas"]["AgentflowRoutingStrategy"];
+    };
+    AgentflowNodeDtoAgentflowOutputNodeDto: {
+      /** @enum {string} */
+      kind: "output";
+      enableSummary: boolean;
       /** Format: uuid */
-      relateId?: null | string;
-      name?: null | string;
-      positionJson?: null | string;
-      instructions?: null | string;
-      configJson?: null | string;
-      sourceEdges?: components["schemas"]["AgentflowEdge"][];
-      targetEdges?: components["schemas"]["AgentflowEdge"][];
-      /** Format: date-time */
-      createTime: string;
-      createBy?: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy?: null | string;
+      summaryModelProviderId: null | string;
+      instructions: null | string;
+      nodeId: string;
+      name: null | string;
+      position: components["schemas"]["AgentflowPositionDto"];
+      routingStrategy: components["schemas"]["AgentflowRoutingStrategy"];
+    };
+    AgentflowNodeDtoAgentflowPromptAdapterNodeDto: {
+      /** @enum {string} */
+      kind: "promptAdapter";
+      instructions: null | string;
+      nodeId: string;
+      name: null | string;
+      position: components["schemas"]["AgentflowPositionDto"];
+      routingStrategy: components["schemas"]["AgentflowRoutingStrategy"];
+    };
+    AgentflowNodeDtoAgentflowWorkflowAsAgentNodeDto: {
+      /** @enum {string} */
+      kind: "workflowAsAgent";
+      /** Format: uuid */
+      relateId: null | string;
+      instructions: null | string;
+      nodeId: string;
+      name: null | string;
+      position: components["schemas"]["AgentflowPositionDto"];
+      routingStrategy: components["schemas"]["AgentflowRoutingStrategy"];
     };
     AgentflowNodeExecutionStatus: number;
     AgentflowNodeKind: number;
-    AgentflowNodeRequest: {
-      nodeId: string;
-      kind: components["schemas"]["AgentflowNodeKind"];
+    AgentflowPositionDto: {
+      /** Format: double */
+      x: number | string;
+      /** Format: double */
+      y: number | string;
+    };
+    /**
+     * @description 定义中的一项问题；NodeId 与 EdgeId 至多一个有值。
+     *     One problem in a definition; at most one of NodeId and EdgeId is set.
+     */
+    AgentflowProblem: {
+      code: string;
+      message: string;
+      nodeId: null | string;
+      edgeId: null | string;
+    };
+    AgentflowPublishRequest: {
       /** Format: uuid */
-      relateId: null | string;
-      name: null | string;
-      positionJson: null | string;
-      instructions: null | string;
-      configJson: null | string;
+      agentflowId: string;
+      /** Format: int32 */
+      revision: number;
+    };
+    AgentflowRevisionDto: {
+      /** Format: int32 */
+      revision: number;
+      /** Format: date-time */
+      createTime: string;
+    };
+    /** @enum {unknown} */
+    AgentflowRoutingStrategy: "direct" | "fanOut" | "switch" | "choice";
+    AgentflowSaveRevisionRequest: {
+      /** Format: uuid */
+      agentflowId: string;
+      /** Format: int32 */
+      baseRevision: number;
+      name: string;
+      description: null | string;
+      definition: components["schemas"]["AgentflowDefinitionDto"];
     };
     AgentflowTraceDto: {
       /** Format: uuid */
@@ -8050,14 +8270,20 @@ export interface components {
       durationMilliseconds: number | string;
       status: components["schemas"]["AgentflowNodeExecutionStatus"];
       error?: null | string;
+      extra?: components["schemas"]["AgentflowTraceExtra"];
     };
-    AgentflowUpdateRequest: {
-      name: string;
-      description: null | string;
-      nodes: components["schemas"]["AgentflowNodeRequest"][];
-      edges: components["schemas"]["AgentflowEdgeRequest"][];
+    AgentflowTraceExtra: {
+      /** Format: int32 */
+      agentflowRevision: number;
+    };
+    AgentflowValidateRequest: {
       /** Format: uuid */
-      summaryModelProviderId?: null | string;
+      agentflowId: null | string;
+      name: string;
+      definition: components["schemas"]["AgentflowDefinitionDto"];
+    };
+    AgentflowValidateResponse: {
+      problems: components["schemas"]["AgentflowProblem"][];
     };
     /**
      * @description Response for the agent option list (`GET /api/agents`) used by Chat, Job, Project, and
@@ -8225,7 +8451,7 @@ export interface components {
       | components["schemas"]["AgwContentAgwDataContent"];
     AgwContentAgwDataContent: {
       /** @enum {string} */
-      type?: "DataContent";
+      type: "DataContent";
       kind: null | string;
       /** @description A data URI representing the content. */
       uri: string;
@@ -8234,7 +8460,7 @@ export interface components {
     };
     AgwContentAgwErrorContent: {
       /** @enum {string} */
-      type?: "ErrorContent";
+      type: "ErrorContent";
       kind: null | string;
       errorCode?: null | string;
       details?: null | string;
@@ -8243,35 +8469,35 @@ export interface components {
     };
     AgwContentAgwFunctionCallContent: {
       /** @enum {string} */
-      type?: "FunctionCallContent";
+      type: "FunctionCallContent";
       kind: null | string;
       content?: null | string;
       additionalProperties?: null | Record<string, never>;
     };
     AgwContentAgwFunctionResultContent: {
       /** @enum {string} */
-      type?: "FunctionResultContent";
+      type: "FunctionResultContent";
       kind: null | string;
       content?: null | string;
       additionalProperties?: null | Record<string, never>;
     };
     AgwContentAgwTextContent: {
       /** @enum {string} */
-      type?: "TextContent";
+      type: "TextContent";
       kind: null | string;
       content?: null | string;
       additionalProperties?: null | Record<string, never>;
     };
     AgwContentAgwTextReasoningContent: {
       /** @enum {string} */
-      type?: "TextReasoningContent";
+      type: "TextReasoningContent";
       kind: null | string;
       content?: null | string;
       additionalProperties?: null | Record<string, never>;
     };
     AgwContentAgwUriContent: {
       /** @enum {string} */
-      type?: "UriContent";
+      type: "UriContent";
       kind: null | string;
       /** Format: uri */
       uri: string;
@@ -8280,7 +8506,7 @@ export interface components {
     };
     AgwContentAgwUsageContent: {
       /** @enum {string} */
-      type?: "UsageContent";
+      type: "UsageContent";
       kind: null | string;
       content?: components["schemas"]["UsageDetails"];
       additionalProperties?: null | Record<string, never>;
@@ -8317,29 +8543,36 @@ export interface components {
       title: string;
       detail?: null | string;
     };
-    ApiResultOfAgentflow: {
-      data?: null | components["schemas"]["Agentflow"];
+    ApiResultOfAgentflowDetailResponse: {
+      data?: null | components["schemas"]["AgentflowDetailResponse"];
       /** Format: int32 */
       code: number;
       title: string;
       detail?: null | string;
     };
-    "ApiResultOfAgentflow[]": {
-      data?: null | components["schemas"]["Agentflow"][];
+    ApiResultOfAgentflowDto: {
+      data?: null | components["schemas"]["AgentflowDto"];
       /** Format: int32 */
       code: number;
       title: string;
       detail?: null | string;
     };
-    "ApiResultOfAgentflowEdge[]": {
-      data?: null | components["schemas"]["AgentflowEdge"][];
+    "ApiResultOfAgentflowDto[]": {
+      data?: null | components["schemas"]["AgentflowDto"][];
       /** Format: int32 */
       code: number;
       title: string;
       detail?: null | string;
     };
-    "ApiResultOfAgentflowNode[]": {
-      data?: null | components["schemas"]["AgentflowNode"][];
+    "ApiResultOfAgentflowRevisionDto[]": {
+      data?: null | components["schemas"]["AgentflowRevisionDto"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfAgentflowValidateResponse: {
+      data?: null | components["schemas"]["AgentflowValidateResponse"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -8718,8 +8951,8 @@ export interface components {
       title: string;
       detail?: null | string;
     };
-    ApiResultOfPagedResultOfAgentflow: {
-      data?: null | components["schemas"]["PagedResultOfAgentflow"];
+    ApiResultOfPagedResultOfAgentflowDto: {
+      data?: null | components["schemas"]["PagedResultOfAgentflowDto"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -10072,8 +10305,8 @@ export interface components {
       displayName: string;
       type: components["schemas"]["AuthProviderType"];
     };
-    PagedResultOfAgentflow: {
-      items: components["schemas"]["Agentflow"][];
+    PagedResultOfAgentflowDto: {
+      items: components["schemas"]["AgentflowDto"][];
       /** Format: int64 */
       total: number | string;
       /** Format: int32 */

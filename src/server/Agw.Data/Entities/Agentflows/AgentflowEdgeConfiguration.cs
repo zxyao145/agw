@@ -7,22 +7,36 @@ public class AgentflowEdgeConfiguration : IEntityTypeConfiguration<AgentflowEdge
 {
     public void Configure(EntityTypeBuilder<AgentflowEdge> builder)
     {
-        builder.HasKey(e => new { e.AgentflowId, e.EdgeId });
-        builder.Property(e => e.Kind).HasConversion<int>();
+        builder.HasKey(e => new
+        {
+            e.AgentflowId,
+            e.AgentflowRevision,
+            e.EdgeId,
+        });
         builder.Property(e => e.Label).HasMaxLength(200);
-        builder.Property(e => e.ConditionJson).HasMaxLength(8000);
-        builder.Property(e => e.ConfigJson).HasMaxLength(16000);
+        builder.Property(e => e.ConditionJson).HasMaxLength(8000).HasDefaultValue("[]").IsRequired();
+        builder.Property(e => e.ChoiceId).HasMaxLength(64);
 
         builder
             .HasOne(e => e.SourceNode)
             .WithMany(n => n.SourceEdges)
-            .HasForeignKey(e => new { e.AgentflowId, e.SourceNodeId })
+            .HasForeignKey(e => new
+            {
+                e.AgentflowId,
+                e.AgentflowRevision,
+                e.SourceNodeId,
+            })
             .OnDelete(DeleteBehavior.Cascade);
 
         builder
             .HasOne(e => e.TargetNode)
             .WithMany(n => n.TargetEdges)
-            .HasForeignKey(e => new { e.AgentflowId, e.TargetNodeId })
+            .HasForeignKey(e => new
+            {
+                e.AgentflowId,
+                e.AgentflowRevision,
+                e.TargetNodeId,
+            })
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

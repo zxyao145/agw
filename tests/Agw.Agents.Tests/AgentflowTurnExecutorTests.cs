@@ -1,10 +1,13 @@
 using System.Security.Claims;
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Turns;
+using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.HumanInteraction.Application;
@@ -12,6 +15,7 @@ using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
+using Agw.Projects.Contracts.History;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
@@ -282,7 +286,7 @@ public partial class AgentflowTurnExecutorTests : IDisposable
     }
 
     [Fact]
-    public async Task GetMermaidAsync_AgentCreationFails_DisposesAlreadyCreatedAgents()
+    public async Task CreateAiWorkflow_AgentCreationFails_DisposesAlreadyCreatedAgents()
     {
         var agentflow = new Agentflow
         {
@@ -343,9 +347,13 @@ public partial class AgentflowTurnExecutorTests : IDisposable
             new RecordingSummaryService()
         );
 
-        var mermaid = await service.GetMermaidAsync(agentflow.Id, TestContext.Current.CancellationToken);
+        var workflow = await service.CreateAiWorkflow(
+            agentflow.Id,
+            AgentflowTurnTestHost.FirstRevision,
+            TestContext.Current.CancellationToken
+        );
 
-        Assert.Null(mermaid);
+        Assert.Null(workflow);
         Assert.True(firstAgent.Disposed);
     }
 
@@ -575,7 +583,10 @@ public partial class AgentflowTurnExecutorTests : IDisposable
         await foreach (
             var _ in host.RunAsync(
                 runtime,
-                new TurnInput(new AgwUserInput { Contents = [new AgwTextContent { Content = "run" }] }),
+                new TurnInput(new AgwUserInput { Contents = [new AgwTextContent { Content = "run" }] })
+                {
+                    AgentflowSnapshot = AgentflowTurnTestHost.FirstRevision,
+                },
                 new DelayedApprovalHandler(),
                 TestContext.Current.CancellationToken
             )
@@ -591,7 +602,7 @@ public partial class AgentflowTurnExecutorTests : IDisposable
     }
 
     [Fact]
-    public async Task GetMermaidAsync_NestedWorkflow_DisposesNestedAgents()
+    public async Task CreateAiWorkflow_NestedWorkflow_DisposesNestedAgents()
     {
         var innerFlow = new Agentflow
         {
@@ -663,9 +674,14 @@ public partial class AgentflowTurnExecutorTests : IDisposable
             new RecordingSummaryService()
         );
 
-        var mermaid = await service.GetMermaidAsync(outerFlow.Id, TestContext.Current.CancellationToken);
-
-        Assert.NotNull(mermaid);
+        var snapshot = new AgentflowRevisionSnapshot(1, [new(outerFlow.Id, 1, "nested", null, innerFlow.Id, 1)]);
+        await using (
+            var workflow = await service.CreateAiWorkflow(outerFlow.Id, snapshot, TestContext.Current.CancellationToken)
+        )
+        {
+            Assert.NotNull(workflow);
+        }
+        Assert.NotEmpty(agentRuntimeService.CreatedAgents);
         Assert.All(agentRuntimeService.CreatedAgents, agent => Assert.True(agent.Disposed));
     }
 
@@ -686,6 +702,8 @@ public partial class AgentflowTurnExecutorTests : IDisposable
                 AgentflowId = agentflow.Id,
                 NodeId = "human",
                 Kind = AgentflowNodeKind.HumanGate,
+                RoutingStrategy = AgentflowRoutingStrategy.Choice,
+                ConfigJson = GateOptions(),
             },
             new AgentflowNode
             {
@@ -709,6 +727,7 @@ public partial class AgentflowTurnExecutorTests : IDisposable
                 EdgeId = "human-agent",
                 SourceNodeId = "human",
                 TargetNodeId = "agent",
+                ChoiceId = "choice-1",
             },
             new AgentflowEdge
             {
@@ -760,6 +779,8 @@ public partial class AgentflowTurnExecutorTests : IDisposable
                 NodeId = "human",
                 Kind = AgentflowNodeKind.HumanGate,
                 Name = "Approval",
+                RoutingStrategy = AgentflowRoutingStrategy.Choice,
+                ConfigJson = GateOptions(),
             },
             new AgentflowNode
             {
@@ -784,6 +805,7 @@ public partial class AgentflowTurnExecutorTests : IDisposable
                 EdgeId = "human-agent",
                 SourceNodeId = "human",
                 TargetNodeId = "agent",
+                ChoiceId = "choice-1",
             },
             new AgentflowEdge
             {
@@ -852,7 +874,6 @@ public partial class AgentflowTurnExecutorTests : IDisposable
             CreateBy = "tester",
             Id = Guid.CreateVersion7(),
             Name = "summary-flow",
-            SummaryModelProviderId = modelProviderId,
         };
         var nodes = new[]
         {
@@ -869,6 +890,7 @@ public partial class AgentflowTurnExecutorTests : IDisposable
                 NodeId = "output",
                 Kind = AgentflowNodeKind.Output,
                 Instructions = "Keep it short.",
+                SummaryModelProviderId = modelProviderId,
                 ConfigJson = """{"enableSummary":true}""",
             },
         };
@@ -1138,6 +1160,9 @@ public partial class AgentflowTurnExecutorTests : IDisposable
         Assert.Equal(agentflowId.ToString("D"), text.AdditionalProperties["targetId"]);
     }
 
+    private static string GateOptions(string? prompt = null) =>
+        AgentflowDefinitionJson.WriteOptions(new HumanGateOptions(prompt, [new("choice-1", "Approve")], true));
+
     private static AgentflowTurnTestHost CreateTestHost(
         ILogger<AgentflowCheckpointSupport> logger,
         IRepository<Agentflow> agentflowRepository,
@@ -1151,17 +1176,24 @@ public partial class AgentflowTurnExecutorTests : IDisposable
         AgentflowCheckpointStore? checkpointStore = null,
         IConversationHandoffProvider? conversationHandoffProvider = null,
         IProjectRuntimeFacade? projectRuntimeFacade = null,
-        IProjectDefaultResolver? projectDefaults = null
+        IProjectDefaultResolver? projectDefaults = null,
+        IRepository<AgentflowBlockMember>? memberRepository = null,
+        IConversationHistoryStore? historyStore = null
     )
     {
+        foreach (var node in nodeRepository.Queryable.Where(node => node.AgentflowRevision == 0))
+            node.AgentflowRevision = AgentflowTurnTestHost.FirstRevision.RootRevision;
+        foreach (var edge in edgeRepository.Queryable.Where(edge => edge.AgentflowRevision == 0))
+            edge.AgentflowRevision = AgentflowTurnTestHost.FirstRevision.RootRevision;
+
         var runtimeFactory = new AgentflowRuntimeFactory(
-            NullLogger<AgentflowRuntimeFactory>.Instance,
-            new TestAgentflowDefinitionReader(agentflowRepository, nodeRepository, edgeRepository),
+            new TestAgentflowDefinitionReader(agentflowRepository, nodeRepository, edgeRepository, memberRepository),
             agentRuntimeFactory,
             summaryService,
             providerSessionState,
             projectDefaults ?? new TestProjectDefaultResolver(),
             projectRuntimeFacade ?? new TestProjectRuntimeFacade(),
+            NullLogger<AgentflowWorkflowCompiler>.Instance,
             sessionStateStore,
             conversationHistoryWriter,
             conversationHandoffProvider
@@ -1169,7 +1201,8 @@ public partial class AgentflowTurnExecutorTests : IDisposable
         var executor = new AgentflowTurnExecutor(
             runtimeFactory,
             new AgentflowCheckpointSupport(logger, checkpointStore),
-            NullLogger<AgentflowTurnExecutor>.Instance
+            NullLogger<AgentflowTurnExecutor>.Instance,
+            historyStore
         );
         return new AgentflowTurnTestHost(runtimeFactory, executor);
     }
@@ -1179,16 +1212,19 @@ public partial class AgentflowTurnExecutorTests : IDisposable
         private readonly IRepository<Agentflow> _agentflows;
         private readonly IRepository<AgentflowNode> _nodes;
         private readonly IRepository<AgentflowEdge> _edges;
+        private readonly IRepository<AgentflowBlockMember>? _members;
 
         public TestAgentflowDefinitionReader(
             IRepository<Agentflow> agentflows,
             IRepository<AgentflowNode> nodes,
-            IRepository<AgentflowEdge> edges
+            IRepository<AgentflowEdge> edges,
+            IRepository<AgentflowBlockMember>? members = null
         )
         {
             _agentflows = agentflows;
             _nodes = nodes;
             _edges = edges;
+            _members = members;
         }
 
         public Task<Agentflow?> FindVisibleAsync(
@@ -1203,13 +1239,24 @@ public partial class AgentflowTurnExecutorTests : IDisposable
 
         public Task<IReadOnlyList<AgentflowNode>> ListNodesAsync(
             Guid agentflowId,
+            int agentflowRevision,
             CancellationToken cancellationToken = default
-        ) => _nodes.ListAsync(node => node.AgentflowId == agentflowId);
+        ) => _nodes.ListAsync(node => node.AgentflowId == agentflowId && node.AgentflowRevision == agentflowRevision);
 
         public Task<IReadOnlyList<AgentflowEdge>> ListEdgesAsync(
             Guid agentflowId,
+            int agentflowRevision,
             CancellationToken cancellationToken = default
-        ) => _edges.ListAsync(edge => edge.AgentflowId == agentflowId);
+        ) => _edges.ListAsync(edge => edge.AgentflowId == agentflowId && edge.AgentflowRevision == agentflowRevision);
+
+        public Task<IReadOnlyList<AgentflowBlockMember>> ListBlockMembersAsync(
+            Guid agentflowId,
+            int agentflowRevision,
+            CancellationToken cancellationToken = default
+        ) =>
+            _members?.ListAsync(member =>
+                member.AgentflowId == agentflowId && member.AgentflowRevision == agentflowRevision
+            ) ?? Task.FromResult<IReadOnlyList<AgentflowBlockMember>>([]);
     }
 
     private sealed class TestProjectDefaultResolver : IProjectDefaultResolver

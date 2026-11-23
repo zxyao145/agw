@@ -24,6 +24,7 @@ using Agw.Settings.Application.Persistence;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Persistence;
 using Agw.Shared.Coordination;
+using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
@@ -124,6 +125,9 @@ public static partial class DependencyInjection
 
         services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IAgentsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IAgentConversationChangesWriter>(serviceProvider =>
+            serviceProvider.GetRequiredService<AgwDbContext>()
+        );
         services.AddScoped<IProjectsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IAuthDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IIntegrationsDbContext>(serviceProvider =>
@@ -132,6 +136,7 @@ public static partial class DependencyInjection
         services.AddScoped<IProvidersDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<ISkillsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IToolsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<ITransaction>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IAgentflowCheckpointPersistence, AgentflowCheckpointPersistence>();
         services.AddScoped<IDurableExecutionScopeMaintenance, DurableExecutionScopeMaintenance>();
         services.AddScoped<IExtensionExecutionUsage, DurableExecutionScopeMaintenance>();

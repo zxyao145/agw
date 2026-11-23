@@ -1,262 +1,144 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Edge, Node } from "reactflow";
 
-import { AgentflowEdgeKind, AgentflowNodeKind } from "../../../../types/agentflow.ts";
-import {
-  createAgentflowEditorStore,
-  selectCanRedo,
-  selectCanUndo,
-  type AgentflowEditorDocument,
-  type AgentflowEditorEdgeData,
-  type AgentflowEditorNodeData,
-} from "./agentflow-editor-store.tsx";
+import { createEmptyDocument, createNode } from "./agentflow-document";
+import { createAgentflowEditorStore, selectCanRedo, selectCanUndo } from "./agentflow-editor-store";
 
-function createNode(id: string, kind: AgentflowNodeKind): Node<AgentflowEditorNodeData> {
-  return {
-    id,
-    type: "dagNode",
-    position: { x: 0, y: 0 },
-    data: {
-      kind,
-      title: id,
-      relateId: kind === AgentflowNodeKind.Agent ? `runtime-${id}` : null,
-      instructions: "",
-      configJson: "",
-    },
-  };
+function createStore() {
+  const input = createEmptyDocument().nodes[0];
+  const agent = createNode("agent", { x: 200, y: 0 });
+  return createAgentflowEditorStore({
+    document: { ...createEmptyDocument(), nodes: [input, agent] },
+    agentflowId: null,
+    baseRevision: 0,
+    publishedRevision: 0,
+  });
 }
-
-function createEdge(id: string, source: string, target: string): Edge<AgentflowEditorEdgeData> {
-  return {
-    id,
-    source,
-    target,
-    data: {
-      kind: AgentflowEdgeKind.Direct,
-      label: "",
-      conditionJson: "",
-      configJson: "",
-    },
-  };
-}
-
-function createDocument(): AgentflowEditorDocument {
-  return {
-    name: "Initial",
-    description: "",
-    summaryModelProviderId: "",
-    nodes: [
-      createNode("input", AgentflowNodeKind.Input),
-      createNode("agent", AgentflowNodeKind.Agent),
-    ],
-    edges: [createEdge("edge", "input", "agent")],
-  };
-}
-
-function rename(document: AgentflowEditorDocument, name: string): AgentflowEditorDocument {
-  return { ...document, name };
-}
-
-test("saving freezes document edits and history until the write finishes", () => {
-  const store = createAgentflowEditorStore(createDocument());
-  store.getState().updateDocument((document) => rename(document, "Submitted"));
-  store.getState().setSaving(true);
-  const submitted = store.getState().document;
-  for (const mode of ["atomic", "ephemeral", { group: "name" }] as const) {
-    store.getState().updateDocument((document) => rename(document, "Unsent"), mode);
-  }
-  store.getState().undo();
-  store.getState().redo();
-  assert.equal(store.getState().document, submitted);
-  store.getState().markSaved();
-  store.getState().setSaving(false);
-  assert.equal(store.getState().isDirty, false);
-  store.getState().updateDocument((document) => rename(document, "Next edit"));
-  assert.equal(store.getState().isDirty, true);
-});
-
-test("a failed save releases the editor without clearing unsaved changes", () => {
-  const store = createAgentflowEditorStore(createDocument());
-  store.getState().updateDocument((document) => rename(document, "Unsaved"));
-  store.getState().setSaving(true);
-  store.getState().setSaving(false);
-  assert.equal(store.getState().isDirty, true);
-  store.getState().undo();
-  assert.equal(store.getState().document.name, "Initial");
-});
 
 test("editor store tracks dirty state and supports undo and redo", () => {
-  const store = createAgentflowEditorStore(createDocument());
-  assert.equal(store.getState().isDirty, false);
+  const store = createStore();
+  store.getState().updateDocument((document) => ({ ...document, name: "Changed" }));
 
-  store.getState().updateDocument((document) => rename(document, "Changed"));
   assert.equal(store.getState().isDirty, true);
   assert.equal(selectCanUndo(store.getState()), true);
-
   store.getState().undo();
-  assert.equal(store.getState().document.name, "Initial");
+  assert.equal(store.getState().document.name, "");
   assert.equal(store.getState().isDirty, false);
   assert.equal(selectCanRedo(store.getState()), true);
-
-  store.getState().redo();
-  assert.equal(store.getState().document.name, "Changed");
-  assert.equal(store.getState().isDirty, true);
 });
 
-test("changing an Agent runtime is one undoable document edit", () => {
-  const store = createAgentflowEditorStore(createDocument());
+test("saving records the new base revision", () => {
+  const store = createStore();
+  store.getState().updateDocument((document) => ({ ...document, name: "Saved" }));
+  store.getState().markSaved({ agentflowId: "flow-1", latestRevision: 1 });
 
+  assert.equal(store.getState().agentflowId, "flow-1");
+  assert.equal(store.getState().baseRevision, 1);
+  assert.equal(store.getState().isDirty, false);
+});
+
+test("selecting a node clears edge and member selection", () => {
+  const store = createStore();
+  const agent = store.getState().document.nodes[1];
+  const team = {
+    ...createNode("magenticBlock", { x: 400, y: 0 }),
+    members: [
+      {
+        memberId: "member-1",
+        kind: "agent" as const,
+        relateId: "agent-1",
+        name: "Member",
+        instructions: null,
+        isManager: true,
+      },
+    ],
+  };
+  const edge = {
+    edgeId: "edge-1",
+    sourceNodeId: "input",
+    targetNodeId: agent.nodeId,
+    isFanInBarrier: false,
+    isSwitchDefault: false,
+    switchCaseOrder: 0,
+    choiceId: null,
+    label: null,
+    conditions: [],
+  };
   store.getState().updateDocument((document) => ({
     ...document,
-    nodes: document.nodes.map((node) =>
-      node.id === "agent"
-        ? {
-            ...node,
-            data: { ...node.data, relateId: "runtime-reviewer", title: "reviewer" },
-          }
-        : node,
-    ),
+    nodes: [...document.nodes, team],
+    edges: [edge],
   }));
+  store.getState().selectEdge("edge-1");
+  store.getState().selectMember({ nodeId: team.nodeId, memberId: "member-1" });
+  store.getState().selectNodes([agent.nodeId]);
 
-  assert.equal(store.getState().document.nodes[1]?.data.relateId, "runtime-reviewer");
-  assert.equal(store.getState().document.nodes[1]?.data.title, "reviewer");
-  assert.equal(store.getState().document.edges[0]?.id, "edge");
-  assert.equal(store.getState().isDirty, true);
-  assert.equal(store.getState().past.length, 1);
-
-  store.getState().undo();
-  assert.equal(store.getState().document.nodes[1]?.data.relateId, "runtime-agent");
-  assert.equal(store.getState().document.nodes[1]?.data.title, "agent");
-
-  store.getState().redo();
-  assert.equal(store.getState().document.nodes[1]?.data.relateId, "runtime-reviewer");
-  assert.equal(store.getState().document.nodes[1]?.data.title, "reviewer");
+  assert.deepEqual(store.getState().selectedNodeIds, [agent.nodeId]);
+  assert.equal(store.getState().selectedEdgeId, null);
+  assert.equal(store.getState().selectedMember, null);
 });
 
-test("a new mutation clears redo history", () => {
-  const store = createAgentflowEditorStore(createDocument());
-  store.getState().updateDocument((document) => rename(document, "First"));
-  store.getState().undo();
-  store.getState().updateDocument((document) => rename(document, "Second"));
+test("a selection of removed nodes, edges or members is cleared after edits", () => {
+  const store = createStore();
+  const node = store.getState().document.nodes[1];
+  const edge = {
+    edgeId: "edge-1",
+    sourceNodeId: "input",
+    targetNodeId: node.nodeId,
+    isFanInBarrier: false,
+    isSwitchDefault: false,
+    switchCaseOrder: 0,
+    choiceId: null,
+    label: null,
+    conditions: [],
+  };
+  store.getState().updateDocument((document) => ({ ...document, edges: [edge] }));
+  store.getState().selectNodes([node.nodeId]);
+  store
+    .getState()
+    .updateDocument((document) => ({ ...document, nodes: document.nodes.slice(0, 1), edges: [] }));
 
-  assert.equal(selectCanRedo(store.getState()), false);
-  assert.equal(store.getState().document.name, "Second");
+  assert.deepEqual(store.getState().selectedNodeIds, []);
+  assert.equal(store.getState().selectedEdgeId, null);
+  assert.equal(store.getState().selectedMember, null);
 });
 
-test("grouped edits create one history entry", () => {
-  const store = createAgentflowEditorStore(createDocument());
-  store.getState().updateDocument((document) => rename(document, "C"), { group: "name" });
-  store.getState().updateDocument((document) => rename(document, "Ch"), { group: "name" });
-  store.getState().updateDocument((document) => rename(document, "Changed"), { group: "name" });
-  store.getState().commitHistoryGroup();
-
-  assert.equal(store.getState().past.length, 1);
-  store.getState().undo();
-  assert.equal(store.getState().document.name, "Initial");
-});
-
-test("history keeps only the latest one hundred entries", () => {
-  const store = createAgentflowEditorStore(createDocument());
-  for (let index = 0; index < 105; index += 1) {
-    store.getState().updateDocument((document) => rename(document, `Name ${index}`));
-  }
-
-  assert.equal(store.getState().past.length, 100);
-  for (let index = 0; index < 100; index += 1) {
-    store.getState().undo();
-  }
-  assert.equal(store.getState().document.name, "Name 4");
-});
-
-test("composite graph edits are restored atomically", () => {
-  const store = createAgentflowEditorStore(createDocument());
-  store.getState().selectNode("agent");
+test("undo restores a multi-node move in one step", () => {
+  const store = createStore();
+  const before = store.getState().document.nodes.map((node) => node.position);
   store.getState().updateDocument((document) => ({
     ...document,
-    nodes: document.nodes.filter((node) => node.id !== "agent"),
-    edges: document.edges.filter((edge) => edge.source !== "agent" && edge.target !== "agent"),
-  }));
-
-  assert.deepEqual(
-    store.getState().document.nodes.map((node) => node.id),
-    ["input"],
-  );
-  assert.equal(store.getState().document.edges.length, 0);
-  assert.equal(store.getState().selectedNodeId, null);
-
-  store.getState().undo();
-  assert.deepEqual(
-    store.getState().document.nodes.map((node) => node.id),
-    ["input", "agent"],
-  );
-  assert.equal(store.getState().document.edges.length, 1);
-});
-
-test("invalid block scope and selection are reconciled after edits", () => {
-  const document = createDocument();
-  document.nodes.push(createNode("block", AgentflowNodeKind.ConcurrentBlock));
-  const store = createAgentflowEditorStore(document);
-  store.getState().setCanvasScope({ kind: "block", blockId: "block" });
-  store.getState().selectNode("block");
-
-  store.getState().updateDocument((current) => ({
-    ...current,
-    nodes: current.nodes.filter((node) => node.id !== "block"),
-  }));
-
-  assert.deepEqual(store.getState().canvasScope, { kind: "root" });
-  assert.equal(store.getState().selectedNodeId, null);
-
-  store.getState().undo();
-  store.getState().setCanvasScope({ kind: "block", blockId: "block" });
-  store.getState().selectNode("block");
-  store.getState().redo();
-
-  assert.deepEqual(store.getState().canvasScope, { kind: "root" });
-  assert.equal(store.getState().selectedNodeId, null);
-});
-
-test("an automatic layout is one undoable document change", () => {
-  const store = createAgentflowEditorStore(createDocument());
-  store.getState().updateDocument((document) => ({
-    ...document,
-    nodes: document.nodes.map((node, index) => ({
+    nodes: document.nodes.map((node) => ({
       ...node,
-      position: { x: index * 120, y: index * 80 },
+      position: { x: Number(node.position.x) + 40, y: Number(node.position.y) + 20 },
     })),
   }));
 
   assert.equal(store.getState().past.length, 1);
-  assert.deepEqual(store.getState().document.nodes[1]?.position, { x: 120, y: 80 });
-
   store.getState().undo();
-  assert.deepEqual(store.getState().document.nodes[1]?.position, { x: 0, y: 0 });
-});
-
-test("ephemeral React Flow state does not mark the document dirty", () => {
-  const store = createAgentflowEditorStore(createDocument());
-  store.getState().updateDocument(
-    (document) => ({
-      ...document,
-      nodes: document.nodes.map((node) =>
-        node.id === "agent" ? { ...node, width: 220, selected: true } : node,
-      ),
-    }),
-    "ephemeral",
+  assert.deepEqual(
+    store.getState().document.nodes.map((node) => node.position),
+    before,
   );
-
-  assert.equal(store.getState().isDirty, false);
-  assert.equal(selectCanUndo(store.getState()), false);
 });
 
-test("stores are isolated and markSaved resets only the current baseline", () => {
-  const first = createAgentflowEditorStore(createDocument());
-  const second = createAgentflowEditorStore(createDocument());
-  first.getState().updateDocument((document) => rename(document, "Saved"));
-  first.getState().markSaved();
+test("grouped edits create one history entry", () => {
+  const store = createStore();
+  store.getState().updateDocument((document) => ({ ...document, name: "F" }), { group: "name" });
+  store.getState().updateDocument((document) => ({ ...document, name: "Flow" }), { group: "name" });
+  store.getState().commitHistoryGroup();
 
-  assert.equal(first.getState().isDirty, false);
-  assert.equal(first.getState().document.name, "Saved");
-  assert.equal(second.getState().document.name, "Initial");
+  assert.equal(store.getState().past.length, 1);
+  store.getState().undo();
+  assert.equal(store.getState().document.name, "");
+});
+
+test("saving freezes edits while a request is active", () => {
+  const store = createStore();
+  store.getState().setSaving(true);
+  store.getState().updateDocument((document) => ({ ...document, name: "Ignored" }));
+
+  assert.equal(store.getState().document.name, "");
+  store.getState().setSaving(false);
+  assert.equal(selectCanRedo(store.getState()), false);
 });

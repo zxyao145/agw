@@ -168,11 +168,18 @@ test("gradient images may be longer than other values up to their own limit", ()
 test("every color variable, including the palette, accepts a color", () => {
   const colors = [...THEME_TOKEN_KINDS].filter(([, kind]) => kind === "color");
   assert.ok(colors.some(([name]) => name === "--color-amber-500"));
-  assert.ok(colors.some(([name]) => name === "--agw-agentflow-edge-switch-default"));
+  assert.ok(colors.some(([name]) => name === "--agw-agentflow-edge"));
   assert.deepEqual(
     errors({ light: Object.fromEntries(colors.map(([name]) => [name, "#123456"])) }),
     [],
   );
+});
+
+test("a removed Agentflow edge variable is an unknown variable", () => {
+  const variable = "--agw-agentflow-edge" + "-fan-out";
+  assert.deepEqual(errors({ light: { [variable]: "#123456" } }), [
+    ["UNKNOWN_THEME_VARIABLE", `light.${variable}`],
+  ]);
 });
 
 test("a theme needs at least one variable and no other fields", () => {

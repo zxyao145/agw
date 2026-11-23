@@ -366,6 +366,8 @@ public sealed class ExecutionWorkspaceAuthorizationTests
         );
         await using var workflow = await workflowFactory.CreateAiWorkflow(
             agentflow,
+            request.AgentflowSnapshot!.RootRevision,
+            request.AgentflowSnapshot,
             cancellationToken,
             sessionScope,
             environmentVariables: request.Settings.EnvironmentVariables,
@@ -520,45 +522,7 @@ public sealed class ExecutionWorkspaceAuthorizationTests
                         CreateTime = now,
                     }
                 );
-                context.Agentflows.Add(
-                    new Agentflow
-                    {
-                        Id = agentflowId,
-                        Name = "workspace authorization",
-                        CreateBy = UserId,
-                        CreateTime = now,
-                        Nodes =
-                        [
-                            new AgentflowNode
-                            {
-                                NodeId = "input",
-                                Kind = AgentflowNodeKind.Input,
-                                Name = "Input",
-                                CreateBy = UserId,
-                                CreateTime = now,
-                            },
-                            new AgentflowNode
-                            {
-                                NodeId = "output",
-                                Kind = AgentflowNodeKind.Output,
-                                Name = "Output",
-                                CreateBy = UserId,
-                                CreateTime = now,
-                            },
-                        ],
-                        Edges =
-                        [
-                            new AgentflowEdge
-                            {
-                                EdgeId = "input-output",
-                                SourceNodeId = "input",
-                                TargetNodeId = "output",
-                                CreateBy = UserId,
-                                CreateTime = now,
-                            },
-                        ],
-                    }
-                );
+                AddAgentflowRevision(context, agentflowId, "workspace authorization", now);
                 await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             }
 
@@ -651,64 +615,76 @@ public sealed class ExecutionWorkspaceAuthorizationTests
             var context = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
             var agentflowId = Guid.CreateVersion7();
             var now = TimeProvider.System.GetUtcNow();
+            AddAgentflowRevision(context, agentflowId, "compiled-extension-agentflow", now, agentId);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            return agentflowId;
+        }
+
+        private static void AddAgentflowRevision(
+            AgwDbContext context,
+            Guid agentflowId,
+            string name,
+            DateTimeOffset now,
+            Guid? agentId = null
+        )
+        {
             context.Agentflows.Add(
                 new Agentflow
                 {
                     Id = agentflowId,
-                    Name = "compiled-extension-agentflow",
+                    Name = name,
+                    LatestRevision = 1,
+                    PublishedRevision = 1,
                     CreateBy = UserId,
                     CreateTime = now,
-                    Nodes =
-                    [
-                        new AgentflowNode
-                        {
-                            NodeId = "input",
-                            Kind = AgentflowNodeKind.Input,
-                            Name = "Input",
-                            CreateBy = UserId,
-                            CreateTime = now,
-                        },
-                        new AgentflowNode
-                        {
-                            NodeId = "agent",
-                            Kind = AgentflowNodeKind.Agent,
-                            Name = "Agent",
-                            RelateId = agentId,
-                            CreateBy = UserId,
-                            CreateTime = now,
-                        },
-                        new AgentflowNode
-                        {
-                            NodeId = "output",
-                            Kind = AgentflowNodeKind.Output,
-                            Name = "Output",
-                            CreateBy = UserId,
-                            CreateTime = now,
-                        },
-                    ],
-                    Edges =
-                    [
-                        new AgentflowEdge
-                        {
-                            EdgeId = "input-agent",
-                            SourceNodeId = "input",
-                            TargetNodeId = "agent",
-                            CreateBy = UserId,
-                            CreateTime = now,
-                        },
-                        new AgentflowEdge
-                        {
-                            EdgeId = "agent-output",
-                            SourceNodeId = "agent",
-                            TargetNodeId = "output",
-                            CreateBy = UserId,
-                            CreateTime = now,
-                        },
-                    ],
                 }
             );
-            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
-            return agentflowId;
+            context.AgentflowRevisions.Add(
+                new AgentflowRevision
+                {
+                    AgentflowId = agentflowId,
+                    Revision = 1,
+                    CreateBy = UserId,
+                    CreateTime = now,
+                }
+            );
+
+            AddNode("input", AgentflowNodeKind.Input);
+            if (agentId.HasValue)
+            {
+                AddNode("agent", AgentflowNodeKind.Agent, agentId);
+                AddEdge("input", "agent");
+            }
+            AddNode("output", AgentflowNodeKind.Output);
+            AddEdge(agentId.HasValue ? "agent" : "input", "output");
+
+            void AddNode(string nodeId, AgentflowNodeKind kind, Guid? relateId = null) =>
+                context.AgentflowNodes.Add(
+                    new AgentflowNode
+                    {
+                        AgentflowId = agentflowId,
+                        AgentflowRevision = 1,
+                        NodeId = nodeId,
+                        Kind = kind,
+                        RelateId = relateId,
+                        CreateBy = UserId,
+                        CreateTime = now,
+                    }
+                );
+
+            void AddEdge(string source, string target) =>
+                context.AgentflowEdges.Add(
+                    new AgentflowEdge
+                    {
+                        AgentflowId = agentflowId,
+                        AgentflowRevision = 1,
+                        EdgeId = $"{source}-{target}",
+                        SourceNodeId = source,
+                        TargetNodeId = target,
+                        CreateBy = UserId,
+                        CreateTime = now,
+                    }
+                );
         }
 
         public async Task SetWorkspaceAsync(Guid projectId, string workspace)

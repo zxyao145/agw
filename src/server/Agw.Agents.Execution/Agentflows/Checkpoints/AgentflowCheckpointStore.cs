@@ -8,6 +8,7 @@ using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
 using Agw.Extensions.Contracts;
+using Agw.Projects.Contracts.History;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
@@ -17,6 +18,7 @@ using Agw.Shared.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Execution.Agentflows.Checkpoints;
 
@@ -31,16 +33,19 @@ public sealed class AgentflowCheckpointStore
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IApplicationLock _applicationLock;
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<AgentflowCheckpointStore> _logger;
 
     public AgentflowCheckpointStore(
         IServiceScopeFactory scopeFactory,
         IApplicationLock applicationLock,
-        TimeProvider timeProvider
+        TimeProvider timeProvider,
+        ILogger<AgentflowCheckpointStore> logger
     )
     {
         _scopeFactory = scopeFactory;
         _applicationLock = applicationLock;
         _timeProvider = timeProvider;
+        _logger = logger;
     }
 
     internal async Task<RecordedAgentflowCheckpoint?> RecordAsync(
@@ -50,9 +55,10 @@ public sealed class AgentflowCheckpointStore
         string contextId,
         Guid taskId,
         Guid agentflowId,
+        int agentflowRevision,
+        AgentflowRevisionSnapshot revisionSnapshot,
         string userId,
         bool isDurable,
-        string definitionFingerprint,
         DurableAgentflowCheckpoint checkpoint,
         IReadOnlyDictionary<string, string> markerNames,
         CancellationToken cancellationToken
@@ -74,6 +80,10 @@ public sealed class AgentflowCheckpointStore
         )
         {
             throw new AgwException(ErrorCodes.AuthenticationRequired);
+        }
+        if (revisionSnapshot.RootRevision != agentflowRevision)
+        {
+            throw new AgwException(ErrorCodes.DurableExecutionConflict);
         }
 
         var occurrenceId = CreateDeterministicGuid(
@@ -138,7 +148,15 @@ public sealed class AgentflowCheckpointStore
                     throw new AgwException(ErrorCodes.InvalidParam, "Agentflow checkpoint owner does not match.");
                 }
 
-                return new RecordedAgentflowCheckpoint(ToSnapshot(existing), messages);
+                if (
+                    existing.AgentflowRevision != agentflowRevision
+                    || existing.RuntimeVersion != AgentflowCheckpointRuntime.Version
+                )
+                {
+                    throw new AgwException(ErrorCodes.DurableExecutionConflict);
+                }
+
+                return new RecordedAgentflowCheckpoint(ToSnapshot(existing, revisionSnapshot), messages);
             }
 
             if (
@@ -186,10 +204,11 @@ public sealed class AgentflowCheckpointStore
                             ContextId = contextId,
                             TaskId = taskId,
                             AgentflowId = agentflowId,
+                            AgentflowRevision = agentflowRevision,
+                            RuntimeVersion = AgentflowCheckpointRuntime.Version,
                             UserId = userId,
                             IsDurable = isDurable,
                             BoundarySequence = nextSequence,
-                            DefinitionFingerprint = definitionFingerprint,
                             MarkersJson = JsonSerializer.Serialize(markers, JsonOptions),
                             CheckpointJson = DurableExecutionJson.Serialize(checkpoint),
                             CreateBy = userId,
@@ -199,7 +218,7 @@ public sealed class AgentflowCheckpointStore
                         };
                         session.Agents.AgentflowCheckpoints.Add(record);
                         return new AgentflowCheckpointPersistenceResult<RecordedAgentflowCheckpoint?>(
-                            new RecordedAgentflowCheckpoint(ToSnapshot(record), messages),
+                            new RecordedAgentflowCheckpoint(ToSnapshot(record, revisionSnapshot), messages),
                             Commit: true
                         );
                     },
@@ -222,15 +241,54 @@ public sealed class AgentflowCheckpointStore
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
-        var fingerprint = await AgentflowDefinitionFingerprint
-            .CreateAsync(dbContext, agentflowId, cancellationToken)
+        var turns = scope.ServiceProvider.GetRequiredService<IConversationTurnStore>();
+        var snapshots = scope.ServiceProvider.GetRequiredService<IAgentflowRevisionSnapshotReader>();
+
+        var records = await ListCheckpointRecordsAsync(
+                dbContext,
+                projectId,
+                contextId,
+                agentflowId,
+                userId,
+                cancellationToken
+            )
             .ConfigureAwait(false);
-        if (fingerprint == null)
+        var result = new List<AgentflowCheckpointAvailability>(records.Length);
+        var validationContext = new CheckpointValidationContext
         {
-            return [];
+            Agents = dbContext,
+            Turns = turns,
+            Snapshots = snapshots,
+            ProjectId = projectId,
+            ContextId = contextId,
+            AgentflowId = agentflowId,
+            UserId = userId,
+        };
+        foreach (var record in records)
+        {
+            var isInProcessOccurrence = inProcessOccurrences?.Contains(record.Id) == true;
+            var available = await IsCheckpointAvailableAsync(
+                    validationContext,
+                    record,
+                    isInProcessOccurrence,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            result.Add(CreateAvailability(record, available));
         }
 
-        var records = await dbContext
+        return result;
+    }
+
+    private static Task<AgentflowCheckpointRecord[]> ListCheckpointRecordsAsync(
+        IAgentsDbContext dbContext,
+        Guid projectId,
+        string contextId,
+        Guid agentflowId,
+        string userId,
+        CancellationToken cancellationToken
+    ) =>
+        dbContext
             .AgentflowCheckpoints.AsNoTracking()
             .Where(item =>
                 item.ProjectId == projectId
@@ -239,31 +297,60 @@ public sealed class AgentflowCheckpointStore
                 && item.UserId == userId
             )
             .OrderBy(item => item.BoundarySequence)
-            .ToArrayAsync(cancellationToken)
-            .ConfigureAwait(false);
-        return records
-            .Select(record => new AgentflowCheckpointAvailability(
+            .ToArrayAsync(cancellationToken);
+
+    private async Task<bool> IsCheckpointAvailableAsync(
+        CheckpointValidationContext validationContext,
+        AgentflowCheckpointRecord record,
+        bool isInProcessOccurrence,
+        CancellationToken cancellationToken
+    )
+    {
+        if (
+            record.RuntimeVersion != AgentflowCheckpointRuntime.Version
+            || !HasReadableCheckpoint(record)
+            || (!record.IsDurable && !isInProcessOccurrence)
+        )
+        {
+            return false;
+        }
+
+        try
+        {
+            _ = await LoadValidatedResumeCheckpointAsync(
+                    validationContext,
+                    record.Id,
+                    record.IsDurable,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            return true;
+        }
+        catch (AgwException exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Agentflow checkpoint {CheckpointOccurrenceId} is unavailable with error code {ErrorCode}.",
                 record.Id,
-                record.AgentflowId,
-                record.BoundarySequence,
-                string.Equals(record.DefinitionFingerprint, fingerprint, StringComparison.Ordinal)
-                    && HasReadableCheckpoint(record)
-                    && (record.IsDurable || inProcessOccurrences?.Contains(record.Id) == true),
-                DeserializeMarkers(record.MarkersJson)
-                    .Select(marker => new AgentflowCheckpointMarkerInfo(marker.NodeId, marker.Name, marker.MessageId))
-                    .ToArray()
-            ))
-            .ToArray();
+                exception.Code
+            );
+            return false;
+        }
     }
 
-    internal async Task<string?> GetDefinitionFingerprintAsync(Guid agentflowId, CancellationToken cancellationToken)
-    {
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
-        return await AgentflowDefinitionFingerprint
-            .CreateAsync(dbContext, agentflowId, cancellationToken)
-            .ConfigureAwait(false);
-    }
+    private static AgentflowCheckpointAvailability CreateAvailability(
+        AgentflowCheckpointRecord record,
+        bool available
+    ) =>
+        new(
+            record.Id,
+            record.AgentflowId,
+            record.BoundarySequence,
+            available,
+            DeserializeMarkers(record.MarkersJson)
+                .Select(marker => new AgentflowCheckpointMarkerInfo(marker.NodeId, marker.Name, marker.MessageId))
+                .ToArray()
+        );
 
     internal async Task<AgentflowCheckpointSnapshot> PrepareInProcessResumeAsync(
         Guid occurrenceId,
@@ -271,7 +358,8 @@ public sealed class AgentflowCheckpointStore
         string contextId,
         Guid agentflowId,
         string userId,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        Func<AgentflowRevisionSnapshot, CancellationToken, Task>? validateSnapshot = null
     ) =>
         await PrepareResumeAsync(
                 occurrenceId,
@@ -280,7 +368,8 @@ public sealed class AgentflowCheckpointStore
                 agentflowId,
                 userId,
                 resumeTurnId: null,
-                cancellationToken
+                cancellationToken,
+                validateSnapshot: validateSnapshot
             )
             .ConfigureAwait(false);
 
@@ -292,7 +381,8 @@ public sealed class AgentflowCheckpointStore
         Guid agentflowId,
         string userId,
         CancellationToken cancellationToken,
-        DurableExecutionSettings? permissionSettings = null
+        DurableExecutionSettings? permissionSettings = null,
+        Func<AgentflowRevisionSnapshot, CancellationToken, Task>? validateSnapshot = null
     ) =>
         await PrepareResumeAsync(
                 occurrenceId,
@@ -302,7 +392,8 @@ public sealed class AgentflowCheckpointStore
                 userId,
                 resumeTurnId,
                 cancellationToken,
-                permissionSettings
+                permissionSettings,
+                validateSnapshot
             )
             .ConfigureAwait(false);
 
@@ -330,11 +421,14 @@ public sealed class AgentflowCheckpointStore
         string userId,
         Guid? resumeTurnId,
         CancellationToken cancellationToken,
-        DurableExecutionSettings? permissionSettings = null
+        DurableExecutionSettings? permissionSettings = null,
+        Func<AgentflowRevisionSnapshot, CancellationToken, Task>? validateSnapshot = null
     )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var persistence = scope.ServiceProvider.GetRequiredService<IAgentflowCheckpointPersistence>();
+        var turns = scope.ServiceProvider.GetRequiredService<IConversationTurnStore>();
+        var snapshots = scope.ServiceProvider.GetRequiredService<IAgentflowRevisionSnapshotReader>();
         var checkpoint =
             await persistence.FindCheckpointAsync(occurrenceId, cancellationToken)
             ?? throw new AgwException(ErrorCodes.InvalidParam, "Agentflow checkpoint was not found.");
@@ -364,42 +458,43 @@ public sealed class AgentflowCheckpointStore
         await using var historyLock = await _applicationLock
             .AcquireAsync(GetHistoryLockName(projectId, contextId), cancellationToken)
             .ConfigureAwait(false);
+        var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
+        var validationContext = new CheckpointValidationContext
+        {
+            Agents = dbContext,
+            Turns = turns,
+            Snapshots = snapshots,
+            ProjectId = projectId,
+            ContextId = contextId,
+            AgentflowId = agentflowId,
+            UserId = userId,
+        };
+        var validatedTarget = await LoadValidatedResumeCheckpointAsync(
+                validationContext,
+                occurrenceId,
+                expectsDurable: resumeTurnId.HasValue,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (validateSnapshot is not null)
+        {
+            await validateSnapshot(validatedTarget.Snapshot.RevisionSnapshot, cancellationToken).ConfigureAwait(false);
+        }
+
         IReadOnlyList<Guid> extensionIds = [];
         if (resumeTurnId.HasValue)
         {
-            var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
             var existingResume = await dbContext
                 .DurableExecutions.AsNoTracking()
                 .SingleOrDefaultAsync(item => item.Id == resumeTurnId.Value, cancellationToken)
                 .ConfigureAwait(false);
             if (existingResume != null)
             {
-                var validated = await LoadValidatedResumeCheckpointAsync(
-                        dbContext,
-                        occurrenceId,
-                        projectId,
-                        contextId,
-                        agentflowId,
-                        userId,
-                        expectsDurable: true,
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
-                EnsureExistingResumeMatches(existingResume, validated.Record.Id, userId);
-                return validated.Snapshot;
+                EnsureExistingResumeMatches(existingResume, validatedTarget.Record.Id, userId);
+                return validatedTarget.Snapshot;
             }
 
-            var target = await LoadValidatedResumeCheckpointAsync(
-                    dbContext,
-                    occurrenceId,
-                    projectId,
-                    contextId,
-                    agentflowId,
-                    userId,
-                    expectsDurable: true,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
+            var target = validatedTarget;
             var source =
                 await dbContext
                     .DurableExecutions.AsNoTracking()
@@ -447,12 +542,11 @@ public sealed class AgentflowCheckpointStore
                     async (session, token) =>
                     {
                         var validated = await LoadValidatedResumeCheckpointAsync(
-                                session.Agents,
+                                validationContext with
+                                {
+                                    Agents = session.Agents,
+                                },
                                 occurrenceId,
-                                projectId,
-                                contextId,
-                                agentflowId,
-                                userId,
                                 resumeTurnId.HasValue,
                                 token
                             )
@@ -530,7 +624,7 @@ public sealed class AgentflowCheckpointStore
                             // 恢复分支是一个新的 Turn：Turn 行与序号 1 的开始事件随执行记录一起提交。
                             // The resume branch is a new turn: its turn row and the start event with sequence 1 commit with the execution record.
                             await session
-                                .AcceptResumeTurnAsync(resumeTurnId.Value, record, token)
+                                .AcceptResumeTurnAsync(resumeTurnId.Value, record, snapshot.RevisionSnapshot, token)
                                 .ConfigureAwait(false);
                             AddResumeStartEvent(session.Agents, resumeTurnId.Value, record, userId);
                         }
@@ -549,28 +643,58 @@ public sealed class AgentflowCheckpointStore
         }
     }
 
-    private static async Task<ValidatedResumeCheckpoint> LoadValidatedResumeCheckpointAsync(
-        IAgentsDbContext dbContext,
+    private async Task<ValidatedResumeCheckpoint> LoadValidatedResumeCheckpointAsync(
+        CheckpointValidationContext context,
         Guid occurrenceId,
-        Guid projectId,
-        string contextId,
-        Guid agentflowId,
-        string userId,
         bool expectsDurable,
         CancellationToken cancellationToken
     )
     {
         var record =
-            await dbContext
-                .AgentflowCheckpoints.AsNoTracking()
+            await context
+                .Agents.AgentflowCheckpoints.AsNoTracking()
                 .SingleOrDefaultAsync(item => item.Id == occurrenceId, cancellationToken)
                 .ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.InvalidParam, "Agentflow checkpoint was not found.");
+        EnsureCheckpointTargetMatches(record, context, expectsDurable);
+        var sourceTurn = await GetCheckpointSourceTurnAsync(context.Turns, record, cancellationToken)
+            .ConfigureAwait(false);
+        var revisionSnapshot = AgentflowRevisionSnapshot.FromTurn(sourceTurn);
+        EnsureCheckpointRevisionMatches(record, sourceTurn, context.AgentflowId, revisionSnapshot);
+
+        if (record.IsDurable)
+        {
+            await EnsureDurableSnapshotMatchesAsync(context, record, sourceTurn, revisionSnapshot, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         if (
-            record.ProjectId != projectId
-            || !string.Equals(record.ContextId, contextId, StringComparison.Ordinal)
-            || record.AgentflowId != agentflowId
-            || !string.Equals(record.UserId, userId, StringComparison.Ordinal)
+            !await context
+                .Snapshots.DefinitionsRemainAvailableAsync(sourceTurn.TargetId, revisionSnapshot, cancellationToken)
+                .ConfigureAwait(false)
+        )
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "A definition pinned by this checkpoint is no longer available."
+            );
+        }
+
+        // Validate decryption and deserialization before any history mutation.
+        return new ValidatedResumeCheckpoint(record, ToSnapshot(record, revisionSnapshot));
+    }
+
+    private static void EnsureCheckpointTargetMatches(
+        AgentflowCheckpointRecord record,
+        CheckpointValidationContext context,
+        bool expectsDurable
+    )
+    {
+        if (
+            record.ProjectId != context.ProjectId
+            || !string.Equals(record.ContextId, context.ContextId, StringComparison.Ordinal)
+            || record.AgentflowId != context.AgentflowId
+            || !string.Equals(record.UserId, context.UserId, StringComparison.Ordinal)
         )
         {
             throw new AgwException(
@@ -578,6 +702,7 @@ public sealed class AgentflowCheckpointStore
                 "Agentflow checkpoint does not match the current conversation target."
             );
         }
+
         if (record.IsDurable != expectsDurable)
         {
             throw new AgwException(
@@ -588,19 +713,86 @@ public sealed class AgentflowCheckpointStore
             );
         }
 
-        var fingerprint = await AgentflowDefinitionFingerprint
-            .CreateAsync(dbContext, agentflowId, cancellationToken)
-            .ConfigureAwait(false);
-        if (!string.Equals(record.DefinitionFingerprint, fingerprint, StringComparison.Ordinal))
+        if (record.RuntimeVersion != AgentflowCheckpointRuntime.Version)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "The checkpoint runtime version is no longer available.");
+        }
+    }
+
+    private static async Task<ConversationTurnSnapshot> GetCheckpointSourceTurnAsync(
+        IConversationTurnStore turns,
+        AgentflowCheckpointRecord record,
+        CancellationToken cancellationToken
+    )
+    {
+        var sourceTurn = record.SourceTurnId.HasValue
+            ? await turns.GetAsync(record.SourceTurnId.Value, cancellationToken).ConfigureAwait(false)
+            : null;
+        if (
+            sourceTurn is null
+            || sourceTurn.TargetType != ConversationTurnTargetType.Agentflow
+            || sourceTurn.AgentflowDependencies is null
+        )
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,
-                "Agentflow definition changed after this checkpoint was created."
+                "The checkpoint's source turn has no Agentflow revision snapshot."
             );
         }
 
-        // Validate decryption and deserialization before any history mutation.
-        return new ValidatedResumeCheckpoint(record, ToSnapshot(record));
+        return sourceTurn;
+    }
+
+    private static void EnsureCheckpointRevisionMatches(
+        AgentflowCheckpointRecord record,
+        ConversationTurnSnapshot sourceTurn,
+        Guid agentflowId,
+        AgentflowRevisionSnapshot revisionSnapshot
+    )
+    {
+        if (
+            sourceTurn.TargetId != agentflowId
+            || record.AgentflowId != sourceTurn.TargetId
+            || !revisionSnapshot.PinsDefinition(sourceTurn.TargetId, record.AgentflowId, record.AgentflowRevision)
+        )
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "A definition pinned by this checkpoint is no longer available."
+            );
+        }
+    }
+
+    private static async Task EnsureDurableSnapshotMatchesAsync(
+        CheckpointValidationContext context,
+        AgentflowCheckpointRecord record,
+        ConversationTurnSnapshot sourceTurn,
+        AgentflowRevisionSnapshot revisionSnapshot,
+        CancellationToken cancellationToken
+    )
+    {
+        var sourceExecution = await context
+            .Agents.DurableExecutions.AsNoTracking()
+            .SingleOrDefaultAsync(
+                item => item.Id == record.SourceTurnId && item.UserId == context.UserId,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (sourceExecution is null)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "The checkpoint's revision snapshots do not match.");
+        }
+
+        var manifest = ReadExecutionManifest(sourceExecution);
+        if (
+            manifest.AgentType != AgentRuntimeType.Agentflow
+            || manifest.AgentId != sourceTurn.TargetId
+            || manifest.AgentflowRevision != revisionSnapshot.RootRevision
+            || !revisionSnapshot.MatchesDependencies(manifest.AgentflowDependencies)
+        )
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "The checkpoint's revision snapshots do not match.");
+        }
     }
 
     private static DurableExecutionManifest ReadExecutionManifest(DurableExecutionRecord record)
@@ -641,6 +833,17 @@ public sealed class AgentflowCheckpointStore
         AgentflowCheckpointRecord Record,
         AgentflowCheckpointSnapshot Snapshot
     );
+
+    private sealed record CheckpointValidationContext
+    {
+        public required IAgentsDbContext Agents { get; init; }
+        public required IConversationTurnStore Turns { get; init; }
+        public required IAgentflowRevisionSnapshotReader Snapshots { get; init; }
+        public required Guid ProjectId { get; init; }
+        public required string ContextId { get; init; }
+        public required Guid AgentflowId { get; init; }
+        public required string UserId { get; init; }
+    }
 
     private async Task RegisterResumeExecutionAsync(
         IAgentsDbContext dbContext,
@@ -778,14 +981,19 @@ public sealed class AgentflowCheckpointStore
         );
     }
 
-    private static AgentflowCheckpointSnapshot ToSnapshot(AgentflowCheckpointRecord record) =>
+    private static AgentflowCheckpointSnapshot ToSnapshot(
+        AgentflowCheckpointRecord record,
+        AgentflowRevisionSnapshot revisionSnapshot
+    ) =>
         new(
             record.Id,
             record.SourceTurnId,
             record.AgentflowId,
             record.BoundarySequence,
-            record.DefinitionFingerprint,
+            record.AgentflowRevision,
+            record.RuntimeVersion,
             DeserializeMarkers(record.MarkersJson),
+            revisionSnapshot,
             DurableExecutionJson.DeserializeRequired<DurableAgentflowCheckpoint>(
                 record.CheckpointJson,
                 "agentflow checkpoint"
@@ -799,7 +1007,11 @@ public sealed class AgentflowCheckpointStore
     {
         try
         {
-            _ = ToSnapshot(record);
+            _ = DeserializeMarkers(record.MarkersJson);
+            _ = DurableExecutionJson.DeserializeRequired<DurableAgentflowCheckpoint>(
+                record.CheckpointJson,
+                "agentflow checkpoint"
+            );
             return true;
         }
         catch (Exception exception) when (exception is JsonException or AgwException)
@@ -812,9 +1024,9 @@ public sealed class AgentflowCheckpointStore
     {
         var properties = new AdditionalPropertiesDictionary
         {
-            ["type"] = CheckpointMessageType,
+            [AgwMessageClassifier.TypeKey] = CheckpointMessageType,
             ["checkpointOccurrenceId"] = occurrenceId.ToString("D"),
-            ["checkpointNodeId"] = marker.NodeId,
+            [AgwMessageClassifier.NodeIdKey] = marker.NodeId,
             ["checkpointName"] = marker.Name,
         };
         return new ChatMessage(ChatRole.Assistant, marker.Name)

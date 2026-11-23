@@ -1,3 +1,4 @@
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Shared.Exceptions;
@@ -26,10 +27,6 @@ public sealed class AgentflowCheckpointSupport
     }
 
     internal bool IsAvailable => _checkpointStore != null;
-
-    internal Task<string?> GetDefinitionFingerprintAsync(Guid agentflowId, CancellationToken cancellationToken) =>
-        _checkpointStore?.GetDefinitionFingerprintAsync(agentflowId, cancellationToken)
-        ?? Task.FromResult<string?>(null);
 
     private static string CreateCheckpointSessionId(Guid agentflowId, Guid turnId) =>
         $"agentflow-{agentflowId:N}-turn-{turnId:N}";
@@ -77,9 +74,10 @@ public sealed class AgentflowCheckpointSupport
         string contextId,
         Guid taskId,
         Guid agentflowId,
+        int agentflowRevision,
+        AgentflowRevisionSnapshot revisionSnapshot,
         string userId,
         bool isDurable,
-        string? definitionFingerprint,
         DurableAgentflowCheckpointStore runCheckpointStore,
         CheckpointInfo? frameworkCheckpoint,
         IReadOnlyDictionary<string, string> checkpointMarkers,
@@ -91,7 +89,6 @@ public sealed class AgentflowCheckpointSupport
             || conversationId == Guid.Empty
             || checkpointMarkers.Count == 0
             || frameworkCheckpoint == null
-            || string.IsNullOrWhiteSpace(definitionFingerprint)
         )
         {
             return null;
@@ -116,9 +113,10 @@ public sealed class AgentflowCheckpointSupport
                 contextId,
                 taskId,
                 agentflowId,
+                agentflowRevision,
+                revisionSnapshot,
                 userId,
                 isDurable,
-                definitionFingerprint,
                 checkpoint,
                 checkpointMarkers,
                 cancellationToken

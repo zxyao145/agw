@@ -12,11 +12,7 @@
     "--color-emerald-500": "#333333",
     "--agw-status-running": "#444444",
     "--agw-server-online-halo": "#555555",
-    "--agw-agentflow-edge": "#010203",
-    "--agw-agentflow-edge-fan-out": "#040506",
-    "--agw-agentflow-edge-fan-in": "#070809",
-    "--agw-agentflow-edge-switch-case": "#0a0b0c",
-    "--agw-agentflow-edge-switch-default": "#0d0e0f"
+    "--agw-agentflow-edge": "#010203"
   },
   "light": {
     "--popover": "#fff7ed",

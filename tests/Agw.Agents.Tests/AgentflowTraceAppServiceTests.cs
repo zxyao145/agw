@@ -261,6 +261,7 @@ public class AgentflowTraceAppServiceTests : IDisposable
             durationMilliseconds: 1234L,
             status: AgentflowNodeExecutionStatus.Succeeded,
             error: null,
+            extra: new AgentflowTraceExtra { AgentflowRevision = 3 },
             startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)
         );
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
@@ -288,6 +289,7 @@ public class AgentflowTraceAppServiceTests : IDisposable
         Assert.Equal(trace.DurationMilliseconds, dto.DurationMilliseconds);
         Assert.Equal(trace.Status, dto.Status);
         Assert.Equal(trace.Error, dto.Error);
+        Assert.Equal(trace.Extra, dto.Extra);
     }
 
     [Theory]
@@ -378,6 +380,7 @@ public class AgentflowTraceAppServiceTests : IDisposable
         long durationMilliseconds = 100L,
         AgentflowNodeExecutionStatus status = AgentflowNodeExecutionStatus.Succeeded,
         string? error = null,
+        AgentflowTraceExtra? extra = null,
         DateTimeOffset? startTimeUtc = null
     )
     {
@@ -398,6 +401,7 @@ public class AgentflowTraceAppServiceTests : IDisposable
             DurationMilliseconds = durationMilliseconds,
             Status = status,
             Error = error,
+            Extra = extra ?? new AgentflowTraceExtra(),
         };
     }
 }

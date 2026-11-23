@@ -125,7 +125,7 @@ public partial class AgentflowTurnExecutorTests
             var messages = await CollectAsync(
                 fixture.Service.ExecuteStreamingAsync(fixture.Flow.Id, "input", TestContext.Current.CancellationToken)
             );
-            Assert.Equal(["input", "done", "done"], messages.Select(MessageShape));
+            Assert.Equal(["input", "done", "done"], ConversationShapes(messages));
             Assert.Single(fixture.Agents.CreatedAgents);
         }
     }

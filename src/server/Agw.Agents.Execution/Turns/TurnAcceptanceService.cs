@@ -8,6 +8,7 @@ using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.Durable;
+using Agw.Extensions.Contracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.History;
 using Agw.Projects.Contracts.Runtime;
@@ -70,6 +71,141 @@ internal sealed class TurnAcceptanceService
     public async Task<AcceptedTurn> AcceptAsync(TurnAcceptanceRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ValidateRequest(request);
+        var resolved = await ResolveAcceptanceAsync(request, cancellationToken).ConfigureAwait(false);
+        return await AcceptResolvedAsync(request, resolved, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ResolvedTurnAcceptance> ResolveAcceptanceAsync(
+        TurnAcceptanceRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var turnId = request.TurnId is { } requested && requested != Guid.Empty ? requested : Guid.CreateVersion7();
+        var task = request.Task ?? await ResolveTaskAsync(request, cancellationToken);
+        EnsureTaskConversationMatches(request, task);
+
+        var project =
+            await _projects.GetForCurrentUserAsync(task.ProjectId, cancellationToken)
+            ?? throw new AgwException(ErrorCodes.InvalidParam, $"Project '{task.ProjectId}' was not found.");
+        return new ResolvedTurnAcceptance
+        {
+            TurnId = turnId,
+            Task = task,
+            Project = project,
+            WorkspaceSnapshot = CreateWorkspaceSnapshot(project),
+            Input = NormalizeInput(request.Input),
+        };
+    }
+
+    private async Task<AcceptedTurn> AcceptResolvedAsync(
+        TurnAcceptanceRequest request,
+        ResolvedTurnAcceptance resolved,
+        CancellationToken cancellationToken
+    )
+    {
+        var state = new PreparedRegistrationState();
+        try
+        {
+            var write = CreateAcceptanceWrite(
+                request,
+                resolved.Task,
+                resolved.TurnId,
+                resolved.Input,
+                (snapshot, token) => RegisterAsync(request, resolved, state, snapshot, token)
+            );
+            var result = await _writer.AcceptAsync(write, cancellationToken).ConfigureAwait(false);
+            if (!result.Created)
+            {
+                await state.ReleaseAsync().ConfigureAwait(false);
+                return CreateReplay(request, resolved.Task, resolved.WorkspaceSnapshot, result.Turn);
+            }
+
+            var registration = state.Prepared ?? throw new AgwException(ErrorCodes.AgentExecutionFailed);
+            if (_durable != null)
+                await state.ReleaseAsync().ConfigureAwait(false);
+            else
+                state.Detach();
+
+            return CreateAcceptedTurn(registration, result, request.UserId, resolved.TurnId);
+        }
+        finally
+        {
+            await state.ReleaseAsync().ConfigureAwait(false);
+        }
+    }
+
+    private async Task<TurnAcceptanceRegistration> RegisterAsync(
+        TurnAcceptanceRequest request,
+        ResolvedTurnAcceptance resolved,
+        PreparedRegistrationState state,
+        AgentflowRevisionSnapshot? snapshot,
+        CancellationToken cancellationToken
+    )
+    {
+        state.Prepared = await PrepareRegistrationAsync(request, resolved, snapshot, cancellationToken)
+            .ConfigureAwait(false);
+        return state.Prepared.Registration;
+    }
+
+    private static TurnAcceptanceWrite CreateAcceptanceWrite(
+        TurnAcceptanceRequest request,
+        AgentExecutionTask task,
+        Guid turnId,
+        AgwUserInput input,
+        Func<AgentflowRevisionSnapshot?, CancellationToken, Task<TurnAcceptanceRegistration>> register
+    ) =>
+        new()
+        {
+            RequestedAgentflowRevision = request.RequestedAgentflowRevision,
+            PinnedSnapshot = request.ResumeCheckpoint?.RevisionSnapshot,
+            Turn = new AcceptConversationTurnRequest
+            {
+                TurnId = turnId,
+                ProjectId = task.ProjectId,
+                ContextId = task.ContextId,
+                ConversationId = task.ProjectConversationId,
+                Generation = task.Generation,
+                TaskId = task.TaskId == Guid.Empty ? null : task.TaskId,
+                TargetId = request.Target.AgentId,
+                TargetType =
+                    request.Target.AgentType == AgentRuntimeType.Agentflow
+                        ? ConversationTurnTargetType.Agentflow
+                        : ConversationTurnTargetType.Agent,
+                Input = input.Contents.Count == 0 ? null : CreateInputRow(input, request.Target),
+            },
+            Register = register,
+        };
+
+    private AcceptedTurn CreateAcceptedTurn(
+        PreparedTurnAcceptanceRegistration registration,
+        TurnAcceptanceResult result,
+        string userId,
+        Guid turnId
+    )
+    {
+        var request = registration.Request;
+        if (_durable != null)
+        {
+            request = request with
+            {
+                Settings = request.Settings.WithExtensionCapabilities(registration.ExtensionPins, null),
+            };
+        }
+        return new AcceptedTurn(
+            request with
+            {
+                Lease = result.Durable?.Lease,
+            },
+            TurnBroadcast.Stamp(registration.Start, turnId, 1),
+            true,
+            result.Turn,
+            _broadcasts.GetOrCreate(turnId, userId)
+        );
+    }
+
+    private static void ValidateRequest(TurnAcceptanceRequest request)
+    {
         if (request.Target.AgentId == Guid.Empty)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.agentId is required.");
@@ -78,9 +214,17 @@ internal sealed class TurnAcceptanceService
         {
             throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.conversationId is required.");
         }
+        if (request.RequestedAgentflowRevision != 0 && request.Target.AgentType != AgentRuntimeType.Agentflow)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "ExecCommand.agentflowRevision applies to Agentflow targets only."
+            );
+        }
+    }
 
-        var turnId = request.TurnId is { } requested && requested != Guid.Empty ? requested : Guid.CreateVersion7();
-        var task = request.Task ?? await ResolveTaskAsync(request, cancellationToken);
+    private static void EnsureTaskConversationMatches(TurnAcceptanceRequest request, AgentExecutionTask task)
+    {
         if (task.ProjectConversationId != request.ConversationId)
         {
             throw new AgwException(
@@ -88,11 +232,10 @@ internal sealed class TurnAcceptanceService
                 "The resolved task does not match ExecCommand.conversationId."
             );
         }
+    }
 
-        var project =
-            await _projects.GetForCurrentUserAsync(task.ProjectId, cancellationToken)
-            ?? throw new AgwException(ErrorCodes.InvalidParam, $"Project '{task.ProjectId}' was not found.");
-        var workspaceSnapshot = ProjectWorkspacePaths.CreateSnapshot(
+    private static ProjectWorkspaceSnapshot CreateWorkspaceSnapshot(ProjectRuntimeSnapshot project) =>
+        ProjectWorkspacePaths.CreateSnapshot(
             project.Id,
             project.Workspace,
             (project.AdditionalDirectories ?? []).Select(directory => new ProjectWorkspaceDirectory(
@@ -100,152 +243,199 @@ internal sealed class TurnAcceptanceService
                 directory.Path
             ))
         );
-        if (await _turns.GetAsync(turnId, cancellationToken).ConfigureAwait(false) is { } existing)
-        {
-            if (existing.ConversationId != request.ConversationId)
-                throw new AgwException(ErrorCodes.ResourceNotFound);
-            var existingTarget = new ExecutionTarget(
-                existing.TargetId,
-                existing.TargetType == ConversationTurnTargetType.Agentflow
-                    ? AgentRuntimeType.Agentflow
-                    : AgentRuntimeType.Agent
-            );
-            var replayEnvelope = new TurnEnvelope(
-                turnId,
-                existing.ConversationId,
-                existing.TargetId,
-                existingTarget.AgentType,
-                turnId.ToString("D")
-            );
-            var replay = new ExecutionRequest(
-                turnId,
-                request.UserId,
-                existingTarget,
-                task,
-                request.Settings.WithExtensionCapabilities([], null),
-                NormalizeInput(request.Input),
-                request.Stream,
-                workspaceSnapshot
-            )
-            {
-                Envelope = replayEnvelope,
-                InputMessageId = existing.InputMessageId == Guid.Empty ? null : existing.InputMessageId,
-            };
-            return new AcceptedTurn(
-                replay,
-                TurnBroadcast.Stamp(TurnMessageFactory.CreateStarted(replayEnvelope), turnId, 1),
-                false,
-                existing,
-                _broadcasts.Find(turnId, request.UserId)
-            );
-        }
-        if (_permissions != null)
-        {
-            ExecutionPermissionService.Validate(
-                await _permissions.GetAsync(request.Target.AgentType, request.Target.AgentId, cancellationToken),
-                request.Settings.PermissionMode
-            );
-        }
 
+    private async Task<PreparedTurnAcceptanceRegistration> PrepareRegistrationAsync(
+        TurnAcceptanceRequest request,
+        ResolvedTurnAcceptance resolved,
+        AgentflowRevisionSnapshot? snapshot,
+        CancellationToken cancellationToken
+    )
+    {
+        await ValidatePermissionModeAsync(request, snapshot, cancellationToken).ConfigureAwait(false);
+        var target = snapshot is null
+            ? request.Target
+            : request.Target with
+            {
+                AgentflowRevision = snapshot.RootRevision,
+            };
         var extensionSelection = await _extensionSelectionResolver
-            .ResolveAsync(request.Target, project, cancellationToken)
+            .ResolveAsync(target, snapshot, resolved.Project, cancellationToken)
             .ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        ExtensionCapabilitySnapshot? extensionCapabilities = await _extensionCapabilityCatalog
+        var extensionCapabilities = await _extensionCapabilityCatalog
             .AcquireCurrentAsync(extensionSelection, cancellationToken)
             .ConfigureAwait(false);
-
-        var extensionPins = extensionCapabilities?.Pins ?? [];
         try
         {
-            var input = NormalizeInput(request.Input);
-            var envelope = new TurnEnvelope(
-                turnId,
-                request.ConversationId,
-                request.Target.AgentId,
-                request.Target.AgentType,
-                turnId.ToString("D")
-            );
-            var hasInput = input.Contents.Count > 0;
-            var executionSettings = request.Settings.WithExtensionCapabilities(extensionPins, extensionCapabilities);
-            var executionRequest = new ExecutionRequest(
-                turnId,
-                request.UserId,
-                request.Target,
-                task,
-                executionSettings,
-                input,
-                request.Stream,
-                workspaceSnapshot
-            )
-            {
-                RequestedMode = request.RequestedMode,
-                ResumeCheckpoint = request.ResumeCheckpoint,
-                ExtensionPins = extensionPins,
-                Envelope = envelope,
-                InputMessageId = hasInput ? Guid.Parse(input.MessageId) : null,
-            };
-            var start = TurnMessageFactory.CreateStarted(envelope);
-            var result = await _writer
-                .AcceptAsync(
-                    new TurnAcceptanceWrite
-                    {
-                        ExtensionIds = extensionPins.Select(pin => pin.ExtensionId).Distinct().Order().ToArray(),
-                        Turn = new AcceptConversationTurnRequest
-                        {
-                            TurnId = turnId,
-                            ProjectId = task.ProjectId,
-                            ContextId = task.ContextId,
-                            ConversationId = task.ProjectConversationId,
-                            Generation = task.Generation,
-                            TaskId = task.TaskId == Guid.Empty ? null : task.TaskId,
-                            TargetId = request.Target.AgentId,
-                            TargetType =
-                                request.Target.AgentType == AgentRuntimeType.Agentflow
-                                    ? ConversationTurnTargetType.Agentflow
-                                    : ConversationTurnTargetType.Agent,
-                            Input = hasInput ? CreateInputRow(input, request.Target) : null,
-                        },
-                        Durable = _durable?.CreateRegistration(executionRequest, start),
-                    },
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-            if (_durable != null || !result.Created)
-            {
-                if (extensionCapabilities != null)
-                {
-                    await extensionCapabilities.DisposeAsync().ConfigureAwait(false);
-                    extensionCapabilities = null;
-                }
-                executionSettings = executionSettings.WithExtensionCapabilities(extensionPins, null);
-            }
-            else
-            {
-                extensionCapabilities = null;
-            }
-
-            return new AcceptedTurn(
-                executionRequest with
-                {
-                    Settings = executionSettings,
-                    Lease = result.Durable?.Lease,
-                },
-                TurnBroadcast.Stamp(start, turnId, 1),
-                result.Created,
-                result.Turn,
-                result.Created
-                    ? _broadcasts.GetOrCreate(turnId, request.UserId)
-                    : _broadcasts.Find(turnId, request.UserId)
+            var extensionPins = extensionCapabilities?.Pins ?? [];
+            return CreatePreparedRegistration(
+                request,
+                resolved,
+                target,
+                snapshot,
+                extensionCapabilities,
+                extensionPins
             );
         }
-        finally
+        catch
         {
-            if (extensionCapabilities != null)
+            if (extensionCapabilities is not null)
             {
                 await extensionCapabilities.DisposeAsync().ConfigureAwait(false);
             }
+            throw;
         }
+    }
+
+    private async Task ValidatePermissionModeAsync(
+        TurnAcceptanceRequest request,
+        AgentflowRevisionSnapshot? snapshot,
+        CancellationToken cancellationToken
+    )
+    {
+        if (_permissions == null)
+        {
+            return;
+        }
+
+        var capabilities = await _permissions
+            .GetForTargetAsync(request.Target.AgentType, request.Target.AgentId, snapshot, cancellationToken)
+            .ConfigureAwait(false);
+        ExecutionPermissionService.Validate(capabilities, request.Settings.PermissionMode);
+    }
+
+    private PreparedTurnAcceptanceRegistration CreatePreparedRegistration(
+        TurnAcceptanceRequest request,
+        ResolvedTurnAcceptance resolved,
+        ExecutionTarget target,
+        AgentflowRevisionSnapshot? snapshot,
+        ExtensionCapabilitySnapshot? extensionCapabilities,
+        IReadOnlyList<ExtensionExecutionPin> extensionPins
+    )
+    {
+        var executionRequest = CreateExecutionRequest(
+            request,
+            resolved,
+            target,
+            snapshot,
+            extensionCapabilities,
+            extensionPins
+        );
+        var start = TurnMessageFactory.CreateStarted(executionRequest.Envelope);
+        var registration = new TurnAcceptanceRegistration(
+            extensionPins.Select(pin => pin.ExtensionId).Distinct().Order().ToArray(),
+            _durable?.CreateRegistration(executionRequest, start)
+        );
+        return new PreparedTurnAcceptanceRegistration(
+            executionRequest,
+            start,
+            extensionCapabilities,
+            extensionPins,
+            registration
+        );
+    }
+
+    private ExecutionRequest CreateExecutionRequest(
+        TurnAcceptanceRequest request,
+        ResolvedTurnAcceptance resolved,
+        ExecutionTarget target,
+        AgentflowRevisionSnapshot? snapshot,
+        ExtensionCapabilitySnapshot? extensionCapabilities,
+        IReadOnlyList<ExtensionExecutionPin> extensionPins
+    )
+    {
+        var envelope = new TurnEnvelope(
+            resolved.TurnId,
+            request.ConversationId,
+            request.Target.AgentId,
+            request.Target.AgentType,
+            resolved.TurnId.ToString("D")
+        );
+        var settings = request.Settings.WithExtensionCapabilities(extensionPins, extensionCapabilities);
+        var executionRequest = new ExecutionRequest(
+            resolved.TurnId,
+            request.UserId,
+            target,
+            resolved.Task,
+            settings,
+            resolved.Input,
+            request.Stream,
+            resolved.WorkspaceSnapshot
+        )
+        {
+            RequestedMode = request.RequestedMode,
+            ResumeCheckpoint = request.ResumeCheckpoint,
+            AgentflowSnapshot = snapshot,
+            ExtensionPins = extensionPins,
+            Envelope = envelope,
+            InputMessageId = resolved.Input.Contents.Count > 0 ? Guid.Parse(resolved.Input.MessageId) : null,
+        };
+        return executionRequest;
+    }
+
+    private AcceptedTurn CreateReplay(
+        TurnAcceptanceRequest request,
+        AgentExecutionTask task,
+        ProjectWorkspaceSnapshot workspaceSnapshot,
+        ConversationTurnSnapshot existing
+    )
+    {
+        var replay = CreateReplayRequest(request, task, workspaceSnapshot, existing);
+        return new AcceptedTurn(
+            replay.Request,
+            TurnBroadcast.Stamp(TurnMessageFactory.CreateStarted(replay.Envelope), existing.TurnId, 1),
+            false,
+            existing,
+            _broadcasts.Find(existing.TurnId, request.UserId)
+        );
+    }
+
+    private ExecutionReplayRequest CreateReplayRequest(
+        TurnAcceptanceRequest request,
+        AgentExecutionTask task,
+        ProjectWorkspaceSnapshot workspaceSnapshot,
+        ConversationTurnSnapshot existing
+    )
+    {
+        if (existing.ConversationId != request.ConversationId)
+        {
+            throw new AgwException(ErrorCodes.ResourceNotFound);
+        }
+
+        var target = new ExecutionTarget(
+            existing.TargetId,
+            existing.TargetType == ConversationTurnTargetType.Agentflow
+                ? AgentRuntimeType.Agentflow
+                : AgentRuntimeType.Agent,
+            existing.AgentflowRevision
+        );
+        var snapshot =
+            existing.TargetType == ConversationTurnTargetType.Agentflow
+                ? AgentflowRevisionSnapshot.FromTurn(existing)
+                : null;
+        var envelope = new TurnEnvelope(
+            existing.TurnId,
+            existing.ConversationId,
+            existing.TargetId,
+            target.AgentType,
+            existing.TurnId.ToString("D")
+        );
+        var replay = new ExecutionRequest(
+            existing.TurnId,
+            request.UserId,
+            target,
+            task,
+            request.Settings.WithExtensionCapabilities([], null),
+            NormalizeInput(request.Input),
+            request.Stream,
+            workspaceSnapshot
+        )
+        {
+            Envelope = envelope,
+            AgentflowSnapshot = snapshot,
+            InputMessageId = existing.InputMessageId == Guid.Empty ? null : existing.InputMessageId,
+        };
+        return new ExecutionReplayRequest(replay, envelope);
     }
 
     /// <summary>
@@ -263,6 +453,11 @@ internal sealed class TurnAcceptanceService
             return;
         }
 
+        await ReportInProcessStartFailureAsync(accepted, failure).ConfigureAwait(false);
+    }
+
+    private async Task ReportInProcessStartFailureAsync(AcceptedTurn accepted, Exception failure)
+    {
         var errorCode = TurnMessageFactory.GetErrorCode(AgwTurnStatus.Failed, failure);
         var broadcast =
             accepted.Broadcast
@@ -284,24 +479,34 @@ internal sealed class TurnAcceptanceService
         }
         finally
         {
-            await broadcast
-                .WriteAsync(
-                    new AgwMessage(
-                        Guid.CreateVersion7().ToString("D"),
-                        Constants.DefaultAgentAuthor,
-                        AiRole.System,
-                        [new AgwErrorContent { Content = failure.Message }]
-                    ),
-                    CancellationToken.None
-                )
-                .ConfigureAwait(false);
-            await broadcast
-                .WriteAsync(
-                    TurnMessageFactory.CreateFinished(accepted.Request.Envelope, AgwTurnStatus.Failed, 0, errorCode),
-                    CancellationToken.None
-                )
-                .ConfigureAwait(false);
+            await WriteStartFailureMessagesAsync(broadcast, accepted.Request, failure, errorCode).ConfigureAwait(false);
         }
+    }
+
+    private static async Task WriteStartFailureMessagesAsync(
+        TurnBroadcast broadcast,
+        ExecutionRequest request,
+        Exception failure,
+        string? errorCode
+    )
+    {
+        await broadcast
+            .WriteAsync(
+                new AgwMessage(
+                    Guid.CreateVersion7().ToString("D"),
+                    Constants.DefaultAgentAuthor,
+                    AiRole.System,
+                    [new AgwErrorContent { Content = failure.Message }]
+                ),
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
+        await broadcast
+            .WriteAsync(
+                TurnMessageFactory.CreateFinished(request.Envelope, AgwTurnStatus.Failed, 0, errorCode),
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -365,6 +570,57 @@ internal sealed class TurnAcceptanceService
         );
         return ProjectTaskProjectionMapper.Map(task);
     }
+
+    private sealed record PreparedTurnAcceptanceRegistration
+    {
+        public PreparedTurnAcceptanceRegistration(
+            ExecutionRequest request,
+            AgwMessage start,
+            ExtensionCapabilitySnapshot? extensionCapabilities,
+            IReadOnlyList<ExtensionExecutionPin> extensionPins,
+            TurnAcceptanceRegistration registration
+        )
+        {
+            Request = request;
+            Start = start;
+            ExtensionCapabilities = extensionCapabilities;
+            ExtensionPins = extensionPins;
+            Registration = registration;
+        }
+
+        public ExecutionRequest Request { get; }
+        public AgwMessage Start { get; }
+        public ExtensionCapabilitySnapshot? ExtensionCapabilities { get; }
+        public IReadOnlyList<ExtensionExecutionPin> ExtensionPins { get; }
+        public TurnAcceptanceRegistration Registration { get; }
+    }
+
+    private sealed record ResolvedTurnAcceptance
+    {
+        public required Guid TurnId { get; init; }
+        public required AgentExecutionTask Task { get; init; }
+        public required ProjectRuntimeSnapshot Project { get; init; }
+        public required ProjectWorkspaceSnapshot WorkspaceSnapshot { get; init; }
+        public required AgwUserInput Input { get; init; }
+    }
+
+    private sealed record ExecutionReplayRequest(ExecutionRequest Request, TurnEnvelope Envelope);
+
+    private sealed class PreparedRegistrationState
+    {
+        public PreparedTurnAcceptanceRegistration? Prepared { get; set; }
+
+        public void Detach() => Prepared = null;
+
+        public async ValueTask ReleaseAsync()
+        {
+            if (Prepared?.ExtensionCapabilities is { } capabilities)
+            {
+                await capabilities.DisposeAsync().ConfigureAwait(false);
+                Prepared = null;
+            }
+        }
+    }
 }
 
 /// <summary>
@@ -384,6 +640,8 @@ internal sealed record TurnAcceptanceRequest(
     public AgentExecutionTask? Task { get; init; }
 
     public string? RequestedMode { get; init; }
+
+    public int RequestedAgentflowRevision { get; init; }
 
     public AgentflowCheckpointSnapshot? ResumeCheckpoint { get; init; }
 }

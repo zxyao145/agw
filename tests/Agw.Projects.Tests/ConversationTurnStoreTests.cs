@@ -198,6 +198,101 @@ public sealed class ConversationTurnStoreTests : IAsyncLifetime
         Assert.Null(exception);
     }
 
+    [Fact]
+    public async Task AcceptAsync_AgentflowTurn_StoresRevisionSnapshotInExtra()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var context = new AgwDbContext(_options);
+        var conversationId = AddConversation(context, "tester");
+        await context.SaveChangesAsync(token);
+        using var user = EnterUser();
+        var projectId = await context
+            .ProjectConversations.Where(conversation => conversation.Id == conversationId)
+            .Select(conversation => conversation.ProjectId)
+            .SingleAsync(token);
+        var turnId = Guid.CreateVersion7();
+        var parentAgentflowId = Guid.CreateVersion7();
+        var targetAgentflowId = Guid.CreateVersion7();
+        var dependency = new AgentflowDependencyRevisionDto(
+            parentAgentflowId,
+            3,
+            "workflow",
+            "member-1",
+            targetAgentflowId,
+            2
+        );
+
+        var acceptance = await new ConversationTurnStore(context, TimeProvider.System).AcceptAsync(
+            new AcceptConversationTurnRequest
+            {
+                TurnId = turnId,
+                ProjectId = projectId,
+                ContextId = conversationId.ToString("N"),
+                ConversationId = conversationId,
+                Generation = 0,
+                TargetId = parentAgentflowId,
+                TargetType = ConversationTurnTargetType.Agentflow,
+                AgentflowRevision = 3,
+                AgentflowDependencies = [dependency],
+            },
+            token
+        );
+
+        var extra = await context
+            .Database.SqlQueryRaw<string>(
+                "SELECT extra AS \"Value\" FROM project_conversation_turn WHERE id = {0}",
+                turnId
+            )
+            .SingleAsync(token);
+        var stored = await new ConversationTurnStore(context, TimeProvider.System).GetAsync(turnId, token);
+
+        Assert.True(acceptance.Created);
+        Assert.Equal(
+            $"{{\"agentflowRevision\":3,\"agentflowDependencies\":[{{\"parentAgentflowId\":\"{parentAgentflowId:D}\",\"parentRevision\":3,\"parentNodeId\":\"workflow\",\"blockMemberId\":\"member-1\",\"targetAgentflowId\":\"{targetAgentflowId:D}\",\"targetRevision\":2}}]}}",
+            extra
+        );
+        Assert.Equal(3, stored!.AgentflowRevision);
+        Assert.Equal([dependency], stored.AgentflowDependencies);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_AgentTurn_StoresRevisionZero()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var context = new AgwDbContext(_options);
+        var conversationId = AddConversation(context, "tester");
+        await context.SaveChangesAsync(token);
+        using var user = EnterUser();
+        var projectId = await context
+            .ProjectConversations.Where(conversation => conversation.Id == conversationId)
+            .Select(conversation => conversation.ProjectId)
+            .SingleAsync(token);
+        var turnId = Guid.CreateVersion7();
+
+        await new ConversationTurnStore(context, TimeProvider.System).AcceptAsync(
+            new AcceptConversationTurnRequest
+            {
+                TurnId = turnId,
+                ProjectId = projectId,
+                ContextId = conversationId.ToString("N"),
+                ConversationId = conversationId,
+                Generation = 0,
+                TargetId = Guid.CreateVersion7(),
+                TargetType = ConversationTurnTargetType.Agent,
+            },
+            token
+        );
+
+        var extra = await context
+            .Database.SqlQueryRaw<string>(
+                "SELECT extra AS \"Value\" FROM project_conversation_turn WHERE id = {0}",
+                turnId
+            )
+            .SingleAsync(token);
+
+        Assert.Equal("{\"agentflowRevision\":0}", extra);
+    }
+
     private static readonly DateTimeOffset Now = new(2026, 10, 24, 8, 0, 0, TimeSpan.Zero);
 
     private async Task<ProjectConversationTurn> ReadTurnAsync(Guid turnId)

@@ -67,7 +67,7 @@ function SummaryCards({
     // {
     //   label: "Task Record",
     //   value: hasData ? stats?.taskRecordCount : "—",
-    //   color: "text-violet-400",
+    //   color: "text-chart-4",
     // },
     // {
     //   label: "Job",

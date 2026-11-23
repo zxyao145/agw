@@ -20,6 +20,12 @@ public class ProjectConversationTurnConfiguration : IEntityTypeConfiguration<Pro
             .HasMaxLength(16)
             .IsRequired();
         builder.Property(e => e.ErrorCode).HasMaxLength(64);
+        builder
+            .Property(e => e.Extra)
+            .HasConversion(ExtraJson.Converter<ProjectConversationTurnExtra>())
+            .HasColumnType("text")
+            .IsRequired()
+            .HasDefaultValueSql("'{}'");
         builder.HasIndex(e => new { e.ProjectConversationId, e.FirstSequence });
         builder.HasIndex(e => new { e.ProjectConversationId, e.Status });
         builder.HasIndex(e => e.TaskId);

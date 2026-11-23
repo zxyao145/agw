@@ -246,7 +246,7 @@ public sealed partial class BackendArchitectureTests
         .ToHashSet(StringComparer.Ordinal);
 
     [GeneratedRegex(
-        @"^\s*(?:public|internal|protected|private)\s+(?:static\s+)?(?:async\s+)?[A-Za-z_][A-Za-z0-9_<>,?.\[\] ]*\s+(?<member>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+        @"^\s*(?:public|internal|protected|private)\s+(?![^\r\n]*\brecord\s+[A-Za-z_][A-Za-z0-9_]*\s*\()(?:static\s+)?(?:async\s+)?[A-Za-z_][A-Za-z0-9_<>,?.\[\] ]*\s+(?<member>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
         RegexOptions.Multiline | RegexOptions.CultureInvariant
     )]
     private static partial Regex DataMethodDeclarationRegex();

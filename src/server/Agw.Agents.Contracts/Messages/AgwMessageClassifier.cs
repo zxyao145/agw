@@ -12,8 +12,14 @@ public static class AgwMessageClassifier
 {
     public const string TypeKey = "type";
     public const string StatusKey = "status";
+    public const string InteractionIdKey = "interactionId";
+    public const string HumanAuthorName = "human";
+    public const string NodeIdKey = "nodeId";
+    public const string NodePathKey = "nodePath";
+    public const string ChoiceIdKey = "choiceId";
     public const string ResultType = AgwMessageTypes.Result;
     public const string ResultFormatKey = "resultFormat";
+    public const string JsonResultFormat = "json";
     public const string ResultSourceMessageIdKey = "resultSourceMessageId";
 
     public static string? GetMessageType(AgwMessage message) => GetMessageType(message.AdditionalProperties);

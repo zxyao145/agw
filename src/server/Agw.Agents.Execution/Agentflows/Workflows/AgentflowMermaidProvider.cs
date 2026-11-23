@@ -8,6 +8,7 @@ using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Execution.Agentflows.Workflows;
 
@@ -16,17 +17,28 @@ public sealed class AgentflowMermaidProvider : IAgentflowMermaidProvider
 {
     private readonly IAgentflowDefinitionReader _definitions;
     private readonly IAgentCatalogFacade _catalog;
+    private readonly AgentflowWorkflowCompiler _workflowCompiler;
 
-    public AgentflowMermaidProvider(IAgentflowDefinitionReader definitions, IAgentCatalogFacade catalog)
+    public AgentflowMermaidProvider(
+        IAgentflowDefinitionReader definitions,
+        IAgentCatalogFacade catalog,
+        ILogger<AgentflowWorkflowCompiler> workflowCompilerLogger
+    )
     {
         _definitions = definitions;
         _catalog = catalog;
+        _workflowCompiler = new AgentflowWorkflowCompiler(workflowCompilerLogger);
     }
 
-    public async Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default)
+    public async Task<string?> GetMermaidAsync(
+        Guid agentflowId,
+        int agentflowRevision,
+        CancellationToken cancellationToken = default
+    )
     {
         var workflow = await CompileAsync(
             agentflowId,
+            agentflowRevision,
             UserInfoUtil.RequiredUserId,
             new HashSet<Guid>(),
             cancellationToken
@@ -34,7 +46,13 @@ public sealed class AgentflowMermaidProvider : IAgentflowMermaidProvider
         return workflow == null ? null : WorkflowVisualizer.ToMermaidString(workflow);
     }
 
-    private async Task<Workflow?> CompileAsync(Guid id, string owner, HashSet<Guid> ancestors, CancellationToken token)
+    private async Task<Workflow?> CompileAsync(
+        Guid id,
+        int agentflowRevision,
+        string owner,
+        HashSet<Guid> ancestors,
+        CancellationToken token
+    )
     {
         if (!ancestors.Add(id))
             throw new AgwException(ErrorCodes.InvalidParam, $"Nested Agentflow cycle at '{id}'.");
@@ -43,8 +61,9 @@ public sealed class AgentflowMermaidProvider : IAgentflowMermaidProvider
             var flow = await _definitions.FindVisibleAsync(id, owner, token);
             if (flow == null)
                 return null;
-            var nodes = await _definitions.ListNodesAsync(id, token);
-            var edges = await _definitions.ListEdgesAsync(id, token);
+            var nodes = await _definitions.ListNodesAsync(id, agentflowRevision, token);
+            var edges = await _definitions.ListEdgesAsync(id, agentflowRevision, token);
+            var members = await _definitions.ListBlockMembersAsync(id, agentflowRevision, token);
             var agents = new Dictionary<string, AIAgent>(StringComparer.Ordinal);
             foreach (var node in nodes)
             {
@@ -56,20 +75,48 @@ public sealed class AgentflowMermaidProvider : IAgentflowMermaidProvider
                 }
                 else if (node.Kind == AgentflowNodeKind.WorkflowAsAgent && node.RelateId is { } flowId)
                 {
-                    var nested = await CompileAsync(flowId, owner, ancestors, token);
+                    var target = await _definitions.FindVisibleAsync(flowId, owner, token);
+                    if (target == null || target.PublishedRevision == 0)
+                        return null;
+                    var nested = await CompileAsync(flowId, target.PublishedRevision, owner, ancestors, token);
                     if (nested == null)
                         return null;
                     agents[node.NodeId] = nested.AsAIAgent();
                 }
             }
-            return agents.Count == 0
-                ? null
-                : new AgentflowWorkflowCompiler().Compile(
-                    flow,
-                    AgentflowTopology.OrderNodesByEdges(nodes, edges),
-                    edges,
-                    agents
-                );
+
+            foreach (var member in members)
+            {
+                if (member.Kind == AgentflowNodeKind.Agent)
+                {
+                    if (!await _catalog.IsOwnedTargetAsync(AgentRuntimeType.Agent, member.RelateId, owner, token))
+                        return null;
+                    agents[AgentflowBlockMemberKey.Create(member.NodeId, member.MemberId)] = new DiagramAgent(
+                        member.MemberId,
+                        member.Name
+                    );
+                }
+                else if (member.Kind == AgentflowNodeKind.WorkflowAsAgent)
+                {
+                    var target = await _definitions.FindVisibleAsync(member.RelateId, owner, token);
+                    if (target == null || target.PublishedRevision == 0)
+                        return null;
+                    var nested = await CompileAsync(member.RelateId, target.PublishedRevision, owner, ancestors, token);
+                    if (nested == null)
+                        return null;
+                    agents[AgentflowBlockMemberKey.Create(member.NodeId, member.MemberId)] = nested.AsAIAgent();
+                }
+            }
+
+            var compilation = _workflowCompiler.Compile(
+                flow,
+                agentflowRevision,
+                AgentflowTopology.OrderNodesByEdges(nodes, edges),
+                edges,
+                members,
+                agents
+            );
+            return compilation?.Workflow;
         }
         finally
         {

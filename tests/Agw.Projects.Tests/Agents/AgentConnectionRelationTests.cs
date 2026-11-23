@@ -4,8 +4,11 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Domain.Services;
 using Agw.Agents.Definitions.Persistence;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Infrastructure.Data;
 using Agw.Integrations.Application.Facades;
+using Agw.Projects.Contracts.History;
+using Agw.Projects.Infrastructure;
 using Agw.Projects.Tests;
 using Agw.Providers.Application.Facades;
 using Agw.Shared.Coordination;
@@ -432,7 +435,12 @@ public class AgentConnectionRelationTests : IDisposable
                 userInfo,
                 new Agw.Infrastructure.Agents.AgentDeletionCoordinator(
                     dbContext,
-                    Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+                    Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                    new AgentflowRevisionUsageReader(
+                        dbContext,
+                        new ConversationTurnStore(dbContext, TimeProvider.System),
+                        new AgentflowRevisionSnapshotReader(dbContext)
+                    )
                 ),
                 InMemoryApplicationLock.Shared,
                 AgentServices.GetRequiredService<IA2AAgentCardClient>(),

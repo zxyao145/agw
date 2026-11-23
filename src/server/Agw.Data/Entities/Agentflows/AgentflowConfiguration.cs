@@ -12,5 +12,6 @@ public class AgentflowConfiguration : IEntityTypeConfiguration<Agentflow>
         builder.Property(e => e.Description).HasMaxLength(1000);
         builder.Property(e => e.Enable).HasDefaultValue(true);
         builder.Property(e => e.SystemPrompt).HasMaxLength(4000);
+        builder.Property(e => e.PublishedRevision).HasDefaultValue(0);
     }
 }
