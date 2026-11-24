@@ -9,7 +9,7 @@ import {
   type FindQuery,
   type FindResult,
 } from "../shared/find-query";
-import { clippingScrollers, coveredByFindBar, needsReveal } from "../shared/find-reveal";
+import { revealMatch } from "../shared/find-reveal";
 
 // Preview 的搜索（Markdown 搜索替换设计第 6 节）：从 DOM 收集文字段，用与 Mixed 相同的 SearchQuery 查找，再用 CSS Custom
 // Highlight API 高亮，React 渲染的 DOM 保持不变。
@@ -297,16 +297,6 @@ export class PreviewSearch implements FindTarget {
   private reveal(): void {
     if (this.current === null) return;
     const range = this.ranges[this.current]!;
-    const start = range.startContainer.parentElement!;
-    if (!needsReveal(range.getBoundingClientRect(), start, null)) return;
-    for (const scroller of clippingScrollers(range.getBoundingClientRect(), start, document.body)) {
-      const box = scroller.getBoundingClientRect();
-      const match = range.getBoundingClientRect();
-      scroller.scrollLeft += (match.left + match.right) / 2 - (box.left + box.right) / 2;
-    }
-    const match = range.getBoundingClientRect();
-    if (match.top < 0 || match.bottom > window.innerHeight || coveredByFindBar(match)) {
-      window.scrollBy({ top: (match.top + match.bottom) / 2 - window.innerHeight / 2 });
-    }
+    revealMatch(() => range.getBoundingClientRect(), range.startContainer.parentElement!, null);
   }
 }
