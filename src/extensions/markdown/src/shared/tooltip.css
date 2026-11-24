@@ -1,0 +1,15 @@
+/* 工具条与搜索栏按钮的 tooltip，配色与宿主的 tooltip 相同。Tooltips of toolbar and find bar buttons, colored like the
+   host's tooltips. */
+.tooltip {
+  z-index: 30;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: var(--foreground);
+  color: var(--background);
+  font-size: 0.875em;
+  white-space: nowrap;
+}
+
+.tooltip-arrow {
+  fill: var(--foreground);
+}

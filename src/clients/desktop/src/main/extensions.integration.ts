@@ -5508,9 +5508,11 @@ const OUTLINE_ITEMS = `${OUTLINE_BUTTONS}
   .map((heading) => [heading.textContent, heading.getAttribute("data-depth")])`;
 const CURRENT_OUTLINE_ITEM = `(document.querySelector('nav.outline [aria-current="location"]')?.textContent ?? null)`;
 const OUTLINE_BREAKPOINT = 960;
-const OUTLINE_WIDTH = 240;
+const OUTLINE_MIN_WIDTH = 240;
+const OUTLINE_MAX_WIDTH = 400;
 const OUTLINE_GUTTER = 16;
-const OUTLINE_RESERVED_WIDTH = OUTLINE_WIDTH + OUTLINE_GUTTER;
+const OUTLINE_MIN_TRACK = OUTLINE_MIN_WIDTH + OUTLINE_GUTTER;
+const OUTLINE_MAX_TRACK = OUTLINE_MAX_WIDTH + OUTLINE_GUTTER;
 const OUTLINE_JUMP_OFFSET = 16;
 const OUTLINE_LAYOUTS = {
   preview: {
@@ -5543,13 +5545,27 @@ function outlineItem(label: string): string {
   return `${OUTLINE_BUTTONS}.find((heading) => heading.textContent === ${JSON.stringify(label)})`;
 }
 
+/**
+ * 正文列先达到最大宽度；之后大纲列与左侧列平分多出的宽度，大纲列达到最大宽度后左侧列继续变宽，直到两侧对称。
+ * The document column reaches its maximum width first; then the outline column and the left column share the extra
+ * width, and once the outline column is at its maximum the left column keeps growing until both sides match.
+ */
 function visibleOutlineLayout(viewer: OutlineViewer): string {
   const { maxWidth, gap } = OUTLINE_LAYOUTS[viewer];
   return outlineLayoutCheck(
     viewer,
-    `innerWidth >= ${OUTLINE_BREAKPOINT} && visible
-      && Math.abs(documentColumn.width - Math.min(${maxWidth}, layout.width - ${OUTLINE_RESERVED_WIDTH})) <= 1
-      && Math.abs(outline.getBoundingClientRect().left - documentColumn.right - ${gap}) <= 1`,
+    `innerWidth >= ${OUTLINE_BREAKPOINT} && visible && (() => {
+      const columnWidth = Math.min(${maxWidth}, layout.width - ${OUTLINE_MIN_TRACK});
+      const sharedTrack = (layout.width - ${maxWidth} + ${OUTLINE_MIN_TRACK}) / 2;
+      const outlineTrack = Math.max(
+        Math.min(Math.max(${OUTLINE_MIN_TRACK}, sharedTrack), ${OUTLINE_MAX_TRACK}),
+        (layout.width - columnWidth) / 2,
+      );
+      return Math.abs(documentColumn.width - columnWidth) <= 1
+        && Math.abs(documentColumn.left - layout.left - (layout.width - columnWidth - outlineTrack)) <= 1
+        && Math.abs(outlineBox.width - Math.min(outlineTrack - ${OUTLINE_GUTTER}, ${OUTLINE_MAX_WIDTH})) <= 1
+        && Math.abs(outlineBox.left - documentColumn.right - ${gap}) <= 1;
+    })()`,
   );
 }
 
@@ -5570,6 +5586,7 @@ function outlineLayoutCheck(viewer: OutlineViewer, assertion: string): string {
     const documentColumn = document.querySelector("${documentColumnSelector}")?.getBoundingClientRect();
     const outline = document.querySelector("nav.outline");
     if (!layout || !documentColumn || !outline) return false;
+    const outlineBox = outline.getBoundingClientRect();
     const visible = getComputedStyle(outline).display !== "none";
     return ${assertion};
   })()`;
@@ -5601,6 +5618,7 @@ async function markdownOutline(): Promise<void> {
   await checkMixedOutline();
   await checkMixedEmptyOutline();
   await checkOutlineBreakpoint();
+  await checkWideOutline();
   await goToChat();
 }
 
@@ -5831,6 +5849,65 @@ async function checkOutlineBreakpoint(): Promise<void> {
   );
 }
 
+async function checkWideOutline(): Promise<void> {
+  const preview = await outlinePreview();
+  await checkOutlineWidths(preview, "preview");
+  await selectViewer(MIXED_VIEWER);
+  const mixed = await mixedShowing(
+    `Boolean(${mixedBlock("Go Usage", "h2")})`,
+    "Mixed for the wide outline",
+  );
+  await checkOutlineWidths(mixed, "mixed");
+  pass(
+    "Preview and Mixed widen the outline up to 400px from the extra width, then center the content",
+  );
+}
+
+/**
+ * 缩小页面得到窗口达不到的 CSS 宽度：先进入大纲变宽的区间，再进入两侧对称的区间。
+ * Zooming out the page gives CSS widths the window cannot reach: first the range where the outline widens, then the
+ * range where both sides match.
+ */
+async function checkOutlineWidths(frame: FrameHandle, viewer: OutlineViewer): Promise<void> {
+  const { maxWidth } = OUTLINE_LAYOUTS[viewer];
+  const ranges = [
+    {
+      width: maxWidth + OUTLINE_MIN_TRACK + 200,
+      label: "widened",
+      assertion: `outlineBox.width > ${OUTLINE_MIN_WIDTH + 1} && outlineBox.width < ${OUTLINE_MAX_WIDTH - 1}`,
+    },
+    {
+      width: maxWidth + 2 * OUTLINE_MAX_TRACK + 200,
+      label: "centered",
+      assertion: `Math.abs(outlineBox.width - ${OUTLINE_MAX_WIDTH}) <= 1
+        && Math.abs((documentColumn.left - layout.left) - (layout.right - documentColumn.right)) <= 1`,
+    },
+  ];
+  const contents = frame.view.webContents;
+  const viewWidth = frame.view.getBounds().width;
+  const innerWidth = await evalFrame<number>(frame, "innerWidth");
+  try {
+    for (const { width, label, assertion } of ranges) {
+      contents.setZoomFactor(viewWidth / width);
+      await until(
+        () =>
+          evalFrame<boolean>(
+            frame,
+            `${visibleOutlineLayout(viewer)} && ${outlineLayoutCheck(viewer, assertion)}`,
+          ),
+        `the ${label} ${viewer} outline at a ${width}px page`,
+      );
+    }
+  } finally {
+    contents.setZoomFactor(1);
+  }
+  await until(
+    () =>
+      evalFrame<boolean>(frame, `innerWidth === ${innerWidth} && ${visibleOutlineLayout(viewer)}`),
+    `the ${viewer} outline at zoom 1`,
+  );
+}
+
 async function markdownOutlineBackdrop(): Promise<void> {
   await openFileInTree("notes/outline.md");
   await selectViewer(MIXED_VIEWER);
@@ -5862,6 +5939,408 @@ async function markdownOutlineBackdrop(): Promise<void> {
   pass(
     "Warm Minimalism gives the outline the same background, corner radius and top as the content card",
   );
+}
+
+const OUTLINE_RESIZER = `document.querySelector("nav.outline .outline-resizer")`;
+const OUTLINE_WIDTH_KEY = "markdown.outlineWidth";
+
+type OutlineState = {
+  left: number;
+  width: number;
+  column: number;
+  stored: string | null;
+  valueNow: string | null;
+};
+
+const OUTLINE_STATE = `(() => {
+  const outline = document.querySelector("nav.outline").getBoundingClientRect();
+  const column = document.querySelector(".document-column").getBoundingClientRect();
+  return {
+    left: outline.left,
+    width: outline.width,
+    column: column.width,
+    stored: localStorage.getItem(${JSON.stringify(OUTLINE_WIDTH_KEY)}),
+    valueNow: ${OUTLINE_RESIZER}.getAttribute("aria-valuenow"),
+  };
+})()`;
+
+async function markdownOutlineResize(): Promise<void> {
+  await openFileInTree("notes/outline.md");
+  await selectViewer(MIXED_VIEWER);
+  let mixed = await mixedShowing(
+    `Boolean(${mixedBlock("Outline sample", "h1")})`,
+    "outline.md in Mixed for resizing",
+  );
+  await until(
+    () => evalFrame<boolean>(mixed, visibleOutlineLayout("mixed")),
+    "the automatic Mixed outline",
+  );
+  const before = await evalFrame<OutlineState>(mixed, OUTLINE_STATE);
+  assert.equal(before.stored, null);
+  await focusHostWindow();
+  const handle = await centerOf(mixed, OUTLINE_RESIZER);
+  assert.ok(handle?.hit, "the resize handle on the outline's left edge can be hit");
+  drag(mixed, handle, { x: handle.x - 100, y: handle.y });
+  const widened = await until(
+    async () => {
+      const state = await evalFrame<OutlineState>(mixed, OUTLINE_STATE);
+      return Math.abs(state.width - before.width - 100) <= 1 &&
+        Math.abs(state.left - (before.left - 100)) <= 1 &&
+        state.stored === String(Math.round(state.width))
+        ? state
+        : null;
+    },
+    "the Mixed outline 100px wider with its left edge under the pointer",
+    undefined,
+    async () => JSON.stringify(await evalFrame<OutlineState>(mixed, OUTLINE_STATE)),
+  );
+  const preview = await outlinePreview();
+  await until(
+    () =>
+      evalFrame<boolean>(
+        preview,
+        `Math.abs(document.querySelector("nav.outline").getBoundingClientRect().width - ${widened.width}) <= 1`,
+      ),
+    "the Preview outline at the stored width",
+  );
+  pass(
+    "dragging the outline's left edge in Mixed widens it under the pointer, and Preview uses the same stored width",
+  );
+
+  await selectViewer(MIXED_VIEWER);
+  mixed = await mixedShowing(
+    `Boolean(${mixedBlock("Outline sample", "h1")})`,
+    "outline.md in Mixed for the keyboard",
+  );
+  assert.equal(
+    await evalFrame<boolean>(
+      mixed,
+      `(${OUTLINE_RESIZER}.focus(), document.activeElement === ${OUTLINE_RESIZER})`,
+    ),
+    true,
+  );
+  pressKey(mixed, "End");
+  const widest = await until(async () => {
+    const state = await evalFrame<OutlineState>(mixed, OUTLINE_STATE);
+    const width = String(Math.round(state.width));
+    return Math.abs(state.column - 480) <= 1 && state.stored === width && state.valueNow === width
+      ? state
+      : null;
+  }, "End to leave the content column at its 480px minimum");
+  const window = hooks.mainWindow()!;
+  const [width, height] = window.getSize();
+  const shrink = Math.min(
+    100,
+    (await evalFrame<number>(mixed, "innerWidth")) - OUTLINE_BREAKPOINT - 10,
+  );
+  assert.ok(shrink >= 50, `the viewer is wide enough to narrow by ${shrink}px`);
+  try {
+    window.setSize(width - shrink, height);
+    await until(async () => {
+      const state = await evalFrame<OutlineState>(mixed, OUTLINE_STATE);
+      return (
+        Math.abs(state.column - 480) <= 1 && Math.abs(state.width - (widest.width - shrink)) <= 1
+      );
+    }, "the outline to give way while the content column keeps 480px");
+  } finally {
+    window.setSize(width, height);
+  }
+  pressKey(mixed, "ArrowRight");
+  const narrower = String(Math.round(widest.width) - 16);
+  await until(async () => {
+    const state = await evalFrame<OutlineState>(mixed, OUTLINE_STATE);
+    return (
+      String(Math.round(state.width)) === narrower &&
+      state.stored === narrower &&
+      state.valueNow === narrower
+    );
+  }, "ArrowRight to narrow the outline by 16px");
+  pass(
+    "End keeps the 480px content column, a narrower window takes width from the outline, and ArrowRight narrows it",
+  );
+
+  const point = (await centerOf(mixed, OUTLINE_RESIZER))!;
+  const contents = mixed.view.webContents;
+  for (const clickCount of [1, 2]) {
+    contents.sendInputEvent({
+      type: "mouseDown",
+      x: point.x,
+      y: point.y,
+      button: "left",
+      clickCount,
+    });
+    contents.sendInputEvent({
+      type: "mouseUp",
+      x: point.x,
+      y: point.y,
+      button: "left",
+      clickCount,
+    });
+  }
+  await until(
+    () =>
+      evalFrame<boolean>(
+        mixed,
+        `${visibleOutlineLayout("mixed")} && localStorage.getItem(${JSON.stringify(OUTLINE_WIDTH_KEY)}) === null`,
+      ),
+    "the automatic Mixed outline after a double click",
+  );
+  const automaticPreview = await outlinePreview();
+  await until(
+    () => evalFrame<boolean>(automaticPreview, visibleOutlineLayout("preview")),
+    "the automatic Preview outline after the double click in Mixed",
+  );
+  pass("double-clicking the handle restores the automatic width in Mixed and Preview");
+  await goToChat();
+}
+
+const FIND_COUNT = `(document.querySelector(".find-count")?.textContent ?? null)`;
+
+function findInputFocused(label: "Find" | "Replace"): string {
+  return `document.activeElement?.getAttribute("aria-label") === ${JSON.stringify(label)}`;
+}
+
+/** Preview 当前匹配的矩形与起点所在的元素。The rect of Preview's current match and the element of its start. */
+const PREVIEW_CURRENT_MATCH = `(() => {
+  const range = [...(CSS.highlights.get("markdown-find-current") ?? [])][0];
+  return range ? { rect: range.getBoundingClientRect(), element: range.startContainer.parentElement } : null;
+})()`;
+
+/** Mixed 当前匹配的矩形与元素。The rect and element of Mixed's current match. */
+const MIXED_CURRENT_MATCH = `(() => {
+  const element = document.querySelector(".ProseMirror-active-search-match");
+  return element ? { rect: element.getBoundingClientRect(), element } : null;
+})()`;
+
+/**
+ * 当前匹配完整显示：在滚动区域（null 为窗口）与所在的代码块中都可见，并且不与搜索栏相交。
+ * The current match shows in full: inside the scroll area (null for the window) and its code block, clear of the
+ * find bar.
+ */
+function currentMatchVisible(match: string, scroller: string | null): string {
+  const area =
+    scroller === null
+      ? "({ top: 0, left: 0, bottom: innerHeight, right: innerWidth })"
+      : `document.querySelector(${JSON.stringify(scroller)}).getBoundingClientRect()`;
+  return `(() => {
+    const current = ${match};
+    if (!current) return false;
+    const { rect, element } = current;
+    const area = ${area};
+    const clip = element.closest("pre")?.getBoundingClientRect() ?? area;
+    const bar = document.querySelector(".find-bar").getBoundingClientRect();
+    const covered = rect.left < bar.right && rect.right > bar.left && rect.top < bar.bottom && rect.bottom > bar.top;
+    return rect.width > 0 && rect.top >= area.top && rect.bottom <= area.bottom
+      && rect.left >= clip.left && rect.right <= clip.right && !covered;
+  })()`;
+}
+
+async function markdownSearch(): Promise<void> {
+  const path = projectPath("notes/search.md");
+  const original = await readFile(path, "utf8");
+  await openFileInTree("notes/search.md");
+  await checkPreviewSearch();
+  await checkMixedSearch(path, original);
+  await goToChat();
+}
+
+async function checkPreviewSearch(): Promise<void> {
+  await selectPreview();
+  const preview = await untilViewerFrame(EXTENSION_IDS.markdown, "preview");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        preview,
+        `document.querySelector(".mermaid-block")?.dataset.diagram === "rendered"`,
+      ),
+    "the rendered diagram in Preview",
+  );
+  await evalFrame(preview, "window.scrollTo(0, 0)");
+  pressKey(preview, "f", [MOD]);
+  await until(
+    () => evalFrame<boolean>(preview, findInputFocused("Find")),
+    "the Preview find input",
+  );
+  await typeIn(preview, "needle");
+  const visible = currentMatchVisible(PREVIEW_CURRENT_MATCH, null);
+  await until(
+    () =>
+      evalFrame<boolean>(
+        preview,
+        `${FIND_COUNT} === "1 of 3"
+          && CSS.highlights.get("markdown-find-match").size === 2
+          && CSS.highlights.get("markdown-find-current").size === 1
+          && ${visible}`,
+      ),
+    "the first of three Preview matches",
+  );
+  pass("Preview finds the visible text only, leaving out the rendered diagram's source and SVG");
+
+  pressKey(preview, "Enter");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        preview,
+        `${FIND_COUNT} === "2 of 3" && ${visible}
+          && document.querySelector(".markdown-body pre").scrollLeft > 0`,
+      ),
+    "the code match scrolled into view in Preview",
+  );
+  pressKey(preview, "Enter", ["shift"]);
+  await until(
+    () => evalFrame<boolean>(preview, `${FIND_COUNT} === "1 of 3" && ${visible}`),
+    "the first Preview match again",
+  );
+  pass(
+    "Preview's Enter and Shift+Enter move between matches and scroll the current one into view, also sideways in code",
+  );
+
+  pressKey(preview, "Escape");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        preview,
+        `!document.querySelector(".find-bar")
+          && !CSS.highlights.has("markdown-find-match") && !CSS.highlights.has("markdown-find-current")`,
+      ),
+    "the closed Preview find bar",
+  );
+  pass("Esc closes Preview's find bar and removes the highlights");
+}
+
+async function checkMixedSearch(path: string, original: string): Promise<void> {
+  await selectViewer(MIXED_VIEWER);
+  const mixed = await mixedShowing(
+    `Boolean(${mixedBlock("The first needle", "p")})`,
+    "search.md in Mixed",
+  );
+  await evalFrame(mixed, `document.querySelector(".edit-scroll").scrollTo(0, 0)`);
+  await placeCaret(mixed, mixedBlock("Search sample", "h1"));
+  pressKey(mixed, "f", [MOD]);
+  await until(() => evalFrame<boolean>(mixed, findInputFocused("Find")), "the Mixed find input");
+  await typeIn(mixed, "needle");
+  const visible = currentMatchVisible(MIXED_CURRENT_MATCH, ".edit-scroll");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        mixed,
+        `${FIND_COUNT} === "1 of 4"
+          && document.querySelectorAll(".ProseMirror-search-match").length === 3
+          && document.querySelectorAll(".ProseMirror-active-search-match").length === 1
+          && ${visible}`,
+      ),
+    "the first of four Mixed matches",
+  );
+  // 大纲显示时搜索栏在内容列中，不遮挡大纲。With the outline shown, the bar sits in the content column clear of it.
+  assert.equal(
+    await evalFrame<boolean>(
+      mixed,
+      `document.querySelector(".find-bar").getBoundingClientRect().right
+        <= document.querySelector("nav.outline").getBoundingClientRect().left + 1`,
+    ),
+    true,
+  );
+  pressKey(mixed, "Enter");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        mixed,
+        `${FIND_COUNT} === "2 of 4" && ${visible}
+          && document.querySelector(".code-block pre").scrollLeft > 0`,
+      ),
+    "the code match scrolled into view in Mixed",
+  );
+  pressKey(mixed, "Enter");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        mixed,
+        `${FIND_COUNT} === "3 of 4" && ${visible}
+          && document.querySelector('.code-block[data-diagram="rendered"]').hasAttribute("data-editing")`,
+      ),
+    "the Mermaid source match in Mixed",
+  );
+  pressKey(mixed, "Enter");
+  await until(
+    () => evalFrame<boolean>(mixed, `${FIND_COUNT} === "4 of 4" && ${visible}`),
+    "the last Mixed match",
+  );
+  pass(
+    "Mixed highlights every match, Mermaid source included, and scrolls the current one into view, also sideways in code",
+  );
+
+  const window = hooks.mainWindow()!;
+  const [width, height] = window.getSize();
+  try {
+    window.setSize(window.getMinimumSize()[0]!, height);
+    await until(
+      () =>
+        evalFrame<boolean>(
+          mixed,
+          `(() => {
+            const bar = document.querySelector(".find-bar").getBoundingClientRect();
+            return innerWidth < ${OUTLINE_BREAKPOINT}
+              && getComputedStyle(document.querySelector("nav.outline")).display === "none"
+              && bar.left >= 0 && bar.top >= 0
+              && bar.right <= document.querySelector(".edit-scroll").clientWidth;
+          })()`,
+        ),
+      "the whole find bar at the top right below 960px",
+    );
+  } finally {
+    window.setSize(width, height);
+  }
+  pass("below 960px the find bar shows in full at the top right of the page");
+
+  if (process.platform === "darwin") pressKey(mixed, "f", ["meta", "alt"]);
+  else pressKey(mixed, "h", ["control"]);
+  await until(
+    () => evalFrame<boolean>(mixed, findInputFocused("Replace")),
+    "the Mixed replace input",
+  );
+  await typeIn(mixed, "pin");
+  pressKey(mixed, "Enter");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        mixed,
+        `${FIND_COUNT} === "1 of 3" && Boolean(${mixedBlock("The last pin is at the end.", "p")})`,
+      ),
+    "the last match replaced",
+  );
+  pressKey(mixed, "Enter", [MOD]);
+  await until(() => evalFrame<boolean>(mixed, `${FIND_COUNT} === "No results"`), "Replace All");
+  await untilHost(unsavedIn(MIXED_VIEWER), "the unsaved replacements");
+  saveIn(mixed);
+  await untilHost(`!${unsavedIn(MIXED_VIEWER)}`, "the saved replacements");
+  await untilFileText(path, original.replaceAll("needle", "pin"), "the replacements on disk");
+  pass("Mixed replaces one match and then all of them, and saves only the replaced text");
+
+  pressKey(mixed, "Escape");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        mixed,
+        `!document.querySelector(".find-bar") && document.activeElement === ${EDITOR}`,
+      ),
+    "the closed Mixed find bar with the editor focused",
+  );
+  pressKey(mixed, "z", [MOD]);
+  await until(
+    () =>
+      evalFrame<boolean>(
+        mixed,
+        `Boolean(${mixedBlock("The first needle", "p")}) && Boolean(${mixedBlock("The last pin", "p")})`,
+      ),
+    "Replace All undone in one step",
+  );
+  saveIn(mixed);
+  await untilFileText(
+    path,
+    original.replace("The last needle", "The last pin"),
+    "the undone Replace All on disk",
+  );
+  pass("Esc returns focus to the editor, and one undo restores everything Replace All changed");
 }
 
 /**
@@ -10642,6 +11121,12 @@ async function serverExtensionRestart(): Promise<void> {
 
 async function run(): Promise<void> {
   await boot();
+  if (config.phase === "first") {
+    await bundledDefaults();
+    await markdownSearch();
+    await markdownOutlineResize();
+    return;
+  }
   if (config.phase === "server-extension") {
     await serverExtensionLifecycle();
     await serverExtensionContextSwitchRace();
@@ -10712,6 +11197,8 @@ async function run(): Promise<void> {
   await textEditorTypography();
   await dragHandleFirstLine();
   await markdownOutline();
+  await markdownSearch();
+  await markdownOutlineResize();
   await hostScaling();
   await appearanceSettings();
   await themeSelection();

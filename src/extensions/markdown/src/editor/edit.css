@@ -118,6 +118,16 @@ body {
   outline: 2px solid var(--ring);
 }
 
+/* 搜索匹配（prosemirror-search 的装饰），颜色见 shared/find-bar.css。Find matches (prosemirror-search decorations);
+   the colors are in shared/find-bar.css. */
+.edit-content .ProseMirror-search-match {
+  background: var(--find-match);
+}
+
+.edit-content .ProseMirror-active-search-match {
+  background: var(--find-match-current);
+}
+
 /* 列表与任务项。Lists and task items. */
 .edit-content li.task-item {
   display: flex;
@@ -405,21 +415,6 @@ body {
   justify-content: center;
   width: 26px;
   padding: 0;
-}
-
-/* 工具条按钮的 tooltip，配色与宿主的 tooltip 相同。Tooltips of toolbar buttons, colored like the host's tooltips. */
-.tooltip {
-  z-index: 30;
-  padding: 6px 12px;
-  border-radius: var(--radius-md);
-  background: var(--foreground);
-  color: var(--background);
-  font-size: 0.875em;
-  white-space: nowrap;
-}
-
-.tooltip-arrow {
-  fill: var(--foreground);
 }
 
 .link-address {

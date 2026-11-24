@@ -18,6 +18,7 @@ Object.assign(globalThis, {
   window,
   document: window.document,
   DOMParser: window.DOMParser,
+  MutationObserver: window.MutationObserver,
   ResizeObserver: LayoutFreeResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
@@ -28,6 +29,7 @@ installMermaidDom(window);
 
 const { createRoot } = await import("react-dom/client");
 const { MarkdownDocument } = await import("./markdown-document");
+const { createFindBarMemory } = await import("../shared/find-bar");
 
 const ROOT = "agw-cloud://local/project-1/workspace/";
 const ENCODINGS = [
@@ -92,6 +94,7 @@ function mountViewer(): Viewer {
   document.body.append(container);
   const root = createRoot(container);
   let shown = 0;
+  const findMemory = createFindBarMemory();
   return {
     container,
     async show(name) {
@@ -101,6 +104,7 @@ function mountViewer(): Viewer {
         api: host.api,
         file: viewerFile(name),
         shown,
+        findMemory,
       });
       await act(async () => root.render(element));
     },
@@ -151,8 +155,8 @@ test("a document with level 1-4 headings shows the outline beside the article", 
     const layout = viewer.container.querySelector(".preview-layout")!;
     assert.equal(layout.hasAttribute("data-outline"), true);
     assert.deepEqual(
-      [...layout.children].map((child) => child.localName),
-      ["article", "nav"],
+      [...layout.children].map((child) => child.className),
+      ["find-bar-anchor", "markdown-body agw-prose document-column", "outline"],
     );
     const nav = layout.querySelector("nav.outline")!;
     assert.equal(nav.getAttribute("aria-label"), "Outline");
@@ -472,6 +476,41 @@ test("a Mermaid syntax error shows the error below the source", async () => {
     assert.equal(svg, "");
     assert.match(block!.querySelector(".mermaid-diagram-error")!.textContent!, /Parse error/);
     assert.ok(block!.querySelector("pre > code.language-mermaid"));
+  } finally {
+    await viewer.unmount();
+  }
+});
+
+/** 测试宿主的平台为 darwin，Mod 为 Meta。The test host's platform is darwin, so Mod is Meta. */
+async function pressShortcut(init: KeyboardEventInit): Promise<void> {
+  const event = new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+  await act(async () => document.body.dispatchEvent(event));
+}
+
+test("Preview's find bar has no replace row and stays open across a file switch", async () => {
+  files.set(`${ROOT}find-one.md`, { text: "# One\n\nText.\n" });
+  files.set(`${ROOT}find-two.md`, { text: "# Two\n\nMore text.\n" });
+  const viewer = mountViewer();
+  try {
+    await viewer.show("find-one.md");
+    await until(viewer, () => heading(viewer) === "One", "the first file");
+    // 替换快捷键在 Preview 中只打开搜索栏。The replace shortcut only opens the find bar in Preview.
+    await pressShortcut({ key: "ƒ", code: "KeyF", metaKey: true, altKey: true });
+    const bar = () => viewer.container.querySelector(".find-bar");
+    assert.ok(bar());
+    assert.equal(bar()!.querySelector('button[aria-label="Toggle Replace"]'), null);
+    assert.equal(bar()!.querySelector('input[aria-label="Replace"]'), null);
+    assert.equal(document.activeElement, bar()!.querySelector('input[aria-label="Find"]'));
+
+    await viewer.show("find-two.md");
+    await until(viewer, () => heading(viewer) === "Two", "the second file");
+    assert.ok(bar(), "the find bar stays open after the file switch");
+    await act(async () =>
+      bar()!
+        .querySelector("input")!
+        .dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+    );
+    assert.equal(bar(), null);
   } finally {
     await viewer.unmount();
   }

@@ -6,6 +6,8 @@ import type { Root } from "react-dom/client";
 import { DocumentError } from "../shared/document-error";
 import { useSessionValue } from "../shared/editor-chrome";
 import { notifyFailure } from "../shared/errors";
+import { createFindBarMemory, FindBar } from "../shared/find-bar";
+import type { Platform } from "../shared/find-query";
 import { OutlinePanel, useActiveHeading } from "../shared/outline-panel";
 import { BlockHandle } from "./block-handle";
 import type { EditDocument } from "./edit-document";
@@ -44,7 +46,11 @@ export function EditView({ api, editDocument }: { api: ExtensionApi; editDocumen
           }
         />
       ) : null}
-      <EditDocumentLayout editDocument={editDocument} ready={phase === "ready"} />
+      <EditDocumentLayout
+        editDocument={editDocument}
+        ready={phase === "ready"}
+        platform={api.context.get().app.platform}
+      />
       <BlockHandle editor={editor} />
       <FormattingMenu editor={editor} ui={ui} />
       <LinkMenu api={api} editor={editor} ui={ui} fileUri={fileUri} />
@@ -59,11 +65,16 @@ export function EditView({ api, editDocument }: { api: ExtensionApi; editDocumen
 function EditDocumentLayout({
   editDocument,
   ready,
+  platform,
 }: {
   editDocument: EditDocument;
   ready: boolean;
+  platform: Platform;
 }) {
-  const { editor, outline } = editDocument;
+  const { editor, outline, search } = editDocument;
+  // 文件切换时这个组件保持挂载，搜索栏状态随之保留。The component stays mounted across file switches, and so does the
+  // find bar's state.
+  const [findMemory] = useState(createFindBarMemory);
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   const [documentColumn, setDocumentColumn] = useState<HTMLDivElement | null>(null);
   const headings = useSyncExternalStore(outline.subscribe, () => outline.headings);
@@ -87,6 +98,7 @@ function EditDocumentLayout({
   return (
     <div ref={setScroller} className="edit-scroll" hidden={!ready}>
       <div className="edit-layout outline-layout" data-outline="">
+        <FindBar target={search} memory={findMemory} platform={platform} enabled={ready} />
         <div ref={setDocumentColumn} className="edit-column document-column">
           <EditorContent editor={editor} className="edit-content" />
         </div>

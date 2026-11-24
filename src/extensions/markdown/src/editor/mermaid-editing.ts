@@ -59,6 +59,21 @@ function isDiagramOnlyAt(state: EditorState, pos: number): boolean {
     .some((decoration) => decoration.from === pos);
 }
 
+/** 事务是否切换了 Mermaid 代码块的视图。Whether the transaction switches the view of a Mermaid code block. */
+export function switchesMermaidView(tr: Transaction): boolean {
+  return tr.getMeta(mermaidViewKey) !== undefined;
+}
+
+/**
+ * `pos` 是否在 "Diagram only" 视图的 Mermaid 代码块中；这类代码块的源码不显示，不参与搜索。
+ * Whether `pos` is inside a Mermaid code block in the Diagram only view; such blocks hide their source and are left out
+ * of searches.
+ */
+export function inDiagramOnlyBlock(state: EditorState, pos: number): boolean {
+  const $pos = state.doc.resolve(pos);
+  return isMermaidBlock($pos.parent) && isDiagramOnlyAt(state, $pos.before());
+}
+
 /** node view 的装饰是否表示它处于编辑状态。Whether a node view's decorations mark it as being edited. */
 export function isMermaidEditing(decorations: readonly Decoration[]): boolean {
   return decorations.some(

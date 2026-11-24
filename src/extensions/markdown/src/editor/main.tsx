@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { applyDocumentFontSize } from "../shared/apply-font-sizes";
 import { notifyFailure } from "../shared/errors";
+import { applyOutlineWidth } from "../shared/outline-width";
 import { createSettingsGate } from "../shared/settings-gate";
 import { applyHighlightTheme } from "../shared/theme";
 import { applyWorkspaceBackdrop } from "../shared/workspace-backdrop";
@@ -12,8 +13,10 @@ import { floatingChatContext } from "./floating-chat-context";
 import { publishHeaderItems } from "./header-items";
 import "../shared/document-error.css";
 import "../shared/editor-chrome.css";
+import "../shared/find-bar.css";
 import "../shared/mermaid-diagram.css";
 import "../shared/outline.css";
+import "../shared/tooltip.css";
 import "./edit.css";
 
 const container = document.getElementById("root");
@@ -65,6 +68,7 @@ defineView({
     api.theme.apply();
     applyHighlightTheme(api);
     applyWorkspaceBackdrop(api);
+    applyOutlineWidth();
     await gate.onLoad(api, params);
   },
   onShow: gate.onShow,

@@ -1,0 +1,137 @@
+/* 搜索栏（Markdown 搜索替换设计第 3.5 节），颜色来自宿主主题变量（theme.apply）。
+   The find bar (Markdown find and replace design, section 3.5); colors come from the host theme variables
+   (theme.apply). */
+
+:root {
+  --find-match: rgb(250 204 21 / 0.4);
+  --find-match-current: rgb(249 115 22 / 0.55);
+}
+
+/* 锚点与内容列在同一个网格单元中，高度为 0，不改变布局；sticky 的约束范围是整行，滚动时搜索栏一直在可见区域顶部。
+   The anchor shares the document column's grid cell with zero height, so the layout stays; its sticky range is the
+   whole row, so the bar stays at the top of the visible area while scrolling. */
+.outline-layout > .find-bar-anchor {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  grid-column: 2;
+  grid-row: 1;
+  height: 0;
+}
+
+.find-bar {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(440px, calc(100% - 32px));
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.16);
+  font-size: 0.875em;
+  line-height: 1.5;
+}
+
+.find-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 替换输入框与搜索输入框左边对齐。The replace input lines up with the find input. */
+.find-replace-row {
+  padding-left: 26px;
+}
+
+.find-field {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+}
+
+.find-field:focus-within {
+  border-color: var(--ring);
+}
+
+.find-field[data-invalid] {
+  border-color: var(--destructive);
+}
+
+.find-field input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  outline: none;
+}
+
+.find-count {
+  flex: none;
+  min-width: 72px;
+  padding: 0 6px;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.find-count[data-invalid] {
+  color: var(--destructive);
+}
+
+.find-button,
+.find-text-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.find-button {
+  width: 24px;
+  padding: 0;
+}
+
+.find-text-button {
+  padding: 0 8px;
+}
+
+.find-button:hover:not(:disabled),
+.find-text-button:hover:not(:disabled),
+.find-button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.find-button:disabled,
+.find-text-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.find-button:focus-visible,
+.find-text-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
