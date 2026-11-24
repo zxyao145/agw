@@ -7,6 +7,7 @@ import { Dropcursor, Gapcursor, Placeholder, TrailingNode, UndoRedo } from "@tip
 import { canTurnIntoSelection, turnInto } from "./block-commands";
 import { CodeBlockView } from "./code-block-view";
 import { codeLanguages } from "./code-languages";
+import { EditSearchExtension } from "./edit-search";
 import type { EditUi } from "./edit-ui";
 import { editorExtensions } from "./editor-extensions";
 import { EditorInputRules } from "./editor-input-rules";
@@ -173,6 +174,7 @@ export function createEditExtensions(context: EditContext): AnyExtension[] {
     MermaidEditing,
     ReferenceDecorations,
     TableNormalization,
+    EditSearchExtension,
     editShortcuts(context),
   ];
 }

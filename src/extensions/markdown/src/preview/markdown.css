@@ -65,6 +65,16 @@ body {
   scroll-margin-top: var(--outline-heading-offset);
 }
 
+/* 搜索匹配（preview-search.ts 设置的 CSS Custom Highlight），颜色见 shared/find-bar.css。Find matches (the CSS Custom
+   Highlights preview-search.ts sets); the colors are in shared/find-bar.css. */
+::highlight(markdown-find-match) {
+  background-color: var(--find-match);
+}
+
+::highlight(markdown-find-current) {
+  background-color: var(--find-match-current);
+}
+
 .markdown-body details {
   margin-top: 0;
   margin-bottom: var(--agw-prose-block-gap);

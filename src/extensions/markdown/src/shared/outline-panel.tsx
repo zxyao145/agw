@@ -4,10 +4,18 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type KeyboardEvent,
+  type PointerEvent,
   type ReactElement,
 } from "react";
 
 import { activeHeadingIndex, type OutlineHeading } from "./outline";
+import {
+  outlineWidthRange,
+  readOutlineSizes,
+  showOutlineWidth,
+  storeOutlineWidth,
+} from "./outline-width";
 
 type OutlinePanelProps = {
   headings: readonly OutlineHeading[];
@@ -16,38 +24,141 @@ type OutlinePanelProps = {
 };
 
 export function OutlinePanel({ headings, active, onSelect }: OutlinePanelProps): ReactElement {
-  const nav = useRef<HTMLElement>(null);
+  const scroll = useRef<HTMLDivElement>(null);
   const activeItem = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
-    keepActiveHeadingVisible(nav.current, activeItem.current);
+    keepActiveHeadingVisible(scroll.current, activeItem.current);
   }, [active, headings]);
 
   const minLevel = headings.reduce((min, { level }) => Math.min(min, level), Infinity);
   return (
-    <nav ref={nav} className="outline" aria-label="Outline">
-      <p className="outline-title">Outline</p>
-      {headings.length === 0 ? (
-        <p className="outline-empty">No headings</p>
-      ) : (
-        <ol className="outline-list">
-          {headings.map(({ level, label }, index) => (
-            <li key={index}>
-              <button
-                ref={index === active ? activeItem : undefined}
-                type="button"
-                className="outline-item"
-                data-depth={level - minLevel}
-                aria-current={index === active ? "location" : undefined}
-                title={label}
-                onClick={() => onSelect(index)}
-              >
-                {label}
-              </button>
-            </li>
-          ))}
-        </ol>
-      )}
+    <nav className="outline" aria-label="Outline">
+      <OutlineResizer />
+      <div ref={scroll} className="outline-scroll">
+        <p className="outline-title">Outline</p>
+        {headings.length === 0 ? (
+          <p className="outline-empty">No headings</p>
+        ) : (
+          <ol className="outline-list">
+            {headings.map(({ level, label }, index) => (
+              <li key={index}>
+                <button
+                  ref={index === active ? activeItem : undefined}
+                  type="button"
+                  className="outline-item"
+                  data-depth={level - minLevel}
+                  aria-current={index === active ? "location" : undefined}
+                  title={label}
+                  onClick={() => onSelect(index)}
+                >
+                  {label}
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
     </nav>
+  );
+}
+
+const KEYBOARD_STEP = 16;
+
+function clampWidth(width: number, range: { min: number; max: number }): number {
+  return Math.min(range.max, Math.max(range.min, width));
+}
+
+/**
+ * 大纲左边缘的拖动手柄（Markdown 大纲宽度调整设计第 4 节）：拖动或方向键、Home、End 调整宽度，双击回到自动宽度。
+ * 拖动中只修改 html 上的变量，结束时保存一次；没有移动的点击不保存。ARIA 数值直接写在元素上，不经过 React 提交。
+ * The drag handle on the outline's left edge (Markdown outline width design, section 4): dragging or the arrow keys,
+ * Home and End set the width, and a double click restores the automatic width. Dragging only changes the variable on
+ * html and stores once at the end; a click without movement stores nothing. The ARIA values go straight onto the
+ * element without a React commit.
+ */
+function OutlineResizer() {
+  const handle = useRef<HTMLDivElement>(null);
+
+  /** 大纲的当前宽度与用户宽度的范围。The outline's current width and the user width range. */
+  const measure = () => {
+    const nav = handle.current!.parentElement!;
+    const layout = nav.parentElement!;
+    return {
+      width: Math.round(nav.getBoundingClientRect().width),
+      range: outlineWidthRange(layout.clientWidth, readOutlineSizes(layout)),
+    };
+  };
+
+  const describe = () => {
+    const { width, range } = measure();
+    const element = handle.current!;
+    element.setAttribute("aria-valuemin", String(range.min));
+    element.setAttribute("aria-valuemax", String(range.max));
+    element.setAttribute("aria-valuenow", String(width));
+  };
+
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const element = event.currentTarget;
+    const root = document.documentElement;
+    const { width: startWidth, range } = measure();
+    const startX = event.clientX;
+    let width: number | null = null;
+    element.setPointerCapture(event.pointerId);
+    root.setAttribute("data-outline-resizing", "");
+    const onMove = (move: globalThis.PointerEvent) => {
+      width = clampWidth(Math.round(startWidth + startX - move.clientX), range);
+      showOutlineWidth(width);
+      describe();
+    };
+    const onEnd = () => {
+      element.removeEventListener("pointermove", onMove);
+      element.removeEventListener("pointerup", onEnd);
+      element.removeEventListener("pointercancel", onEnd);
+      root.removeAttribute("data-outline-resizing");
+      if (width !== null) storeOutlineWidth(width);
+    };
+    element.addEventListener("pointermove", onMove);
+    element.addEventListener("pointerup", onEnd);
+    element.addEventListener("pointercancel", onEnd);
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const { width, range } = measure();
+    const next =
+      event.key === "ArrowLeft"
+        ? width + KEYBOARD_STEP
+        : event.key === "ArrowRight"
+          ? width - KEYBOARD_STEP
+          : event.key === "Home"
+            ? range.min
+            : event.key === "End"
+              ? range.max
+              : null;
+    if (next === null) return;
+    event.preventDefault();
+    storeOutlineWidth(clampWidth(next, range));
+    describe();
+  };
+
+  return (
+    <div
+      ref={handle}
+      className="outline-resizer"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize Outline"
+      tabIndex={0}
+      title="Drag to resize. Double-click to reset."
+      onPointerDown={onPointerDown}
+      onKeyDown={onKeyDown}
+      onDoubleClick={() => {
+        storeOutlineWidth(null);
+        describe();
+      }}
+      onFocus={describe}
+    />
   );
 }
 

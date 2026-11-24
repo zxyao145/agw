@@ -1,7 +1,16 @@
 :root {
-  --outline-width: 240px;
+  --outline-min-width: 240px;
+  --outline-max-width: 400px;
   --outline-gutter: 16px;
   --outline-heading-offset: 16px;
+  /* 用户宽度下内容列至少保留的宽度。The width the document column keeps at least under a user width. */
+  --document-min-width: 480px;
+  --outline-width-limit: var(--outline-max-width);
+}
+
+/* 用户宽度（shared/outline-width.ts 写在 html 上）。The user width, set on html by shared/outline-width.ts. */
+:root[data-outline-width] {
+  --outline-width-limit: var(--outline-user-width);
 }
 
 .outline-layout {
@@ -12,28 +21,110 @@
     );
 }
 
+/* 正文列达到最大宽度后，多出的宽度由大纲列与左侧列平分；大纲达到最大宽度后左侧列继续变宽，直到两侧对称。
+   Once the document column reaches its maximum width, the outline column and the left column share the extra width;
+   after the outline reaches its maximum width the left column keeps growing until both sides match. */
 .outline-layout[data-outline] {
-  --outline-side-track: minmax(calc(var(--outline-width) + var(--outline-gutter)), 1fr);
+  --outline-min-track: calc(var(--outline-min-width) + var(--outline-gutter));
+  --outline-side-track: minmax(
+    clamp(
+      var(--outline-min-track),
+      (100% - var(--document-column-width) + var(--outline-min-track)) / 2,
+      var(--outline-max-width) + var(--outline-gutter)
+    ),
+    1fr
+  );
 }
 
+/* 第 3 列至少为用户宽度加间距；页面变窄时内容列先变窄，到 --document-min-width 后大纲变窄，大纲不小于最小宽度。
+   The third column is at least the user width plus the gutter; on a narrowing page the document column gives way
+   first, then the outline below --document-min-width, never under its minimum width. */
+:root[data-outline-width] .outline-layout[data-outline] {
+  --outline-side-track: minmax(
+    calc(
+      clamp(
+          var(--outline-min-width),
+          var(--outline-user-width),
+          100% - var(--outline-gutter) - var(--document-min-width)
+        ) +
+        var(--outline-gutter)
+    ),
+    1fr
+  );
+}
+
+/* 搜索栏锚点明确占用第 1 行第 2 列，只指定列的网格项会避开它，所以内容列与大纲也指定行。
+   The find bar anchor takes row 1, column 2 explicitly, and items placed by column alone would avoid it, so the
+   document column and the outline name their row too. */
 .outline-layout > .document-column {
   grid-column: 2;
+  grid-row: 1;
 }
 
 .outline-layout > .outline {
   grid-column: 3;
+  grid-row: 1;
 }
 
+/* nav 不滚动，拖动手柄贴在它的左边缘；列表在 .outline-scroll 中滚动。The nav does not scroll, so the drag handle stays
+   on its left edge; the list scrolls in .outline-scroll. */
 .outline {
   position: sticky;
   top: 0;
   align-self: start;
   justify-self: start;
   box-sizing: border-box;
-  width: var(--outline-width);
+  display: flex;
+  flex-direction: column;
+  width: min(100% - var(--outline-gutter), var(--outline-width-limit));
   max-height: 100vh;
+}
+
+.outline-scroll {
+  box-sizing: border-box;
+  min-height: 0;
   padding: 32px 16px 72px;
   overflow-y: auto;
+  border-radius: inherit;
+}
+
+/* 以大纲左边缘为中线的 8px 手柄，中间 2px 的竖线在悬停、键盘焦点与拖动时显示。An 8px handle centered on the
+   outline's left edge; its 2px middle line shows on hover, keyboard focus and while dragging. */
+.outline-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  z-index: 1;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.outline-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+}
+
+.outline-resizer:hover::after,
+.outline-resizer:focus-visible::after,
+:root[data-outline-resizing] .outline-resizer::after {
+  background: var(--ring);
+}
+
+.outline-resizer:focus-visible {
+  outline: none;
+}
+
+/* 拖动经过按钮、编辑区等元素时指针保持不变。The pointer keeps its shape while dragging across buttons and the editor. */
+:root[data-outline-resizing] * {
+  cursor: col-resize !important;
 }
 
 .outline-title {
@@ -118,11 +209,15 @@
 
 :root[data-workspace-backdrop] .outline {
   max-height: calc(100vh - 80px);
+}
+
+:root[data-workspace-backdrop] .outline-scroll {
   padding: 16px 12px 24px;
 }
 
 @media (width < 960px) {
-  .outline-layout[data-outline] {
+  .outline-layout[data-outline],
+  :root[data-outline-width] .outline-layout[data-outline] {
     --outline-side-track: minmax(0, 1fr);
   }
 

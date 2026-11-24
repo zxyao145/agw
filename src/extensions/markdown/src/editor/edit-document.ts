@@ -5,6 +5,7 @@ import { EditorState } from "@tiptap/pm/state";
 
 import { createEditExtensions } from "./edit-extensions";
 import { EditOutline } from "./edit-outline";
+import { EditSearch } from "./edit-search";
 import { EditUi } from "./edit-ui";
 import { loadMarkdown, type LoadedMarkdown, type MarkdownBaseline } from "./markdown-loader";
 import { MarkdownRoundTripError, writeMarkdown } from "./markdown-writer";
@@ -50,6 +51,7 @@ function editorBaseline(loaded: LoadedMarkdown, doc: ProseMirrorNode): MarkdownB
 export class EditDocument {
   public readonly editor: Editor;
   public readonly outline: EditOutline;
+  public readonly search: EditSearch;
   public readonly session: DocumentSession;
   public readonly ui = new EditUi();
   public readonly slashMenu = new SlashMenuStore();
@@ -75,6 +77,7 @@ export class EditDocument {
       },
     });
     this.outline = new EditOutline(this.editor);
+    this.search = new EditSearch(this.editor);
     let doc = this.editor.state.doc;
     this.editor.on("transaction", () => {
       if (this.editor.state.doc === doc) return;
@@ -102,16 +105,19 @@ export class EditDocument {
   public dispose(): void {
     this.session.dispose();
     this.outline.dispose();
+    this.search.dispose();
     this.editor.destroy();
   }
 
   private load(text: string): void {
     const loaded = loadMarkdown(text, this.editor.schema);
     this.editor.commands.setContent(loaded.doc.content, { emitUpdate: false });
-    // 补节点的插件已经执行；用同一个文档新建状态，撤销历史随之清空。
-    // The plugins that append nodes have run; a new state over the same document clears the undo history.
+    // 补节点的插件已经执行；用同一个文档新建状态，撤销历史随之清空。插件随之重新初始化，搜索条件需要再设置一次。
+    // The plugins that append nodes have run; a new state over the same document clears the undo history. The
+    // plugins reinitialize with it, so the search conditions are set again.
     const { state } = this.editor;
     this.editor.view.updateState(EditorState.create({ doc: state.doc, plugins: state.plugins }));
+    this.search.restore();
     this.baselines.set(this.editor.state.doc, editorBaseline(loaded, this.editor.state.doc));
   }
 

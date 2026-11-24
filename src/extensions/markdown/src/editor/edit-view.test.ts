@@ -630,7 +630,7 @@ test("the outline beside the editor lists the headings with their depth", async 
   const layout = container.querySelector(".edit-scroll > .edit-layout")!;
   assert.deepEqual(
     [...layout.children].map((child) => child.className),
-    ["edit-column document-column", "outline"],
+    ["find-bar-anchor", "edit-column document-column", "outline"],
   );
 });
 
@@ -666,4 +666,154 @@ test("typing in a paragraph of a document with headings commits nothing in React
     await settle();
   });
   assert.equal(commits.count, before);
+});
+
+/** 卸载之前的视图：每个搜索栏都在 window 上监听快捷键。Unmounts earlier views: every find bar listens on window. */
+async function unmountEarlierViews(): Promise<void> {
+  for (const cleanup of cleanups.splice(0)) await cleanup();
+}
+
+/** 测试宿主的平台为 darwin，Mod 为 Meta。The test host's platform is darwin, so Mod is Meta. */
+function keyDown(target: EventTarget, init: KeyboardEventInit): void {
+  target.dispatchEvent(
+    new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
+  );
+}
+
+function findBar(container: Element) {
+  const bar = container.querySelector(".find-bar");
+  return {
+    bar,
+    count: () => bar?.querySelector(".find-count")?.textContent ?? null,
+    input: (label: "Find" | "Replace") =>
+      bar!.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!,
+    button: (label: string) =>
+      bar!.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!,
+  };
+}
+
+test("Mod+F opens the find bar with the selected word; Enter, Shift+Enter, F3 and Esc drive it", async () => {
+  await unmountEarlierViews();
+  const { document, container } = await mount("find.md", "A cat here.\n\nAnother cat and cat.\n");
+  const { editor } = document;
+  assert.equal(findBar(container).bar, null);
+  await act(async () => {
+    editor.view.focus();
+    editor.commands.setTextSelection({ from: 3, to: 6 });
+  });
+  await act(async () => keyDown(editor.view.dom, { key: "f", code: "KeyF", metaKey: true }));
+  let find = findBar(container);
+  assert.equal(find.bar?.getAttribute("role"), "dialog");
+  assert.equal(find.input("Find").value, "cat");
+  assert.equal(window.document.activeElement, find.input("Find"));
+  assert.equal(find.count(), "1 of 3");
+  assert.equal(container.querySelectorAll(".ProseMirror-search-match").length, 2);
+  assert.equal(container.querySelectorAll(".ProseMirror-active-search-match").length, 1);
+
+  await act(async () => keyDown(find.input("Find"), { key: "Enter" }));
+  assert.equal(find.count(), "2 of 3");
+  await act(async () => keyDown(find.input("Find"), { key: "Enter", shiftKey: true }));
+  assert.equal(find.count(), "1 of 3");
+  await act(async () => keyDown(find.input("Find"), { key: "F3", code: "F3" }));
+  await act(async () => keyDown(find.input("Find"), { key: "g", code: "KeyG", metaKey: true }));
+  assert.equal(find.count(), "3 of 3");
+
+  await act(async () => keyDown(find.input("Find"), { key: "Escape" }));
+  find = findBar(container);
+  assert.equal(find.bar, null);
+  assert.equal(editor.view.hasFocus(), true);
+  assert.equal(editor.state.selection.from, editor.state.doc.content.size - "cat.".length - 1);
+  assert.equal(container.querySelectorAll(".ProseMirror-search-match").length, 0);
+  // 搜索栏关闭时 F3 不做任何事。F3 does nothing while the bar is closed.
+  const closedF3 = new window.KeyboardEvent("keydown", { key: "F3", code: "F3", cancelable: true });
+  await act(async () => editor.view.dom.dispatchEvent(closedF3));
+  assert.equal(closedF3.defaultPrevented, false);
+});
+
+test("the replace shortcut opens the replace row; Enter replaces one match and Mod+Enter all of them", async () => {
+  await unmountEarlierViews();
+  const { document, container } = await mount("find-replace.md", "cat cat cat\n");
+  const { editor } = document;
+  await act(async () =>
+    keyDown(window.document.body, { key: "ƒ", code: "KeyF", metaKey: true, altKey: true }),
+  );
+  const find = findBar(container);
+  assert.equal(find.button("Toggle Replace").getAttribute("aria-expanded"), "true");
+  assert.equal(window.document.activeElement, find.input("Find"), "an empty search focuses Find");
+  await act(async () => setInput(find.input("Find"), "cat"));
+  assert.equal(find.count(), "1 of 3");
+  await act(async () => setInput(find.input("Replace"), "dog"));
+  await act(async () => keyDown(find.input("Replace"), { key: "Enter" }));
+  assert.equal(editor.state.doc.textContent, "dog cat cat");
+  assert.equal(find.count(), "1 of 2");
+  await act(async () => keyDown(find.input("Replace"), { key: "Enter", metaKey: true }));
+  assert.equal(editor.state.doc.textContent, "dog dog dog");
+  assert.equal(find.count(), "No results");
+  for (const label of ["Previous Match", "Next Match", "Replace", "Replace All"]) {
+    assert.equal(find.button(label).disabled, true, label);
+  }
+  assert.equal(document.session.state, "dirty");
+
+  // 再次打开时搜索文字不为空，焦点进入替换框。Reopening with a search text focuses Replace.
+  await act(async () => find.button("Close").click());
+  await act(async () =>
+    keyDown(window.document.body, { key: "ƒ", code: "KeyF", metaKey: true, altKey: true }),
+  );
+  assert.equal(window.document.activeElement, findBar(container).input("Replace"));
+});
+
+test("the options toggle by button and shortcut, an invalid expression shows, and reopening keeps them", async () => {
+  await unmountEarlierViews();
+  const { document, container } = await mount("find-options.md", "Cat cat (cat)\n");
+  await act(async () => keyDown(window.document.body, { key: "f", code: "KeyF", metaKey: true }));
+  let find = findBar(container);
+  await act(async () => setInput(find.input("Find"), "cat"));
+  assert.equal(find.count(), "1 of 3");
+  await act(async () =>
+    keyDown(find.input("Find"), { key: "ç", code: "KeyC", metaKey: true, altKey: true }),
+  );
+  assert.equal(find.button("Match Case").getAttribute("aria-pressed"), "true");
+  assert.equal(find.count(), "1 of 2");
+  await act(async () => find.button("Use Regular Expression").click());
+  await act(async () => setInput(find.input("Find"), "(cat"));
+  assert.equal(find.count(), "Invalid regex");
+  assert.equal(find.input("Find").getAttribute("aria-invalid"), "true");
+  assert.equal(find.input("Find").parentElement!.hasAttribute("data-invalid"), true);
+
+  await act(async () => keyDown(find.input("Find"), { key: "Escape" }));
+  await act(async () => {
+    document.editor.commands.setTextSelection(1);
+    keyDown(window.document.body, { key: "f", code: "KeyF", metaKey: true });
+  });
+  find = findBar(container);
+  assert.equal(find.input("Find").value, "(cat");
+  assert.equal(find.button("Match Case").getAttribute("aria-pressed"), "true");
+  assert.equal(find.button("Use Regular Expression").getAttribute("aria-pressed"), "true");
+  assert.equal(find.count(), "Invalid regex");
+});
+
+test("typing in the editor with the find bar open commits in React only when the count changes", async () => {
+  await unmountEarlierViews();
+  const { document, container, commits } = await mount("find-typing.md", "One cat.\n\nText.\n");
+  const { editor } = document;
+  await act(async () => keyDown(window.document.body, { key: "f", code: "KeyF", metaKey: true }));
+  const find = findBar(container);
+  await act(async () => setInput(find.input("Find"), "cat"));
+  assert.equal(find.count(), "1 of 1");
+  await act(async () => {
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    await settle();
+  });
+  assert.equal(find.count(), "? of 1");
+  const before = commits.count;
+  await act(async () => {
+    typeText(editor, "x");
+    await settle();
+  });
+  assert.equal(commits.count, before);
+  await act(async () => {
+    typeText(editor, " cat");
+    await settle();
+  });
+  assert.equal(find.count(), "? of 2");
 });

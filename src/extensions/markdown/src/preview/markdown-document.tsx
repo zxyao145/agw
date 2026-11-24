@@ -2,9 +2,12 @@ import type { ExtensionApi, FileViewerFile } from "@agw/extension-sdk";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { DocumentError } from "../shared/document-error";
+import { FindBar, type FindBarMemory } from "../shared/find-bar";
+import type { Platform } from "../shared/find-query";
 import { OutlinePanel, useActiveHeading } from "../shared/outline-panel";
 import { MarkdownContext, markdownComponents } from "./markdown-components";
 import { indexRenderedHeadings, renderMarkdown } from "./markdown-pipeline";
+import { PreviewSearch } from "./preview-search";
 
 type DocumentState =
   | { status: "loading" }
@@ -13,18 +16,20 @@ type DocumentState =
 
 /**
  * 读取并渲染一个 Markdown 文件；`shown` 每次变化都重新读取（同一个文件也读取），读到之前保留当前内容。
- * 文件变化时由调用方按 URI 重新挂载。
+ * 文件变化时由调用方按 URI 重新挂载，搜索栏的状态由页面持有的 `findMemory` 恢复。
  * Reads and renders one Markdown file, reading it again whenever `shown` changes (same file included) while the
- * current content stays. Callers remount it per URI.
+ * current content stays. Callers remount it per URI, and the page-owned `findMemory` restores the find bar.
  */
 export function MarkdownDocument({
   api,
   file,
   shown,
+  findMemory,
 }: {
   api: ExtensionApi;
   file: FileViewerFile;
   shown: number;
+  findMemory: FindBarMemory;
 }) {
   const [state, setState] = useState<DocumentState>({ status: "loading" });
   // 用户为这个文件选择的编码，null 时识别编码；每次选择都是新的对象，再次选择同一个编码也重新读取。
@@ -64,17 +69,36 @@ export function MarkdownDocument({
   }
   return (
     <MarkdownContext value={context}>
-      <MarkdownDocumentLayout text={state.text} />
+      <MarkdownDocumentLayout
+        text={state.text}
+        findMemory={findMemory}
+        platform={api.context.get().app.platform}
+      />
     </MarkdownContext>
   );
 }
 
-function MarkdownDocumentLayout({ text }: { text: string }) {
+function MarkdownDocumentLayout({
+  text,
+  findMemory,
+  platform,
+}: {
+  text: string;
+  findMemory: FindBarMemory;
+  platform: Platform;
+}) {
   const { element, outline: headings } = useMemo(
     () => renderMarkdown(text, markdownComponents),
     [text],
   );
   const [documentColumn, setDocumentColumn] = useState<HTMLElement | null>(null);
+  const [search, setSearch] = useState<PreviewSearch | null>(null);
+  useEffect(() => {
+    if (!documentColumn) return;
+    const created = new PreviewSearch(documentColumn);
+    setSearch(created);
+    return () => created.dispose();
+  }, [documentColumn]);
   const headingElementsById = useRef<ReadonlyMap<string, HTMLElement>>(new Map());
   useLayoutEffect(() => {
     if (documentColumn) headingElementsById.current = indexRenderedHeadings(documentColumn);
@@ -96,6 +120,7 @@ function MarkdownDocumentLayout({ text }: { text: string }) {
       className="preview-layout outline-layout"
       data-outline={headings.length > 0 ? "" : undefined}
     >
+      {search ? <FindBar target={search} memory={findMemory} platform={platform} enabled /> : null}
       <article
         ref={setDocumentColumn}
         className="markdown-body agw-prose document-column"
