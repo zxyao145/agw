@@ -6045,16 +6045,31 @@ async function markdownOutlineResize(): Promise<void> {
   } finally {
     window.setSize(width, height);
   }
-  pressKey(mixed, "ArrowRight");
+  await until(
+    async () =>
+      Math.abs((await evalFrame<OutlineState>(mixed, OUTLINE_STATE)).width - widest.width) <= 1,
+    "the outline back at its End width",
+  );
+  // sendInputEvent 中右方向键的键名为 Right。sendInputEvent names the right arrow key Right.
+  pressKey(mixed, "Right");
   const narrower = String(Math.round(widest.width) - 16);
-  await until(async () => {
-    const state = await evalFrame<OutlineState>(mixed, OUTLINE_STATE);
-    return (
-      String(Math.round(state.width)) === narrower &&
-      state.stored === narrower &&
-      state.valueNow === narrower
-    );
-  }, "ArrowRight to narrow the outline by 16px");
+  await until(
+    async () => {
+      const state = await evalFrame<OutlineState>(mixed, OUTLINE_STATE);
+      return (
+        String(Math.round(state.width)) === narrower &&
+        state.stored === narrower &&
+        state.valueNow === narrower
+      );
+    },
+    "ArrowRight to narrow the outline by 16px",
+    undefined,
+    async () =>
+      JSON.stringify({
+        state: await evalFrame<OutlineState>(mixed, OUTLINE_STATE),
+        focused: await evalFrame<boolean>(mixed, `document.activeElement === ${OUTLINE_RESIZER}`),
+      }),
+  );
   pass(
     "End keeps the 480px content column, a narrower window takes width from the outline, and ArrowRight narrows it",
   );
@@ -6135,6 +6150,28 @@ function currentMatchVisible(match: string, scroller: string | null): string {
   })()`;
 }
 
+/** 超时诊断：计数、当前匹配、所在代码块与搜索栏的位置。Timeout diagnostics: the count and the positions of the current
+ *  match, its code block and the find bar. */
+function findDiagnostics(frame: FrameHandle, match: string): () => Promise<string> {
+  return async () =>
+    JSON.stringify(
+      await evalFrame(
+        frame,
+        `(() => {
+          const current = ${match};
+          const pre = current?.element.closest("pre");
+          return {
+            count: ${FIND_COUNT},
+            match: current?.rect.toJSON() ?? null,
+            pre: pre ? { rect: pre.getBoundingClientRect().toJSON(), scrollLeft: pre.scrollLeft } : null,
+            bar: document.querySelector(".find-bar")?.getBoundingClientRect().toJSON() ?? null,
+            viewport: { width: innerWidth, height: innerHeight, scrollY },
+          };
+        })()`,
+      ),
+    );
+}
+
 async function markdownSearch(): Promise<void> {
   const path = projectPath("notes/search.md");
   const original = await readFile(path, "utf8");
@@ -6173,6 +6210,8 @@ async function checkPreviewSearch(): Promise<void> {
           && ${visible}`,
       ),
     "the first of three Preview matches",
+    undefined,
+    findDiagnostics(preview, PREVIEW_CURRENT_MATCH),
   );
   pass("Preview finds the visible text only, leaving out the rendered diagram's source and SVG");
 
@@ -6185,11 +6224,15 @@ async function checkPreviewSearch(): Promise<void> {
           && document.querySelector(".markdown-body pre").scrollLeft > 0`,
       ),
     "the code match scrolled into view in Preview",
+    undefined,
+    findDiagnostics(preview, PREVIEW_CURRENT_MATCH),
   );
   pressKey(preview, "Enter", ["shift"]);
   await until(
     () => evalFrame<boolean>(preview, `${FIND_COUNT} === "1 of 3" && ${visible}`),
     "the first Preview match again",
+    undefined,
+    findDiagnostics(preview, PREVIEW_CURRENT_MATCH),
   );
   pass(
     "Preview's Enter and Shift+Enter move between matches and scroll the current one into view, also sideways in code",
@@ -6230,6 +6273,8 @@ async function checkMixedSearch(path: string, original: string): Promise<void> {
           && ${visible}`,
       ),
     "the first of four Mixed matches",
+    undefined,
+    findDiagnostics(mixed, MIXED_CURRENT_MATCH),
   );
   // 大纲显示时搜索栏在内容列中，不遮挡大纲。With the outline shown, the bar sits in the content column clear of it.
   assert.equal(
@@ -6249,6 +6294,8 @@ async function checkMixedSearch(path: string, original: string): Promise<void> {
           && document.querySelector(".code-block pre").scrollLeft > 0`,
       ),
     "the code match scrolled into view in Mixed",
+    undefined,
+    findDiagnostics(mixed, MIXED_CURRENT_MATCH),
   );
   pressKey(mixed, "Enter");
   await until(
@@ -6259,11 +6306,15 @@ async function checkMixedSearch(path: string, original: string): Promise<void> {
           && document.querySelector('.code-block[data-diagram="rendered"]').hasAttribute("data-editing")`,
       ),
     "the Mermaid source match in Mixed",
+    undefined,
+    findDiagnostics(mixed, MIXED_CURRENT_MATCH),
   );
   pressKey(mixed, "Enter");
   await until(
     () => evalFrame<boolean>(mixed, `${FIND_COUNT} === "4 of 4" && ${visible}`),
     "the last Mixed match",
+    undefined,
+    findDiagnostics(mixed, MIXED_CURRENT_MATCH),
   );
   pass(
     "Mixed highlights every match, Mermaid source included, and scrolls the current one into view, also sideways in code",
@@ -11121,12 +11172,6 @@ async function serverExtensionRestart(): Promise<void> {
 
 async function run(): Promise<void> {
   await boot();
-  if (config.phase === "first") {
-    await bundledDefaults();
-    await markdownSearch();
-    await markdownOutlineResize();
-    return;
-  }
   if (config.phase === "server-extension") {
     await serverExtensionLifecycle();
     await serverExtensionContextSwitchRace();

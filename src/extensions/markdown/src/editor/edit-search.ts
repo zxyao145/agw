@@ -1,5 +1,6 @@
 import { Extension, type Editor } from "@tiptap/core";
 import { Plugin, PluginKey, TextSelection, type Command, type EditorState } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
 import {
   findNext,
   findPrev,
@@ -22,7 +23,7 @@ import {
   type FindQuery,
   type FindResult,
 } from "../shared/find-query";
-import { needsReveal } from "../shared/find-reveal";
+import { revealMatch } from "../shared/find-reveal";
 import { inDiagramOnlyBlock, switchesMermaidView } from "./mermaid-editing";
 
 // Mixed 的搜索与替换（Markdown 搜索替换设计第 5 节）：prosemirror-search 保存搜索条件并生成匹配装饰，当前匹配就是编辑器
@@ -34,13 +35,27 @@ const ACTIVE_MATCH = ".ProseMirror-active-search-match";
 const INVALID_RESULT: FindResult = { status: "invalid" };
 
 /**
- * prosemirror-search 的插件，以及把当前匹配滚动到 `.edit-scroll` 中部的 `handleScrollToSelection`，选区不是匹配时交给
- * ProseMirror 的默认滚动。prosemirror-search 只在文档或选区变化时重新查找，切换 Mermaid 视图后由 `appendTransaction`
- * 再设置一次条件，"Diagram only" 视图的源码随之加入或离开匹配。
- * The prosemirror-search plugin, plus a `handleScrollToSelection` that scrolls the current match to the middle of
- * `.edit-scroll`, leaving a selection that is no match to ProseMirror's default scrolling. prosemirror-search searches
- * again only when the document or selection changes, so `appendTransaction` sets the conditions again after a Mermaid
- * view switch, and Diagram only source joins or leaves the matches.
+ * 当前匹配需要滚动时把它移到 `.edit-scroll` 中部，重复调用不会再次滚动；没有当前匹配时返回 false。
+ * Moves the current match to the middle of `.edit-scroll` when it needs scrolling; calling again scrolls no more.
+ * Returns false without a current match.
+ */
+function revealSearchMatch(view: EditorView): boolean {
+  const match = view.dom.querySelector(ACTIVE_MATCH);
+  if (!match) return false;
+  revealMatch(() => match.getBoundingClientRect(), match, view.dom.closest(".edit-scroll"));
+  return true;
+}
+
+/**
+ * prosemirror-search 的插件，以及 `handleScrollToSelection`：选区是匹配时由 revealSearchMatch 滚动，否则交给
+ * ProseMirror 的默认滚动。ProseMirror 只在 DOM 选区位于编辑器中时调用它，焦点在搜索栏时由 EditSearch 自己滚动。
+ * prosemirror-search 只在文档或选区变化时重新查找，切换 Mermaid 视图后由 `appendTransaction` 再设置一次条件，
+ * "Diagram only" 视图的源码随之加入或离开匹配。
+ * The prosemirror-search plugin, plus a `handleScrollToSelection` letting revealSearchMatch scroll a selected match
+ * and leaving other selections to ProseMirror's default scrolling. ProseMirror calls it only while the DOM selection
+ * is in the editor, so EditSearch scrolls by itself while the find bar has focus. prosemirror-search searches again
+ * only when the document or selection changes, so `appendTransaction` sets the conditions again after a Mermaid view
+ * switch, and Diagram only source joins or leaves the matches.
  */
 export const EditSearchExtension = Extension.create({
   name: "editSearch",
@@ -58,17 +73,7 @@ export const EditSearchExtension = Extension.create({
           const { query, range } = getSearchState(state)!;
           return query.valid ? setSearchState(state.tr, query, range) : null;
         },
-        props: {
-          handleScrollToSelection(view) {
-            const match = view.dom.querySelector(ACTIVE_MATCH);
-            if (!match) return false;
-            const scroller = view.dom.closest(".edit-scroll");
-            if (needsReveal(match.getBoundingClientRect(), match, scroller)) {
-              match.scrollIntoView({ block: "center", inline: "nearest" });
-            }
-            return true;
-          },
-        },
+        props: { handleScrollToSelection: revealSearchMatch },
       }),
     ];
   },
@@ -128,6 +133,7 @@ export class EditSearch implements FindTarget {
     const { state, view } = this.editor;
     const searchQuery = this.searchQuery();
     const tr = setSearchState(state.tr, searchQuery);
+    let moved = false;
     if (
       query !== null &&
       searchQuery.valid &&
@@ -137,9 +143,11 @@ export class EditSearch implements FindTarget {
       const match = searchQuery.findNext(state, from) ?? searchQuery.findNext(state, 0, from);
       if (match) {
         tr.setSelection(TextSelection.create(tr.doc, match.from, match.to)).scrollIntoView();
+        moved = true;
       }
     }
     view.dispatch(tr);
+    if (moved) revealSearchMatch(view);
   }
 
   /**
@@ -182,7 +190,9 @@ export class EditSearch implements FindTarget {
   }
 
   private run(command: Command): void {
-    command(this.editor.state, this.editor.view.dispatch);
+    const { view } = this.editor;
+    command(view.state, view.dispatch);
+    revealSearchMatch(view);
   }
 
   private readonly update = (): void => {

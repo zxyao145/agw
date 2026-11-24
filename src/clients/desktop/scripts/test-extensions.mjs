@@ -229,6 +229,23 @@ const OUTLINE_MARKDOWN =
   ].join("\n\n") + "\n";
 const PLAIN_MARKDOWN = "First plain paragraph.\n\nSecond plain paragraph.\n";
 
+// 搜索检查使用长文档、带长行的代码块与 Mermaid 代码块。The find checks use a long document, a code block with a long
+// line, and a Mermaid code block.
+const SEARCH_FILLER = Array.from(
+  { length: 30 },
+  (_, index) => `Filler paragraph ${index + 1} without the word.`,
+).join("\n\n");
+const SEARCH_MARKDOWN =
+  [
+    "# Search sample",
+    "The first needle is near the top.",
+    SEARCH_FILLER,
+    `\`\`\`ts\nconst line = "${"x".repeat(300)} needle";\n\`\`\``,
+    SEARCH_FILLER,
+    "```mermaid\nflowchart LR\n  needle --> done\n```",
+    "The last needle is at the end.",
+  ].join("\n\n") + "\n";
+
 // 缩进不规范的 TypeScript：唯一缩进的一行为 4 个空格，Monaco 按 4 个空格缩进格式化。
 // TypeScript with irregular indentation: the only indented line uses 4 spaces, so Monaco formats with 4 spaces.
 const APP_TS = `function   add(a:number,b:number){
@@ -607,6 +624,7 @@ async function prepareServerData(baseUrl, echoPort) {
   await writeFile(join(projectDirectory, "notes", "edit.md"), MIXED_MARKDOWN);
   await writeFile(join(projectDirectory, "notes", "outline.md"), OUTLINE_MARKDOWN);
   await writeFile(join(projectDirectory, "notes", "plain.md"), PLAIN_MARKDOWN);
+  await writeFile(join(projectDirectory, "notes", "search.md"), SEARCH_MARKDOWN);
   await writeFile(join(projectDirectory, "notes", "typography.md"), TYPOGRAPHY_MARKDOWN);
   await writeFile(join(projectDirectory, "first-line.md"), FIRST_LINE_MARKDOWN);
   await mkdir(join(projectDirectory, "src"), { recursive: true });
