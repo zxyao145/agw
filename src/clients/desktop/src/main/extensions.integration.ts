@@ -6532,7 +6532,7 @@ type ScanResult = { checked: number; truncated: { selector: string; text: string
 /** 每个视图的扫描结果，在 hostScaling 结尾一起断言。The scan result of every view, asserted together at the end of hostScaling. */
 const scanResults: { view: string; checked: number; reported: ScanResult["truncated"] }[] = [];
 
-/** 扫描当前页面并记录结果，同时断言标题栏高度为 48。Scans the current page, records the result, and asserts the title bar is 48 high. */
+/** 扫描当前页面、记录结果并检查标题栏高度。Scans the current page, records the result, and checks the title bar height. */
 async function scanTruncation(view: string): Promise<void> {
   const { checked, truncated } = await evalHost<ScanResult>(TRUNCATED_TEXT);
   assert.ok(checked > 0, `${view} has no text elements to check`);
@@ -6542,7 +6542,7 @@ async function scanTruncation(view: string): Promise<void> {
     await evalHost<number>(
       `document.querySelector(".agw-titlebar").getBoundingClientRect().height`,
     ),
-    48,
+    38,
     `${view} title bar height`,
   );
 }
@@ -6602,10 +6602,10 @@ async function seedQuickPrompt(): Promise<void> {
 }
 
 /**
- * 基础字号 20 下，Chat、Files、每个 Settings 页面与服务器配置对话框没有被截断的文字，标题栏保持 48 高，
- * macOS 红绿灯位置不变；最后恢复默认字号。
+ * 基础字号 20 下，检查 Chat、Files、每个 Settings 页面与服务器配置对话框的文字、标题栏高度和 macOS 窗口按钮位置。
+ * 检查完成后恢复默认字号。
  * At base size 20, Chat, Files, every Settings page and the server profile dialog show no truncated text, the title
- * bar stays 48 high and the macOS traffic lights stay in place; the default sizes are restored at the end.
+ * bar is 38 px tall, and the macOS traffic lights stay centered. The default sizes are restored at the end.
  */
 async function hostScaling(): Promise<void> {
   scanResults.length = 0;
@@ -6676,7 +6676,7 @@ async function hostScaling(): Promise<void> {
   window.setSize(width, height);
 
   if (process.platform === "darwin") {
-    assert.deepEqual(window.getWindowButtonPosition(), { x: 18, y: 18 });
+    assert.deepEqual(window.getWindowButtonPosition(), { x: 18, y: 12 });
   }
 
   await saveAppearance(RESET_APPEARANCE, () => clickText("Reset all"));
@@ -6687,7 +6687,7 @@ async function hostScaling(): Promise<void> {
   );
   assert.deepEqual(reported, [], `truncated text: ${JSON.stringify(reported, null, 2)}`);
   pass(
-    `at base size 20, ${settingsPages} Settings pages (also at width 980), Chat, Files and the server profile dialog show no truncated text (${scanResults.length} views, ${scanResults.reduce((sum, result) => sum + result.checked, 0)} elements checked, the control button reported), the title bar is 48 high and the traffic lights stay at 18, 18`,
+    `at base size 20, ${settingsPages} Settings pages (also at width 980), Chat, Files and the server profile dialog show no truncated text (${scanResults.length} views, ${scanResults.reduce((sum, result) => sum + result.checked, 0)} elements checked, the control button reported), the title bar is 38 px tall and the macOS traffic lights are at 18, 12`,
   );
 }
 
@@ -10808,10 +10808,17 @@ async function workspaceTabs(): Promise<WorkspaceTabsFixture> {
   );
 
   const chatTab = await openNewConversation();
-  const closeCursors = await evalHost<string[]>(
-    `[...document.querySelectorAll('${WORKSPACE_TABS} .agw-workspace-tab-close')].map((button) => getComputedStyle(button).cursor)`,
+  const tabStyles = await evalHost<{ height: number; cursors: string[] }[]>(
+    `[...document.querySelectorAll('${WORKSPACE_TABS} .agw-workspace-tab')].map((tab) => ({
+      height: tab.getBoundingClientRect().height,
+      cursors: [tab, ...tab.querySelectorAll('button')].map((element) => getComputedStyle(element).cursor),
+    }))`,
   );
-  assert.ok(closeCursors.length >= 2 && closeCursors.every((cursor) => cursor === "pointer"));
+  assert.ok(tabStyles.length >= 2);
+  for (const { height, cursors } of tabStyles) {
+    assert.equal(height, 32);
+    assert.deepEqual(cursors, ["pointer", "pointer", "pointer"]);
+  }
   const message = "workspace tab first message";
   await selectHostTarget("Echo");
   await setInput(COMPOSER, message);

@@ -258,7 +258,11 @@ div[role="option"]:hover {
 
   .agw-titlebar {
     -webkit-app-region: drag;
-    @apply flex h-[48px] min-h-[48px] select-none items-center gap-2 border-b bg-card/92 px-3 backdrop-blur-xl;
+    @apply flex h-[38px] shrink-0 select-none items-center gap-2 border-b bg-card/92 px-3 backdrop-blur-xl;
+  }
+
+  .agw-titlebar :is(.agw-project-tab, button, a) {
+    max-height: 36px;
   }
 
   .agw-titlebar.platform-darwin {
@@ -481,7 +485,7 @@ div[role="option"]:hover {
   }
 
   .agw-workspace-tab {
-    @apply relative flex h-9 max-w-60 shrink-0 items-center gap-1 border-r border-b border-b-transparent pr-1 text-muted-foreground;
+    @apply relative flex h-8 max-w-60 shrink-0 cursor-pointer items-center gap-1 border-r border-b border-b-transparent pr-1 text-muted-foreground;
   }
 
   .agw-workspace-tab:hover {
@@ -493,7 +497,7 @@ div[role="option"]:hover {
   }
 
   .agw-workspace-tab-label {
-    @apply flex h-full min-w-0 items-center gap-2 pl-2.5 text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring;
+    @apply flex h-full min-w-0 cursor-pointer items-center gap-2 pl-2.5 text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring;
   }
 
   .agw-workspace-tab-label.is-preview .agw-workspace-tab-title {

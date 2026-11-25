@@ -474,8 +474,8 @@ function createMainWindow(): BrowserWindow {
     titleBarOverlay:
       process.platform === "darwin"
         ? false
-        : { color: "#00000000", symbolColor: "#8f96a3", height: 48 },
-    trafficLightPosition: process.platform === "darwin" ? { x: 18, y: 18 } : undefined,
+        : { color: "#00000000", symbolColor: "#8f96a3", height: 38 },
+    trafficLightPosition: process.platform === "darwin" ? { x: 18, y: 12 } : undefined,
     backgroundColor: "#0b0c0f",
     webPreferences: {
       preload: resolve(__dirname, "..", "preload", "index.js"),
