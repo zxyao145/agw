@@ -15,7 +15,8 @@ public sealed class A2AEngineCapabilityTests
     public void ForAgent_A2A_AllowsFullAccessOnly()
     {
         var capabilities = ExecutionPermissionService.ForAgent(
-            new Agent { Type = AgentType.External, ExternalAgentKind = EngineKind.A2A }
+            new Agent { Type = AgentType.External, ExternalAgentKind = EngineKind.A2A },
+            ExecutionProvider.InProcess
         );
 
         Assert.Equal([AgwPermissionMode.FullAccess], capabilities.SupportedPermissionModes);

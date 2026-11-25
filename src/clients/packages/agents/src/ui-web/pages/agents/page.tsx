@@ -37,6 +37,7 @@ import { EditAgentDialog } from "./components/edit-agent-dialog";
 import { DeleteAgentDialog } from "./components/delete-agent-dialog";
 import { ExecuteAgentDrawer } from "./components/execute-agent-drawer";
 import { AgentsTable } from "./components/agents-table";
+import { getExternalModelProviderError } from "./components/external-model-provider";
 import { parseToolValues, type ToolValueObject } from "@agw/tools";
 
 type AgentEnabledUpdateRequest = {
@@ -362,7 +363,23 @@ export default function AgentsPage() {
     setExternalAgentKind(nextKind);
     setExtra(nextOption?.defaultExtra ?? "");
     if (externalAgentKind === ExternalAgentKind.A2A) setA2AEndpoint(createA2AEndpointDraft());
-    if (nextKind === ExternalAgentKind.Pi) {
+    if (
+      modelProviderId &&
+      (nextKind === ExternalAgentKind.A2A ||
+        nextKind === ExternalAgentKind.ACP ||
+        getExternalModelProviderError(
+          nextKind,
+          modelProviderId,
+          modelProvidersQuery.data,
+          externalAgentOptionsQuery.data,
+        ))
+    ) {
+      setModelProviderId("");
+      toast.info(
+        "Model provider selection cleared because it is incompatible with this external agent.",
+      );
+    }
+    if (nextKind === ExternalAgentKind.Pi || nextKind === ExternalAgentKind.ACP) {
       setResponseSchema("");
     }
   };

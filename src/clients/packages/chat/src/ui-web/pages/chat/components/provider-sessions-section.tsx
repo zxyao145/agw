@@ -126,8 +126,8 @@ export function ProviderSessionsSection({
         </div>
       ) : groups.length === 0 ? (
         <div className="rounded-lg bg-muted/50 px-4 py-4 text-sm text-muted-foreground">
-          No engine sessions yet. Claude Code, Codex and Pi Agents record their sessions here after
-          they run in this conversation.
+          No engine sessions yet. Claude Code, Codex, Pi and ACP Agents record their sessions here
+          after they run in this conversation.
         </div>
       ) : (
         <div className="grid gap-2">

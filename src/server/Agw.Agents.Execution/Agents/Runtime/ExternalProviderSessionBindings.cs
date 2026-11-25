@@ -1,4 +1,5 @@
 using Agw.Agents.Execution.Agents.ExternalAgents;
+using Agw.Agents.Execution.Agents.ExternalAgents.Acp;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Agents;
 using Microsoft.Extensions.Logging;
@@ -69,18 +70,20 @@ public sealed class ExternalProviderSessionBindings
         return string.Equals(state.PersistedProviderSessionId, current, StringComparison.Ordinal);
     }
 
-    internal Guid? ParseProviderSessionId(Agent agent, ExternalProviderSessionState? state)
+    internal string? ResolveProviderSessionId(Agent agent, ExternalProviderSessionState? state)
     {
         if (state?.PersistedProviderSessionId is not { } providerSessionId)
         {
             return null;
         }
 
-        // Pi 0.84.4 emits UUIDv7 Session IDs, although the persisted provider binding is a string. If Pi adopts a
-        // non-Guid format, preserve the raw value through the runtime instead of treating the binding as invalid.
-        if (Guid.TryParse(providerSessionId, out var parsedProviderSessionId))
+        var valid =
+            EngineKinds.Resolve(agent) == EngineKind.ACP
+                ? AcpAgentSession.IsValidId(providerSessionId)
+                : Guid.TryParse(providerSessionId, out _);
+        if (valid)
         {
-            return parsedProviderSessionId;
+            return providerSessionId;
         }
 
         _logger.LogWarning(
@@ -92,21 +95,21 @@ public sealed class ExternalProviderSessionBindings
         return null;
     }
 
-    internal static (Guid? ProviderSessionId, bool IsResume) ResolveExternalProviderSession(
+    internal static (string? ProviderSessionId, bool IsResume) ResolveExternalProviderSession(
         Agent agent,
-        Guid? persistedProviderSessionId,
+        string? persistedProviderSessionId,
         bool requestedResume
     )
     {
         var kind = EngineKinds.Resolve(agent);
         if (kind == EngineKind.ClaudeCode)
         {
-            return (persistedProviderSessionId ?? Guid.NewGuid(), persistedProviderSessionId.HasValue);
+            return (persistedProviderSessionId ?? Guid.NewGuid().ToString("D"), persistedProviderSessionId is not null);
         }
 
-        if (kind is EngineKind.Codex or EngineKind.Pi)
+        if (kind is EngineKind.Codex or EngineKind.Pi or EngineKind.ACP)
         {
-            return (persistedProviderSessionId, persistedProviderSessionId.HasValue);
+            return (persistedProviderSessionId, persistedProviderSessionId is not null);
         }
 
         return (null, requestedResume);

@@ -1,11 +1,13 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Domain.Rules;
+using Agw.Agents.Execution.Configuration;
 using Agw.Auth.Contracts;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Definitions.Agents;
 
@@ -13,14 +15,20 @@ public sealed class ExecutionPermissionService
 {
     private readonly IAgentsDbContext _db;
     private readonly IAgentflowRevisionSnapshotReader _snapshots;
+    private readonly ExecutionProvider _provider;
 
-    public ExecutionPermissionService(IAgentsDbContext db, IAgentflowRevisionSnapshotReader snapshots)
+    public ExecutionPermissionService(
+        IAgentsDbContext db,
+        IAgentflowRevisionSnapshotReader snapshots,
+        IOptions<ExecutionProviderOptions> executionOptions
+    )
     {
         _db = db;
         _snapshots = snapshots;
+        _provider = executionOptions.Value.Provider;
     }
 
-    public static ExecutionPermissionCapabilities ForAgent(Agent agent) =>
+    public static ExecutionPermissionCapabilities ForAgent(Agent agent, ExecutionProvider provider) =>
         agent switch
         {
             var definition when ExternalAgentRules.UsesA2AEndpoint(definition) => new(
@@ -33,13 +41,20 @@ public sealed class ExecutionPermissionService
                 SupportsNoTools: false,
                 $"The current {agent.ExternalAgentKind} SDK integration supports Full access only."
             ),
+            { Type: AgentType.External, ExternalAgentKind: EngineKind.ACP }
+                when provider == ExecutionProvider.Distributed => new(
+                [AgwPermissionMode.FullAccess],
+                SupportsNoTools: false,
+                "ACP agents support Full access only with the Distributed execution provider."
+            ),
             _ => new(
                 [AgwPermissionMode.FullAccess, AgwPermissionMode.AlwaysAsk, AgwPermissionMode.AllowSameArguments],
                 SupportsNoTools: agent.Type == AgentType.System || agent.ExternalAgentKind == EngineKind.ClaudeCode
             ),
         };
 
-    public static void Validate(Agent agent, AgwPermissionMode? mode) => Validate(ForAgent(agent), mode);
+    public static void Validate(Agent agent, ExecutionProvider provider, AgwPermissionMode? mode) =>
+        Validate(ForAgent(agent, provider), mode);
 
     public static void Validate(ExecutionPermissionCapabilities capabilities, AgwPermissionMode? mode)
     {
@@ -79,7 +94,7 @@ public sealed class ExecutionPermissionService
             var agent =
                 await _db.Agents.AsNoTracking().SingleOrDefaultAsync(a => a.Id == id && a.CreateBy == owner, ct)
                 ?? throw new AgwException(ErrorCodes.ResourceNotFound);
-            return ForAgent(agent);
+            return ForAgent(agent, _provider);
         }
         if (type != AgentRuntimeType.Agentflow)
             throw new AgwException(ErrorCodes.InvalidParam);
@@ -170,14 +185,14 @@ public sealed class ExecutionPermissionService
         agentIds.UnionWith(await nodes.Union(members).ToListAsync(ct).ConfigureAwait(false));
     }
 
-    private static ExecutionPermissionCapabilities IntersectCapabilities(IReadOnlyList<Agent> agents)
+    private ExecutionPermissionCapabilities IntersectCapabilities(IReadOnlyList<Agent> agents)
     {
         var supported = new HashSet<AgwPermissionMode>(Enum.GetValues<AgwPermissionMode>());
         var supportsNoTools = true;
         string? reason = null;
         foreach (var agent in agents)
         {
-            var child = ForAgent(agent);
+            var child = ForAgent(agent, _provider);
             supported.IntersectWith(child.SupportedPermissionModes);
             supportsNoTools &= child.SupportsNoTools;
             reason ??= child.Reason;

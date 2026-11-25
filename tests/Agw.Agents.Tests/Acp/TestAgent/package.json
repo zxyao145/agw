@@ -1,0 +1,9 @@
+{
+  "name": "agw-acp-test-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": { "agw-acp-test-agent": "acp-test-agent.mjs" },
+  "files": ["acp-test-agent.mjs"],
+  "dependencies": { "@agentclientprotocol/sdk": "2.9.1" }
+}

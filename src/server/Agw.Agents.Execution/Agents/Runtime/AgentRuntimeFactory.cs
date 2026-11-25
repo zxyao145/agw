@@ -3,6 +3,7 @@ using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Sessions;
+using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.Summaries;
 using Agw.Files.Abstracts;
@@ -14,6 +15,7 @@ using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Contracts.Remote;
 using Agw.Tools.Generated;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Execution.Agents.Runtime;
 
@@ -50,7 +52,8 @@ public partial class AgentRuntimeFactory : IAgentRuntimeFactory
 
     private readonly ILoggerFactory _loggerFactory;
     private readonly IServiceProvider _services;
-    private readonly ExternalAgents.ClaudeCode.ClaudeToolApprovalCache _claudeApprovals = new();
+    private readonly ExecutionProvider _executionProvider;
+    private readonly ExternalAgents.ExternalToolApprovalCache _externalApprovals = new();
 
     public AgentRuntimeFactory(
         AgentAppService agentAppService,
@@ -77,7 +80,8 @@ public partial class AgentRuntimeFactory : IAgentRuntimeFactory
         HumanInteractionContextAccessor? humanInteractionContextAccessor,
         IAgentExecutionContextAccessor? executionContext,
         TimeProvider timeProvider,
-        AgwGeneratedToolCatalog? generatedToolCatalog
+        AgwGeneratedToolCatalog? generatedToolCatalog,
+        IOptions<ExecutionRuntimeOptions> executionOptions
     )
     {
         _agentAppService = agentAppService;
@@ -110,6 +114,7 @@ public partial class AgentRuntimeFactory : IAgentRuntimeFactory
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(projectDefaults);
         _services = services;
+        _executionProvider = executionOptions.Value.Provider;
     }
 
     internal AgwChatHistoryProvider CreateHistoryProvider(EngineKind engine, bool structuredResult) =>

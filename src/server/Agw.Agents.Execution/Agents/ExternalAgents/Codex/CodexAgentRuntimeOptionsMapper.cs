@@ -16,7 +16,7 @@ internal static class CodexAgentRuntimeOptionsMapper
     public static CodexAgentRuntimeOptions? Build(
         string extra,
         Project project,
-        Guid? providerSessionId,
+        string? providerSessionId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync,
@@ -55,8 +55,8 @@ internal static class CodexAgentRuntimeOptionsMapper
             );
         }
 
-        var selectedProviderSessionId = providerSessionId ?? settings.ThreadId;
-        var selectedResume = providerSessionId.HasValue ? isResume : settings.IsResume;
+        var selectedProviderSessionId = providerSessionId is null ? settings.ThreadId : Guid.Parse(providerSessionId);
+        var selectedResume = providerSessionId is null ? settings.IsResume : isResume;
         var workspace = PathUtil.ExpandTilde(project.Workspace);
         var workingDirectory = string.IsNullOrWhiteSpace(workspace)
             ? PathUtil.ExpandTilde(threadSettings.WorkingDirectory)

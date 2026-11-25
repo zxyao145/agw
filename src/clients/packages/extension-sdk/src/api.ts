@@ -489,7 +489,7 @@ export interface ContextTarget {
   name: string;
   displayName: string | null;
   description: string | null;
-  externalAgentKind: "maf" | "claudeCode" | "codex" | "pi" | "a2a" | null;
+  externalAgentKind: "maf" | "claudeCode" | "codex" | "pi" | "a2a" | "acp" | null;
 }
 
 export interface ContextApi {

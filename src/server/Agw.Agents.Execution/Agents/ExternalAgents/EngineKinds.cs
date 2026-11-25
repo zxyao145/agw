@@ -31,7 +31,10 @@ internal static class EngineKinds
     public static bool RequiresWorkspace(EngineKind? kind) => !ExternalAgentRules.UsesA2AEndpoint(kind);
 
     public static bool UsesProviderSessionBinding(EngineKind kind) =>
-        kind is EngineKind.ClaudeCode or EngineKind.Codex or EngineKind.Pi;
+        kind is EngineKind.ClaudeCode or EngineKind.Codex or EngineKind.Pi or EngineKind.ACP;
+
+    public static bool SupportsDistributedExecution(EngineKind kind) =>
+        kind is EngineKind.Maf or EngineKind.A2A or EngineKind.ACP;
 
     public static bool UsesSdkSession(EngineKind kind) =>
         kind == EngineKind.Maf || ExternalAgentRules.UsesA2AEndpoint(kind);

@@ -17,11 +17,17 @@ public class AgentsController : ControllerBase
 {
     private readonly AgentAppService _agentAppService;
     private readonly AgentSuggestionAppService _agentSuggestionAppService;
+    private readonly AcpRegistryAppService _acpRegistry;
 
-    public AgentsController(AgentAppService agentAppService, AgentSuggestionAppService agentSuggestionAppService)
+    public AgentsController(
+        AgentAppService agentAppService,
+        AgentSuggestionAppService agentSuggestionAppService,
+        AcpRegistryAppService acpRegistry
+    )
     {
         _agentAppService = agentAppService;
         _agentSuggestionAppService = agentSuggestionAppService;
+        _acpRegistry = acpRegistry;
     }
 
     [HttpGet]
@@ -69,6 +75,13 @@ public class AgentsController : ControllerBase
         var suggestions = await _agentSuggestionAppService.GetSuggestionsAsync(projectId, agentId);
         return ApiResult.Ok(suggestions);
     }
+
+    [HttpGet("acp-registry")]
+    [ProducesApiResult(typeof(AcpRegistryResponse))]
+    public async Task<IActionResult> GetAcpRegistryAsync(
+        [FromQuery] bool refresh = false,
+        CancellationToken cancellationToken = default
+    ) => ApiResult.Ok(await _acpRegistry.GetAsync(refresh, cancellationToken));
 
     [HttpGet("external-options")]
     [ProducesApiResult(typeof(ExternalAgentOptionResponse[]))]

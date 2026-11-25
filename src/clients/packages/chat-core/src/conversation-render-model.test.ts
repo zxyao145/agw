@@ -810,6 +810,29 @@ test("tool batches pair out-of-order results before preserving tool-use order", 
   );
 });
 
+test("a tool title takes precedence over the argument summary", () => {
+  const call: AiMessage = {
+    messageId: "read-call",
+    role: "assistant",
+    author: "agent",
+    contents: [
+      {
+        type: "FunctionCallContent",
+        content: JSON.stringify({ path: "src/x.ts" }),
+        additionalProperties: {
+          callId: "read-1",
+          toolName: "read",
+          toolTitle: "Read src/x.ts",
+        },
+      },
+    ],
+  };
+  const [tool] = buildConversationRenderModel([call], { collapseToolRuns: true });
+  assert.equal(tool?.type, "tool-accordion");
+  if (tool?.type !== "tool-accordion") throw new Error("Expected a tool call");
+  assert.equal(tool.summary, "Read src/x.ts");
+});
+
 test("pending and failed tool calls expose stable identities and status", () => {
   const call: AiMessage = {
     messageId: "pending-call",

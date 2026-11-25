@@ -6,6 +6,10 @@ namespace Agw.Agents.Tests;
 public class ExternalAgentDefaultsTests
 {
     [Fact]
+    public void GetDisplayName_Acp_ReturnsAcp() =>
+        Assert.Equal("ACP", ExternalAgentDefaults.GetDisplayName(EngineKind.ACP));
+
+    [Fact]
     public void GetDefaultExtra_A2A_ReturnsEmptyObject() =>
         Assert.Equal("{}", ExternalAgentDefaults.GetDefaultExtra(EngineKind.A2A));
 

@@ -217,6 +217,15 @@ test("a Pi agent cannot configure a response schema", () => {
   );
 });
 
+test("an ACP agent only shows the applicable local settings", () => {
+  renderForm({ agentType: AgentType.External, externalAgentKind: 5 });
+
+  assert.equal(screen.queryByRole("combobox", { name: "Model Provider" }), null);
+  assert.equal(screen.queryByRole("tab", { name: "Response Schema" }), null);
+  assert.ok(screen.getByRole("tab", { name: "Environment Variables" }));
+  assert.ok(screen.getByRole("tab", { name: "Extra Settings" }));
+});
+
 test("an A2A agent opens the endpoint tab and keeps its read-only capabilities", () => {
   renderForm({
     agentType: AgentType.External,

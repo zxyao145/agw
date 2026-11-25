@@ -1,5 +1,7 @@
 using Agw.Agents.Definitions.Domain.Rules;
 using Agw.Agents.Definitions.Domain.ValueObjects;
+using Agw.Agents.ExternalAgents;
+using Agw.Agents.ExternalAgents.Acp;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Domain.Rules;
 using Agw.Shared.Exceptions;
@@ -24,6 +26,7 @@ public sealed class AgentBehavior
     private readonly Agent _agent;
 
     private bool UsesA2AEndpoint => ExternalAgentRules.UsesA2AEndpoint(_agent);
+    private bool UsesAcp => _agent is { Type: AgentType.External, ExternalAgentKind: EngineKind.ACP };
 
     public AgentBehavior(Agent agent)
     {
@@ -44,6 +47,8 @@ public sealed class AgentBehavior
             EnsureA2ASettings(agent.ModelProviderId, agent.Extra, agent.EnvironmentVariables, agent.ResponseSchema);
             agent.Extra = A2AEndpointRules.EmptyExtra;
         }
+        if (UsesAcp)
+            EnsureAcpSettings(agent.Extra);
 
         EnsureModelProviderIsPresentWhenRequired(agent);
         NormalizeEnvironmentVariables(agent);
@@ -67,6 +72,8 @@ public sealed class AgentBehavior
         {
             EnsureA2ASettings(update.ModelProviderId, update.Extra, update.EnvironmentVariables, update.ResponseSchema);
         }
+        if (UsesAcp && update.SpecifiedFields.Contains(AgentUpdateField.Extra))
+            EnsureAcpSettings(update.Extra);
 
         if (_agent.Type == AgentType.External)
         {
@@ -183,6 +190,11 @@ public sealed class AgentBehavior
             );
         }
     }
+
+    private static void EnsureAcpSettings(string? extra) =>
+        AcpAgentSettingsRules.Validate(
+            AcpAgentSettingsJson.Parse(extra ?? ExternalAgentDefaults.GetDefaultExtra(EngineKind.ACP))
+        );
 
     public void RetainVisibleRelations(IReadOnlySet<Guid> visibleSkillIds, IReadOnlySet<Guid> visibleConnectionIds)
     {
@@ -324,13 +336,11 @@ public sealed class AgentBehavior
         }
     }
 
-    // Pi 运行无法强制结构化输出，因此直接拒绝带 responseSchema 的配置。
-    // Pi runs cannot enforce a response schema, so a configuration that sets one is rejected.
     private static void EnsureResponseSchemaSupported(EngineKind kind, string? responseSchema)
     {
-        if (kind == EngineKind.Pi && responseSchema != null)
+        if (kind is EngineKind.Pi or EngineKind.ACP && responseSchema is not null)
         {
-            throw new AgwException(ErrorCodes.InvalidParam, "Pi agents do not support responseSchema.");
+            throw new AgwException(ErrorCodes.InvalidParam, $"{kind} agents do not support responseSchema.");
         }
     }
 

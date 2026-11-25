@@ -14,6 +14,7 @@ import {
 import { normalizeAgentExtraSettings } from "./agent-extra-settings";
 import { normalizeAgentResponseSchema } from "./agent-response-schema";
 import { getAgentSettingsErrors } from "./agent-settings-errors";
+import { isAcpAgent } from "./acp-settings";
 import {
   normalizeAgentEnvironmentVariables,
   type AgentEnvironmentVariableEntry,
@@ -137,23 +138,26 @@ export function EditAgentDialog({
 }: EditAgentDialogProps) {
   const isExternalAgent = editingAgent?.type === AgentType.External;
   const isA2A = isA2AAgent(editingAgent?.type, editingAgent?.externalAgentKind);
+  const isAcp = isAcpAgent(editingAgent?.type ?? 0, editingAgent?.externalAgentKind ?? 0);
   const storedEndpoint = editingAgent?.a2aEndpoint;
   const endpoint = a2aEndpointDraft ?? createA2AEndpointDraft(storedEndpoint);
   const endpointError = isA2A ? getA2AEndpointError(endpoint) : null;
   const effectiveSummaryModelProviderId = isExternalAgent
     ? summaryModelProviderId
     : summaryModelProviderId || modelProviderId;
-  const modelProviderError = isExternalAgent
-    ? getExternalModelProviderError(
-        editingAgent?.externalAgentKind ?? 0,
-        modelProviderId,
-        modelProvidersQuery.data,
-        externalAgentOptionsQuery.data,
-      )
-    : null;
+  const modelProviderError =
+    isExternalAgent && !isAcp
+      ? getExternalModelProviderError(
+          editingAgent?.externalAgentKind ?? 0,
+          modelProviderId,
+          modelProvidersQuery.data,
+          externalAgentOptionsQuery.data,
+        )
+      : null;
   const { extraError, responseSchemaError, environmentVariablesError } = getAgentSettingsErrors({
     isExternalAgent,
     isA2A,
+    isAcp,
     extra,
     responseSchema,
     environmentVariables,
@@ -174,12 +178,12 @@ export function EditAgentDialog({
       const settings = {
         ...metadata,
         environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
-        responseSchema: normalizeAgentResponseSchema(responseSchema),
+        responseSchema: isAcp ? null : normalizeAgentResponseSchema(responseSchema),
       };
       body = isExternalAgent
         ? {
             ...settings,
-            modelProviderId: modelProviderId || null,
+            modelProviderId: isAcp ? null : modelProviderId || null,
             extra: normalizeAgentExtraSettings(extra),
           }
         : {

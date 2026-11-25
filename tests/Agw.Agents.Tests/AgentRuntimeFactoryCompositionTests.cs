@@ -6,6 +6,7 @@ using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
 using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Runtime;
+using Agw.Agents.Execution.Configuration;
 using Agw.Agents.ExternalAgents;
 using Agw.Agents.ExternalAgents.Codex;
 using Agw.Projects.Contracts.History;
@@ -21,6 +22,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using OpenAI.CodexSdk.AppServer;
 using OpenAI.CodexSdk.AppServer.MAF;
 using OpenAI.CodexSdk.AppServer.Protocol;
@@ -687,7 +689,7 @@ public class AgentRuntimeFactoryCompositionTests
             requestedResume: false
         );
 
-        Assert.True(created.ProviderSessionId.HasValue);
+        Assert.NotNull(created.ProviderSessionId);
         Assert.False(created.IsResume);
         Assert.Equal(created.ProviderSessionId, resumed.ProviderSessionId);
         Assert.True(resumed.IsResume);
@@ -702,7 +704,7 @@ public class AgentRuntimeFactoryCompositionTests
             ExternalAgentKind = EngineKind.Codex,
             Name = "custom-codex",
         };
-        var providerSessionId = Guid.Parse("22222222-3333-4444-5555-666666666666");
+        const string providerSessionId = "22222222-3333-4444-5555-666666666666";
 
         var created = ExternalProviderSessionBindings.ResolveExternalProviderSession(
             agent,
@@ -730,7 +732,7 @@ public class AgentRuntimeFactoryCompositionTests
             ExternalAgentKind = EngineKind.Pi,
             Name = "custom-pi",
         };
-        var providerSessionId = Guid.Parse("33333333-4444-5555-6666-777777777777");
+        const string providerSessionId = "33333333-4444-5555-6666-777777777777";
 
         var created = ExternalProviderSessionBindings.ResolveExternalProviderSession(
             agent,
@@ -1062,11 +1064,12 @@ public class AgentRuntimeFactoryCompositionTests
                         ExtraSetting = projectExtra,
                         AdditionalDirectories = additionalDirectories ?? [],
                     },
-                    threadId,
+                    threadId?.ToString("D"),
                     resume,
                     environmentVariables,
                     onThreadStartedAsync,
                     permissionMode,
+                    ExecutionProvider.InProcess,
                 ]
             )
         );
@@ -1142,7 +1145,7 @@ public class AgentRuntimeFactoryCompositionTests
                 observabilityLogger ?? NullLogger<AgentTelemetryMiddleware>.Instance
             ),
             summaryService: null!,
-            services: new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider(),
+            services: new ServiceCollection().BuildServiceProvider(),
             projectDefaults: new TestProjectDefaultResolver(),
             configuration: null!,
             ollamaChatClientFactory: null!,
@@ -1154,7 +1157,8 @@ public class AgentRuntimeFactoryCompositionTests
             humanInteractionContextAccessor: null,
             executionContext: null,
             timeProvider: TimeProvider.System,
-            generatedToolCatalog: null
+            generatedToolCatalog: null,
+            executionOptions: Options.Create(new ExecutionRuntimeOptions())
         );
 
     private class StubAIAgent : AIAgent

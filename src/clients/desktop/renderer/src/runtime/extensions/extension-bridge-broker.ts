@@ -467,6 +467,7 @@ const ENGINE_KINDS: Record<number, ContextTarget["externalAgentKind"]> = {
   2: "codex",
   3: "pi",
   4: "a2a",
+  5: "acp",
 };
 
 type AgentDto = {

@@ -392,3 +392,4 @@ appsettings.setup.json
 !src/server/Agw.Extensions/Infrastructure/Packages/*.cs
 /src/server/Extensions/
 /.worktrees/
+/tests/Agw.Agents.Tests/Acp/TestAgent/node_modules/

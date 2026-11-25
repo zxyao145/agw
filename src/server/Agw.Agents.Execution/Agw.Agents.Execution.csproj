@@ -14,6 +14,8 @@
     <PackageReference Include="CodexSdk.AppServer.MAF" />
     <PackageReference Include="JsonSchema.Net" />
     <PackageReference Include="ClaudeCodeSdk.MAF" />
+    <PackageReference Include="DiffPlex" />
+    <PackageReference Include="StreamJsonRpc" />
     <ProjectReference Include="../../sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/PiAgentSdk.MAF.csproj" />
   </ItemGroup>
 

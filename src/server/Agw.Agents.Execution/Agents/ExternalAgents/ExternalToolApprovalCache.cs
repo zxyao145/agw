@@ -1,11 +1,38 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using Agw.Agents.Execution.HumanInteraction.Application;
 
-namespace Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
+namespace Agw.Agents.Execution.Agents.ExternalAgents;
 
-internal sealed class ClaudeToolApprovalCache
+internal sealed class ExternalToolApprovalCache
 {
     private readonly Lock _sync = new();
     private readonly Dictionary<string, Grants> _scopes = new(StringComparer.Ordinal);
+
+    public static (InteractionSource Source, string? Scope, long Version) BindScope(
+        InteractionSource? interactionSource,
+        AgentExecutionContext? context,
+        Guid agentId,
+        string? workspace
+    )
+    {
+        var source = interactionSource ?? new InteractionSource { NodeId = InteractionIdentity.StandaloneNodeId };
+        if (context is null)
+            return (source, null, 0);
+        var scope = JsonSerializer.Serialize(
+            new
+            {
+                context.UserId,
+                context.ProjectId,
+                context.ProjectConversationId,
+                context.Generation,
+                AgentId = agentId,
+                source.NodeId,
+                Workspace = workspace,
+            }
+        );
+        return (source, scope, context.PermissionVersion);
+    }
 
     public bool Contains(string scope, long version, string tool, JsonNode? arguments)
     {

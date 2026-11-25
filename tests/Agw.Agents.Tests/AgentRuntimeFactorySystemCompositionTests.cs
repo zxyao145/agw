@@ -12,6 +12,7 @@ using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Agents.Middleware.History;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Runtime;
+using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
@@ -998,7 +999,8 @@ public class AgentRuntimeFactorySystemCompositionTests
             humanInteractionContextAccessor: null,
             executionContext: null,
             timeProvider: TimeProvider.System,
-            generatedToolCatalog: null
+            generatedToolCatalog: null,
+            executionOptions: Options.Create(new ExecutionRuntimeOptions())
         );
     }
 
