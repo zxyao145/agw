@@ -57,11 +57,12 @@ import { toExtensionIpcResult } from "@desktop/main/extensions/extension-ipc-res
 import { ReplacedFileRegistry } from "@desktop/main/extensions/replaced-file-registry";
 import { decodeText, encodeText, listTextEncodings } from "@desktop/main/extensions/text-codec";
 import { createScratchDirectory } from "@desktop/main/scratch-directory.test-helper";
+import { WorkspaceTabsFile } from "@desktop/main/settings/workspace-tabs-file";
 import type { AgwDesktopBridge, ServerExtensionOrigin } from "@desktop/shared/contracts";
 import { parseHostPermissions } from "@desktop/shared/extension-host-permissions";
 import { A2AService } from "./a2a-service";
 import { CloudAccessGrants, CloudFileSystem, formatCloudUri } from "./cloud-file-system";
-import { ContextService, connectionKeyOf } from "./context-service";
+import { connectionKeyOf } from "./context-service";
 import {
   ExtensionBridgeBroker,
   type ExtensionTextCodec,
@@ -77,8 +78,8 @@ import {
   TEST_THEME_DEFAULTS,
 } from "./extension-host.test-helper";
 import { ExecutionService } from "./execution-service";
-import { WorkspaceLayoutStore } from "./workspace-layout-store";
-import { WorkspaceRegistry } from "./workspace-registry";
+import { extensionRegistration } from "./extension-contributions";
+import { fileViewerInstanceKey } from "./workspace-ids";
 
 const PROJECT = "0192f0c5-3c2a-7cc1-9d4e-6f1a2b3c4d5e";
 
@@ -186,11 +187,14 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
   // 本地文件经主进程的 ExtensionFileSystem 读写，存储目录不需要权限。
   // Local files go through the main-process ExtensionFileSystem; the storage directory needs no permission.
   const storage = await createScratchDirectory("extension-bridge");
+  const tabsFile = new WorkspaceTabsFile(storage.path);
   const localFiles = new ExtensionFileSystem(
     new ExtensionAccessGrants(),
     new ReplacedFileRegistry(),
   );
   const mainProcess: Partial<AgwDesktopBridge> = {
+    getWorkspaceTabs: (serverId, projectId) => tabsFile.read(serverId, projectId),
+    saveWorkspaceTabs: (serverId, projectId, group) => tabsFile.save(serverId, projectId, group),
     extensionFileSystem: (caller, request) =>
       toExtensionIpcResult(() =>
         localFiles.execute(
@@ -211,16 +215,12 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
       toExtensionIpcResult(async () => encodeText(text, encodeOptions)),
     listTextEncodings: async () => listTextEncodings(),
   };
-  const registry = new WorkspaceRegistry({ views: [], entries: {} });
-  const layout = new WorkspaceLayoutStore(registry);
-  const context = new ContextService(
-    { version: "0.5.0", platform: "darwin", architecture: "arm64" },
-    {
-      sidebarVisible: true,
-      activeSidebarViewId: "agw.conversations",
-      activeMainViewId: "agw.chat",
-    },
-  );
+  const host = new ExtensionHost({
+    bridge: mainProcess as AgwDesktopBridge,
+    app: { version: "0.5.0", platform: "darwin", architecture: "arm64" },
+    notify: () => undefined,
+  });
+  const { layout, context } = host;
   const identity = { profileId: "local", baseUrl: server.baseUrl, token: "agw_secret" };
   context.setConnection(identity, { id: "local", name: "Local", kind: "local" });
   const key = connectionKeyOf(identity);
@@ -367,10 +367,12 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
   after(async () => {
     broker.disconnect("frame-1");
     sdk.endpoint.close();
+    if (host.tabs.getSnapshot().group) await tabsFile.read("local", PROJECT);
     await storage.dispose();
   });
   return {
     ...sdk,
+    host,
     server,
     cloudFiles,
     storage: storage.path,
@@ -968,6 +970,68 @@ test("openFile passes the URI to the host and returns its rejection", async () =
     ["sample", uri("docs/notes.md")],
     ["sample", uri("cancel.md")],
   ]);
+});
+
+test("openMainView validates tab options and JSON parameters and opens keyed previews", async () => {
+  const { api, endpoint, host } = await createHarness([]);
+  const installed = sampleExtension([]);
+  installed.manifest!.contributes!.mainViews = [
+    { id: "app", entry: "app.html", icon: "File", title: "App" },
+  ];
+  host.registry.registerExtension("sample", extensionRegistration(installed));
+  await host.tabs.setScope({ serverId: "local", projectId: PROJECT });
+  const workspace = api.workspace;
+  for (const options of [
+    { extra: true },
+    { key: "" },
+    { key: "k".repeat(257) },
+    { title: "" },
+    { title: "t".repeat(101) },
+    { preview: "yes" },
+    new Map(),
+  ]) {
+    await assert.rejects(endpoint.request("workspace.openMainView", { id: "app", options }), {
+      code: "ERR_INVALID_ARGUMENT",
+    });
+  }
+  const cycle: unknown[] = [];
+  cycle.push(cycle);
+  await assert.rejects(
+    endpoint.request("workspace.openMainView", { id: "app", params: new Date() }),
+    { code: "ERR_INVALID_ARGUMENT" },
+  );
+  for (const params of [
+    new Date(),
+    new Map(),
+    { n: Number.NaN },
+    cycle,
+    { missing: undefined },
+    BigInt(1),
+    "a".repeat(65535),
+  ]) {
+    await assert.rejects(workspace.openMainView("app", params), { code: "ERR_INVALID_ARGUMENT" });
+  }
+  await assert.rejects(workspace.openMainView("agw.chat"), { code: "ERR_UNSUPPORTED_OPERATION" });
+  await assert.rejects(workspace.openMainView("agw.jobs", {}, { preview: false }), {
+    code: "ERR_INVALID_ARGUMENT",
+  });
+  await assert.rejects(
+    endpoint.request("workspace.openFile", { uri: "a", options: { key: "k" } }),
+    { code: "ERR_INVALID_ARGUMENT" },
+  );
+  await workspace.openMainView("app", "a".repeat(65534), {
+    key: "key",
+    title: "Title",
+    preview: true,
+  });
+  const group = host.tabs.getSnapshot().group!;
+  const tab = group.tabs.find((item) => item.id === group.activeTabId);
+  assert.ok(tab?.kind === "extension");
+  assert.equal(tab.viewId, "sample:app");
+  assert.equal(tab.key, "key");
+  assert.equal(tab.title, "Title");
+  assert.equal(tab.preview, true);
+  assert.equal(tab.params, "a".repeat(65534));
 });
 
 test("openExternal accepts only HTTP(S) and asks the user about unapproved hosts", async () => {
@@ -2095,6 +2159,7 @@ async function createDocumentHost() {
       },
     ]),
     storageDirectory: storage.path,
+    workspaceTabsDirectory: storage.path,
     channels: {
       extensionFileSystem: async (caller, request) => {
         fileOperations.push(request.operation);
@@ -2128,7 +2193,11 @@ async function createDocumentHost() {
   });
   await startExtensionHost(host, window);
   // 查看器参数只交给 onLoad；会话打开的是存储目录中的本地文件。The viewer params only reach onLoad; sessions open local files.
-  host.setFileViewerFile(EDITOR, {
+  const scope = { serverId: "local", projectId: PROJECT };
+  await host.tabs.setScope(scope);
+  host.tabs.openFile({ path: "a.txt", directoryId: null, diffScope: null }, { preview: false });
+  const instanceKey = fileViewerInstanceKey(host.tabs.getSnapshot().group!.activeTabId!, EDITOR);
+  host.setFileViewerFile(instanceKey, EDITOR, {
     uri: formatCloudUri({
       serverId: "local",
       projectId: PROJECT,
@@ -2138,9 +2207,9 @@ async function createDocumentHost() {
     name: "a.txt",
     projectId: PROJECT,
   });
-  host.acquireView(EDITOR);
+  const release = host.acquireView(instanceKey, EDITOR);
   const page = await until(() => {
-    const frameId = host.frameIdOfView(EDITOR);
+    const frameId = host.frameIdOf(instanceKey);
     return frameId === null ? undefined : main.pages.get(frameId);
   }, "the editor page");
   const api = await page.api;
@@ -2154,8 +2223,9 @@ async function createDocumentHost() {
   after(async () => {
     await api.workspace.setUnsavedChanges(false);
     await flush();
-    host.retainFileViewers([]);
-    await until(() => host.frameIdOfView(EDITOR) === null, "the editor to close");
+    release();
+    host.releaseScope(scope);
+    await until(() => host.frameIdOf(instanceKey) === null, "the editor to close");
     window.close();
     Reflect.deleteProperty(globalThis, "window");
     await storage.dispose();
@@ -2163,6 +2233,7 @@ async function createDocumentHost() {
   return {
     api,
     host,
+    instanceKey,
     window,
     notifications,
     fileOperations,
@@ -2190,9 +2261,9 @@ async function createDocumentHost() {
       name,
     }),
     /** 宿主是否记录了编辑器的未保存修改。Whether the host recorded unsaved changes of the editor. */
-    unsaved: () => host.getSnapshot().unsavedViewIds.includes(EDITOR),
+    unsaved: () => host.getSnapshot().unsavedInstanceKeys.includes(instanceKey),
     /** 宿主记录的编辑器保存状态。The editor's save status the host recorded. */
-    saveStatus: () => host.getSnapshot().saveStatuses[EDITOR] ?? null,
+    saveStatus: () => host.getSnapshot().saveStatuses[instanceKey] ?? null,
     /** 等到确认窗口显示消息框，返回它的内容。Waits for the confirmation window's message box and returns it. */
     messageBox: async () => {
       const confirmation = await until(
@@ -2390,7 +2461,7 @@ test(
     assert.equal(harness.saveStatus(), "changed-on-disk");
 
     // 宿主的 Reload 先确认放弃修改，再读取磁盘内容。The host's Reload confirms discarding first, then reads the disk.
-    harness.host.reloadFileViewerDocument(EDITOR);
+    harness.host.reloadFileViewerDocument(harness.instanceKey);
     const box = await harness.messageBox();
     assert.equal(box.message, "Discard unsaved changes to notes.txt?");
     await harness.answer(0);
@@ -2400,7 +2471,7 @@ test(
     assert.equal(session.changedOnDisk, false);
 
     // 切换文件时宿主清除旧文件的保存状态。Switching files clears the old file's status in the host.
-    harness.host.setFileViewerFile(EDITOR, {
+    harness.host.setFileViewerFile(harness.instanceKey, EDITOR, {
       uri: formatCloudUri({
         serverId: "local",
         projectId: PROJECT,

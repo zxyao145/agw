@@ -1,4 +1,9 @@
 export * from "./lib/chat-route";
+export {
+  conversationComposerStorage,
+  type ComposerDraftKey,
+} from "./lib/chat/conversation-composer-storage";
+export { conversationImageDrafts } from "./lib/chat/conversation-image-drafts";
 export * from "./lib/chat/agent-suggestions";
 export * from "./lib/chat/ai-message-handlers";
 export * from "./lib/chat/search-command";
@@ -32,15 +37,18 @@ export {
   ChatFilePane,
   ChatFilesSidebar,
   ChatWorkspace,
-  ChatWorkspaceProvider,
-  useChatWorkspace,
   type ChatConversationPaneProps,
   type ChatConversationSidebarProps,
   type ChatFilePaneProps,
   type ChatFilesSidebarProps,
-  type ChatWorkspaceContextValue,
-  type ChatWorkspaceProject,
   type ChatWorkspaceProps,
-  type ChatWorkspaceProviderProps,
 } from "./ui-web/pages/chat/chat-workspace";
+export * from "./ui-web/pages/chat/chat-project-provider";
+export {
+  ChatSessionProvider,
+  useChatSession,
+  type ChatSessionProviderProps,
+  type ChatSessionContextValue,
+} from "./ui-web/pages/chat/chat-session-provider";
+export * from "./ui-web/pages/chat/file-document-provider";
 export { default as ColResizeSplit } from "./ui-web/pages/chat/components/split-layout";

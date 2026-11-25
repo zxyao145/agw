@@ -86,11 +86,14 @@ function ImageDraftFixture() {
     () => ({ serverId: selection.serverId, projectId: selection.projectId }),
     [selection.serverId, selection.projectId],
   );
-  const images = useConversationImageDraft(
-    selection.persist ? scope : null,
-    selection.conversationId,
-    0,
+  const key = React.useMemo(
+    () =>
+      selection.conversationId === null
+        ? { draftId: "web" }
+        : { conversationId: selection.conversationId },
+    [selection.conversationId],
   );
+  const images = useConversationImageDraft(selection.persist ? scope : null, key, 0);
   fixture.current = images.draft;
   fixture.select = (next) => flushSync(() => setSelection((current) => ({ ...current, ...next })));
 

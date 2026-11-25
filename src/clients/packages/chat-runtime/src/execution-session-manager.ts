@@ -218,6 +218,7 @@ export class ExecutionSessionManager {
   public attach(
     key: ExecutionSessionKey,
     handler: ManagedExecutionHandlers,
+    options?: { replayPendingMessages: boolean },
   ): ManagedExecutionHandle {
     const id = getExecutionSessionKey(key);
     let entry = this.entries.get(id);
@@ -265,9 +266,11 @@ export class ExecutionSessionManager {
     this.activity.attach(key);
     const pendingMessages = entry.pendingMessages.splice(0);
     const replayableActiveTurn = entry.activeTurn?.replayable === true;
-    const replayMessages = replayableActiveTurn
-      ? []
-      : pendingMessages.filter((message) => getPendingInteraction(message) === null);
+    // 恢复历史时，服务端分页提供已结束 Turn 的消息。Server history provides completed turns when a recovering view attaches.
+    const replayMessages =
+      replayableActiveTurn || options?.replayPendingMessages === false
+        ? []
+        : pendingMessages.filter((message) => getPendingInteraction(message) === null);
     replayMessages.push(...entry.pendingInteractions.values());
     const attachedEntry = entry;
     if (replayMessages.length > 0) {
@@ -499,6 +502,10 @@ export class ExecutionSessionManager {
 
   public getProjectStatus(serverId: string, projectId: string): ExecutionStatus {
     return this.activity.getProjectStatus(serverId, projectId);
+  }
+
+  public getConversationActivity(key: ExecutionSessionKey): ExecutionStatus {
+    return this.activity.getStatus(key);
   }
 
   public getActiveCount(): number {

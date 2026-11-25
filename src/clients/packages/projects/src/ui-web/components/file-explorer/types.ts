@@ -64,10 +64,19 @@ export interface LineComment {
   timestamp: Date;
 }
 
+export type FileTreeSelectionHandler = (
+  path: string,
+  scope: GitDiffScope | undefined,
+  options: { pinned: boolean },
+) => void;
+
 export interface FileTreeNodeProps {
   projectId: string;
   item: FileTreeItem;
-  onFileSelect?: (path: string, scope?: GitDiffScope) => void;
+  onFileSelect: FileTreeSelectionHandler;
+  selectedPath?: string | null;
+  revealPath?: string | null;
+  onFileRevealed: () => void;
   level: number;
   diffMode: boolean;
   recursiveMode: boolean;

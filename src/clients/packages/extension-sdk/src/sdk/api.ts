@@ -18,6 +18,7 @@ import type {
   ThemeInfo,
 } from "../api";
 import { createExtensionError, type RpcEndpoint } from "../rpc";
+import { isWorkspaceJsonValue, workspaceOpenOptions } from "../workspace-params";
 import {
   type DocumentSessionHost,
   openBinaryDocument,
@@ -133,8 +134,18 @@ export function createExtensionApi(
       showSidebarView: (id) => call("workspace.showSidebarView", { id }),
       toggleSidebarView: (id) => call("workspace.toggleSidebarView", { id }),
       setSidebarVisible: (visible) => call("workspace.setSidebarVisible", { visible }),
-      openMainView: (id, params) => call("workspace.openMainView", { id, params: params ?? {} }),
-      openFile: (uri) => call("workspace.openFile", { uri }),
+      openMainView: async (id, params = {}, options = {}) => {
+        if (!isWorkspaceJsonValue(params))
+          throw createExtensionError("ERR_INVALID_ARGUMENT", "params must be a JSON value.");
+        await call("workspace.openMainView", {
+          id,
+          params,
+          options: workspaceOpenOptions(options, "view"),
+        });
+      },
+      openFile: async (uri, options = {}) => {
+        await call("workspace.openFile", { uri, options: workspaceOpenOptions(options, "file") });
+      },
       setUnsavedChanges: (unsaved) => call("workspace.setUnsavedChanges", { unsaved }),
       setFileHeaderItems: (items) => call("workspace.setFileHeaderItems", { items }),
       onDidSelectFileHeaderItem: (listener) =>

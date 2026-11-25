@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import test, { afterEach, before } from "node:test";
+import test, { after, afterEach, before, beforeEach } from "node:test";
 
 import type { FileViewerFile } from "@agw/extension-sdk";
+import { createScratchDirectory } from "@desktop/main/scratch-directory.test-helper";
 import type { ExtensionHost } from "./extension-host";
+import { fileViewerInstanceKey, tabInstanceKey } from "./workspace-ids";
 import {
   createMainProcess,
   type ExtensionPage,
@@ -14,8 +16,12 @@ type DomEnvironment = Awaited<ReturnType<typeof import("@agw/test-harness").setu
 type ViewModule = typeof import("../components/workspace/extension-view");
 
 const PROJECT = "0192f0c5-3c2a-7cc1-9d4e-6f1a2b3c4d5e";
-const VIEWER = "sample:viewer";
-const OUTLINE = "sample:outline";
+const VIEWER_ID = "sample:viewer";
+const OUTLINE_ID = "sample:outline";
+const SCOPE = { serverId: "local", projectId: PROJECT };
+let viewerTab: string;
+let VIEWER: string;
+let OUTLINE: string;
 const SAMPLE_ORIGIN = {
   kind: "extension",
   extensionId: "sample",
@@ -27,6 +33,9 @@ const installed = sampleExtension([
   { id: "outline", title: "Outline", icon: "List", patterns: ["*.md"], entry: "outline.html" },
 ]);
 installed.grantedPermissions = ["chat.composer"];
+installed.manifest!.contributes!.mainViews = [
+  { id: "main", title: "Main", icon: "File", entry: "main.html" },
+];
 
 // setupDomEnvironment 注册关闭 window 的 after 钩子；在 before 中调用时 node:test 在 before 结束后立即运行它，
 // window 的事件监听随之移除。模块加载时调用，钩子属于整个文件。
@@ -35,31 +44,72 @@ installed.grantedPermissions = ["chat.composer"];
 const environmentReady = import("@agw/test-harness").then(({ setupDomEnvironment }) =>
   setupDomEnvironment(),
 );
+const scratchReady = createScratchDirectory("extension-host-tabs");
+after(async () => {
+  await main.bridge.getWorkspaceTabs(SCOPE.serverId, SCOPE.projectId);
+  await (await scratchReady).dispose();
+});
 
 let environment: DomEnvironment;
 let views: ViewModule;
 let main: ReturnType<typeof createMainProcess>;
 let host: ExtensionHost;
+let holdTabRead: Promise<void> | null = null;
 
 before(async () => {
   environment = await environmentReady;
   views = await import("../components/workspace/extension-view");
   const { ExtensionHost } = await import("./extension-host");
-  main = createMainProcess(environment.window, { installed, storageDirectory: "/data/sample" });
+  main = createMainProcess(environment.window, {
+    installed,
+    storageDirectory: "/data/sample",
+    workspaceTabsDirectory: (await scratchReady).path,
+    channels: {
+      listExtensions: async () => [
+        installed,
+        { ...installed, source: "server", instanceId: "sample-server" },
+      ],
+    },
+  });
   host = new ExtensionHost({
-    bridge: main.bridge,
+    bridge: {
+      ...main.bridge,
+      getWorkspaceTabs: async (serverId, projectId) => {
+        await holdTabRead;
+        return main.bridge.getWorkspaceTabs(serverId, projectId);
+      },
+    },
     app: { version: "0.5.0", platform: "darwin", architecture: "arm64" },
     notify: () => undefined,
   });
   await startExtensionHost(host, environment.window);
-  assert.equal(host.registry.view(VIEWER)?.location, "file");
+  assert.equal(host.registry.view(VIEWER_ID)?.location, "file");
+  await host.tabs.setScope(SCOPE);
+  const initial = host.tabs.getSnapshot().group!.tabs[0];
+  assert.equal(initial.kind, "chat");
+  host.tabs.acceptConversation(initial.id, initial.draftId);
+});
+
+function fileTab(path: string, preview = false): string {
+  host.tabs.openFile({ path, directoryId: null, diffScope: null }, { preview });
+  return host.tabs.getSnapshot().group!.activeTabId!;
+}
+
+beforeEach(async () => {
+  await host.tabs.setScope(SCOPE);
+  viewerTab = fileTab("notes.md");
+  VIEWER = fileViewerInstanceKey(viewerTab, VIEWER_ID);
+  OUTLINE = fileViewerInstanceKey(fileTab("outline.md"), OUTLINE_ID);
 });
 
 /** 测试获取后尚未释放的视图。Views a test acquired and has not released yet. */
 const acquired = new Set<() => void>();
 
-function acquire(viewId: string): () => void {
-  const release = host.acquireView(viewId);
+function acquire(
+  instanceKey: string,
+  viewId = instanceKey === OUTLINE ? OUTLINE_ID : VIEWER_ID,
+): () => void {
+  const release = host.acquireView(instanceKey, viewId);
   const releaseOnce = () => {
     if (acquired.delete(releaseOnce)) release();
   };
@@ -77,14 +127,12 @@ afterEach(async () => {
       confirmation.kind === "message" ? confirmation.cancelId : false,
     );
   }
-  for (const viewId of [VIEWER, OUTLINE]) {
-    const page = pageOf(viewId);
-    if (page && !page.endpoint.isClosed) await reportUnsaved(page, false);
-  }
   for (const release of acquired) release();
-  host.retainFileViewers([]);
+  host.releaseScope(SCOPE);
+  await host.tabs.setScope(SCOPE);
+  await host.tabs.close(host.tabs.getSnapshot().group!.tabs.map((tab) => tab.id));
   await until(
-    () => host.frameIdOfView(VIEWER) === null && host.frameIdOfView(OUTLINE) === null,
+    () => host.frameIdOf(VIEWER) === null && host.frameIdOf(OUTLINE) === null,
     "the file viewers to close",
   );
 });
@@ -103,8 +151,8 @@ function fileNamed(name: string): FileViewerFile {
   return { uri: `agw-cloud://local/${PROJECT}/workspace/${name}`, name, projectId: PROJECT };
 }
 
-function pageOf(viewId: string): ExtensionPage | undefined {
-  const frameId = host.frameIdOfView(viewId);
+function pageOf(instanceKey: string): ExtensionPage | undefined {
+  const frameId = host.frameIdOf(instanceKey);
   return frameId === null ? undefined : main.pages.get(frameId);
 }
 
@@ -131,15 +179,193 @@ async function reportUnsaved(page: ExtensionPage, unsaved: boolean): Promise<voi
 }
 
 /** 显示文件查看器并等到 onLoad 完成。Shows a file viewer and waits until its onLoad finished. */
-async function showLoaded(viewId: string, file: FileViewerFile) {
-  host.retainFileViewers([VIEWER, OUTLINE]);
-  host.setFileViewerFile(viewId, file);
-  const release = acquire(viewId);
-  const page = await until(() => pageOf(viewId), `the ${viewId} page`);
+async function showLoaded(
+  instanceKey: string,
+  file: FileViewerFile,
+  viewId = instanceKey === OUTLINE ? OUTLINE_ID : VIEWER_ID,
+) {
+  host.setFileViewerFile(instanceKey, viewId, file);
+  const release = acquire(instanceKey, viewId);
+  const page = await until(() => pageOf(instanceKey), `the ${viewId} page`);
   await until(() => hooks(page).includes("view.onLoad"), `${viewId} onLoad`);
   await reportUnsaved(page, false);
   return { page, release };
 }
+
+test("one file viewer has a frame per file tab and pins only the dirty preview", async () => {
+  const first = await showLoaded(VIEWER, fileNamed("notes.md"));
+  const id = fileTab("other.md", true);
+  const otherKey = fileViewerInstanceKey(id, VIEWER_ID);
+  const second = await showLoaded(otherKey, fileNamed("other.md"), VIEWER_ID);
+  assert.notEqual(host.frameIdOf(VIEWER), host.frameIdOf(otherKey));
+  assert.deepEqual(first.page.calls[0].params, { params: { file: fileNamed("notes.md") } });
+  assert.deepEqual(second.page.calls[0].params, { params: { file: fileNamed("other.md") } });
+  await reportUnsaved(second.page, true);
+  host.setFileViewerFile(otherKey, VIEWER_ID, fileNamed("stale.md"));
+  await (await second.page.api).workspace.setUnsavedChanges(true);
+  assert.deepEqual(hooks(second.page), ["view.onLoad"]);
+  assert.deepEqual(host.getSnapshot().unsavedInstanceKeys, [otherKey]);
+  assert.equal(host.tabs.getSnapshot().group!.tabs.find((tab) => tab.id === id)?.preview, false);
+  await reportUnsaved(first.page, true);
+  const answerForOne = host.confirmDiscardUnsaved({ tabIds: [id] });
+  const confirmation = currentConfirmation();
+  assert.ok(confirmation?.kind === "discard-unsaved");
+  assert.deepEqual(
+    confirmation.items.map((item) => item.fileName),
+    ["other.md"],
+  );
+  await answer(false);
+  assert.equal(await answerForOne, false);
+});
+
+test("openMainView contribution validation rejects through the returned promise", async () => {
+  const group = host.tabs.getSnapshot().group;
+  const action = { type: "openMainView", view: "sample:main" } as const;
+  for (const args of [{ invalid: undefined }, "a".repeat(65535)]) {
+    await assert.rejects(host.runAction("sample", action, args), { code: "ERR_INVALID_ARGUMENT" });
+    assert.equal(host.tabs.getSnapshot().group, group);
+  }
+});
+
+test("a missing Server release identity publishes the view instance error", async () => {
+  const viewId = "sample-server:main";
+  await host.rescan();
+  await host.layout.openMainView(viewId);
+  const key = tabInstanceKey(host.tabs.getSnapshot().group!.activeTabId!);
+  acquire(key, viewId);
+  const failure = await until(
+    () => host.getSnapshot().instanceErrors[key],
+    "the frame creation error",
+  );
+  assert.equal(failure.code, "LOAD_FAILED");
+  assert.match(failure.message, /source and release identity/u);
+  assert.equal(host.frameIdOf(key), null);
+});
+
+test("leaving a Project keeps its dirty resources until that Project is released", async () => {
+  const first = await showLoaded(VIEWER, fileNamed("notes.md"));
+  await showLoaded(OUTLINE, fileNamed("outline.md"));
+  await reportUnsaved(first.page, true);
+  host.setSourceUnsaved(viewerTab, "source.md");
+  const retained = host.frameIdOf(VIEWER);
+  const otherScope = { ...SCOPE, projectId: "project-b" };
+  await host.tabs.setScope(otherScope);
+  await until(() => host.frameIdOf(OUTLINE) === null, "the clean frame to close");
+  assert.equal(host.frameIdOf(VIEWER), retained);
+  assert.deepEqual(host.getSnapshot().unsavedSourceTabIds, [viewerTab]);
+  assert.equal(await host.confirmDiscardScope(otherScope), true);
+  const decision = host.confirmDiscardScope(SCOPE);
+  const confirmation = currentConfirmation();
+  assert.ok(confirmation?.kind === "discard-unsaved");
+  assert.deepEqual(
+    confirmation.items.map((item) => item.fileName),
+    ["notes.md", "source.md"],
+  );
+  await answer(true);
+  assert.equal(await decision, true);
+  host.releaseScope(SCOPE);
+  await until(() => host.frameIdOf(VIEWER) === null, "the discarded frame to close");
+  assert.equal(host.hasUnsavedChanges(), false);
+});
+
+test("an extension frame loads with its tab parameters and receives a reopen", async () => {
+  host.layout.openMainView("sample:main", { a: 1 });
+  const id = host.tabs.getSnapshot().group!.activeTabId!;
+  const key = tabInstanceKey(id);
+  acquire(key, "sample:main");
+  const page = await until(() => pageOf(key), "the main frame");
+  await until(() => hooks(page).includes("view.onShow"), "the first show");
+  assert.deepEqual(page.calls[0], { method: "view.onLoad", params: { params: { a: 1 } } });
+  host.layout.openMainView("sample:main", { a: 2 });
+  const tab = host.tabs.getSnapshot().group!.tabs.find((item) => item.id === id);
+  assert.ok(tab?.kind === "extension");
+  host.reopenView(key, tab.params);
+  await until(() => page.calls.length === 3, "the second show");
+  assert.deepEqual(page.calls.at(-1), { method: "view.onShow", params: { params: { a: 2 } } });
+});
+
+test("the workspace context reports the active view and null for an empty group", async () => {
+  host.tabs.openJobs();
+  assert.equal(host.context.snapshot().workspace.activeMainViewId, "agw.jobs");
+  host.layout.openMainView("agw.events");
+  assert.equal(host.context.snapshot().workspace.activeMainViewId, "agw.events");
+  host.layout.leaveFullWorkspaceView();
+  await host.tabs.close(host.tabs.getSnapshot().group!.tabs.map((tab) => tab.id));
+  assert.equal(host.context.snapshot().workspace.activeMainViewId, null);
+});
+
+test("composer insertion follows the latest visible registration", async () => {
+  const { page } = await showLoaded(VIEWER, fileNamed("notes.md"));
+  const { composer } = (await page.api).chat;
+  const messages: string[] = [];
+  const absent = { code: "ERR_UNAVAILABLE", message: "No chat composer is visible." };
+  await assert.rejects(composer.insertText("missing"), absent);
+  const first = host.registerComposer({ insertText: (text) => messages.push(`first ${text}`) });
+  const last = host.registerComposer({ insertText: (text) => messages.push(`last ${text}`) });
+  await composer.insertText("two");
+  last();
+  await composer.insertText("one");
+  first();
+  assert.deepEqual(messages, ["last two", "first one"]);
+  await assert.rejects(composer.insertText("missing"), absent);
+});
+
+test("openFile waits for its Project group and opens the tab with dirty files retained", async () => {
+  const { page } = await showLoaded(VIEWER, fileNamed("notes.md"));
+  await reportUnsaved(page, true);
+  const scope = { serverId: "local", projectId: "0192f0c5-3c2a-7cc1-9d4e-6f1a2b3c4d60" };
+  const identity = { profileId: "local", baseUrl: "http://localhost", token: null };
+  host.context.setConnection(identity, {
+    id: "local",
+    name: "Local",
+    kind: "local",
+    serverId: null,
+  });
+  host.context.setSelection(host.context.connectionKey!, {
+    project: { id: scope.projectId, name: "B", description: null, directories: [] },
+    conversation: null,
+    target: null,
+  });
+  let release!: () => void;
+  holdTabRead = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const loading = host.tabs.setScope(scope);
+  const api = await page.api;
+  const opening = api.workspace.openFile(`agw-cloud://local/${scope.projectId}/workspace/next.md`);
+  await api.workspace.setUnsavedChanges(true);
+  assert.equal(host.tabs.getSnapshot().group, null);
+  holdTabRead = null;
+  release();
+  await Promise.all([loading, opening]);
+  const group = host.tabs.getSnapshot().group!;
+  const tab = group.tabs.find((item) => item.id === group.activeTabId);
+  assert.ok(tab?.kind === "file");
+  assert.equal(tab.path, "next.md");
+  assert.equal(tab.preview, false);
+  assert.equal(currentConfirmation(), null);
+
+  await host.tabs.setScope(null);
+  holdTabRead = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const secondLoad = host.tabs.setScope(scope);
+  const stale = assert.rejects(
+    api.workspace.openFile(`agw-cloud://local/${scope.projectId}/workspace/stale.md`),
+    { code: "ERR_UNAVAILABLE" },
+  );
+  await api.workspace.setUnsavedChanges(true);
+  const switchBack = host.tabs.setScope(SCOPE);
+  holdTabRead = null;
+  release();
+  await Promise.all([secondLoad, switchBack, stale]);
+  assert.equal(
+    host.tabs
+      .getSnapshot()
+      .group!.tabs.some((item) => item.kind === "file" && item.path === "stale.md"),
+    false,
+  );
+});
 
 test("a loaded file viewer gets onShow when it is shown again after being hidden, and only then", async () => {
   const file = fileNamed("notes.md");
@@ -177,6 +403,83 @@ test("Source registers the window Chat button with the current file context", ()
   assert.equal(host.getSnapshot().floatingChatButton, null);
 });
 
+test("Events and Notifications keep the Source chat after its component unmounts", async () => {
+  host.tabs.activate(viewerTab);
+  const context = { projectRelativePath: "notes.md" };
+  host.setSourceFloatingChatContext(context);
+  host.openFloatingChatButton("source");
+  await host.layout.openMainView("agw.events");
+  host.closeSourceFloatingChat();
+  assert.equal(host.getSnapshot().floatingChat?.open, true);
+  assert.deepEqual(host.getSnapshot().floatingChat?.context, context);
+  host.closeFloatingChat();
+  const button = host.getSnapshot().floatingChatButton!;
+  assert.equal(host.getSnapshot().floatingChat?.open, false);
+  await host.layout.openMainView("agw.notifications");
+  host.openFloatingChatButton(button.owner);
+  assert.equal(host.getSnapshot().floatingChat?.open, true);
+  host.layout.leaveFullWorkspaceView();
+  host.setSourceFloatingChatContext(context);
+  assert.equal(host.getSnapshot().floatingChat?.open, true);
+  await host.layout.openMainView("agw.events");
+  host.closeSourceFloatingChat();
+  host.tabs.openJobs();
+  host.openFloatingChatButton(button.owner);
+  assert.equal(host.getSnapshot().floatingChatButton, null);
+  assert.notEqual(host.getSnapshot().floatingChat?.open, true);
+});
+
+test("full views retain a viewer's offered chat after hide and clear it on a Project switch", async () => {
+  host.tabs.activate(viewerTab);
+  const viewer = await showLoaded(VIEWER, fileNamed("notes.md"));
+  const context = { projectRelativePath: "notes.md" };
+  const handle = await (await viewer.page.api).chat.createFloatingChat({ context });
+  await host.layout.openMainView("agw.notifications");
+  viewer.release();
+  await until(() => hooks(viewer.page).includes("view.onHide"), "the viewer to hide");
+  const owner = host.getSnapshot().floatingChatButton?.owner;
+  assert.ok(owner);
+  await assert.rejects(handle.open(), { code: "ERR_UNAVAILABLE" });
+  host.openFloatingChatButton(owner);
+  assert.deepEqual(host.getSnapshot().floatingChat?.context, context);
+  assert.equal(host.getSnapshot().floatingChat?.open, true);
+  await host.tabs.setScope({ ...SCOPE, projectId: "project-b" });
+  assert.equal(host.getSnapshot().floatingChatButton, null);
+  assert.notEqual(host.getSnapshot().floatingChat?.open, true);
+  host.openFloatingChatButton(owner);
+  assert.notEqual(host.getSnapshot().floatingChat?.open, true);
+  host.layout.leaveFullWorkspaceView();
+});
+
+test("a full view keeps the open chat of a destroyed main view and honors Close on return", async () => {
+  const viewId = "sample:main";
+  await host.layout.openMainView(viewId);
+  const key = tabInstanceKey(host.tabs.getSnapshot().group!.activeTabId!);
+  const release = acquire(key, viewId);
+  const page = await until(() => pageOf(key), "the main view");
+  const context = { repository: "demo" };
+  const handle = await (await page.api).chat.createFloatingChat({ context });
+  await handle.open();
+  await host.layout.openMainView("agw.events");
+  release();
+  await until(() => host.frameIdOf(key) === null, "the main frame to close");
+  assert.equal(host.getSnapshot().floatingChat?.open, true);
+  assert.deepEqual(host.getSnapshot().floatingChat?.context, context);
+  const owner = host.getSnapshot().floatingChatButton!.owner;
+  host.closeFloatingChat();
+  host.openFloatingChatButton(owner);
+  assert.equal(host.getSnapshot().floatingChat?.open, true);
+  host.closeFloatingChat();
+  host.layout.leaveFullWorkspaceView();
+  acquire(key, viewId);
+  const replacement = await until(() => pageOf(key), "the new main frame");
+  await (await replacement.api).chat.createFloatingChat({ context: { repository: "current" } });
+  host.openFloatingChatButton(owner);
+  assert.notEqual(host.getSnapshot().floatingChat?.open, true);
+  host.openFloatingChatButton(host.getSnapshot().floatingChatButton!.owner);
+  assert.deepEqual(host.getSnapshot().floatingChat?.context, { repository: "current" });
+});
+
 test("floating Chat handles survive retained-view hide and keep registrations per view", async () => {
   const file = fileNamed("notes.md");
   const viewer = await showLoaded(VIEWER, file);
@@ -202,7 +505,8 @@ test("floating Chat handles survive retained-view hide and keep registrations pe
   await until(() => hooks(viewer.page).includes("view.onShow"), "the viewer to show again");
   assert.equal(host.getSnapshot().floatingChatButton?.owner, viewerOwner);
 
-  await assert.rejects(viewerChat.open(), { code: "ERR_UNAVAILABLE" });
+  await viewerChat.open();
+  assert.equal(host.getSnapshot().floatingChat?.open, true);
   await viewerChat.close();
   await viewerChat.dispose();
   await outlineChat.setContext({ projectRelativePath: "outline-still-available.md" });
@@ -218,9 +522,9 @@ test("confirmDiscardUnsaved lists only the unsaved changes of the given viewers"
   const outline = await showLoaded(OUTLINE, file);
   await reportUnsaved(viewer.page, true);
   await reportUnsaved(outline.page, true);
-  assert.deepEqual(host.getSnapshot().unsavedViewIds, [VIEWER, OUTLINE]);
+  assert.deepEqual(host.getSnapshot().unsavedInstanceKeys, [VIEWER, OUTLINE]);
 
-  const onlyOutline = host.confirmDiscardUnsaved([OUTLINE]);
+  const onlyOutline = host.confirmDiscardUnsaved({ instanceKeys: [OUTLINE] });
   assert.deepEqual(currentConfirmation(), {
     kind: "discard-unsaved",
     items: [
@@ -253,7 +557,7 @@ test("confirmDiscardUnsaved lists only the unsaved changes of the given viewers"
   await answer(true);
   assert.equal(await every, true);
 
-  assert.equal(await host.confirmDiscardUnsaved(["sample:other"]), true);
+  assert.equal(await host.confirmDiscardUnsaved({ instanceKeys: ["sample:other"] }), true);
   assert.equal(currentConfirmation(), null);
 });
 
@@ -265,7 +569,7 @@ test("the host Source's unsaved file joins every confirmation except a viewer-on
   await reportUnsaved(viewer.page, false);
   assert.equal(host.hasUnsavedChanges(), false);
 
-  host.setSourceUnsaved("app.ts");
+  host.setSourceUnsaved(viewerTab, "app.ts");
   assert.equal(host.hasUnsavedChanges(), true);
   await reportUnsaved(viewer.page, true);
   const every = host.confirmDiscardUnsaved();
@@ -280,7 +584,7 @@ test("the host Source's unsaved file joins every confirmation except a viewer-on
   assert.equal(await every, false);
 
   // 只针对某个 extension 视图的确认不包括 Source。A confirmation for one extension view leaves Source out.
-  const onlyViewer = host.confirmDiscardUnsaved([VIEWER]);
+  const onlyViewer = host.confirmDiscardUnsaved({ instanceKeys: [VIEWER] });
   assert.deepEqual(currentConfirmation(), {
     kind: "discard-unsaved",
     items: [{ fileName: "notes.md", viewerTitle: "Viewer", origin: SAMPLE_ORIGIN }],
@@ -289,7 +593,7 @@ test("the host Source's unsaved file joins every confirmation except a viewer-on
   assert.equal(await onlyViewer, true);
 
   await reportUnsaved(viewer.page, false);
-  host.setSourceUnsaved(null);
+  host.setSourceUnsaved(viewerTab, null);
   assert.equal(host.hasUnsavedChanges(), false);
   assert.equal(await host.confirmDiscardUnsaved(), true);
   assert.equal(currentConfirmation(), null);
@@ -330,7 +634,7 @@ test("closing the confirmation window answers as canceled", async () => {
   const viewer = await showLoaded(VIEWER, file);
   await reportUnsaved(viewer.page, true);
 
-  const closed = host.confirmDiscardUnsaved([VIEWER]);
+  const closed = host.confirmDiscardUnsaved({ instanceKeys: [VIEWER] });
   assert.equal(currentConfirmation()?.kind, "discard-unsaved");
   main.confirmations.close();
   assert.equal(await closed, false);
@@ -343,11 +647,11 @@ test("Reload view asks before discarding unsaved changes and reloads only after 
   const outline = await showLoaded(OUTLINE, file);
   await reportUnsaved(viewer.page, true);
   await reportUnsaved(outline.page, true);
-  const view = host.registry.view(VIEWER)!;
-  const frameId = host.frameIdOfView(VIEWER)!;
+  const view = host.registry.view(VIEWER_ID)!;
+  const frameId = host.frameIdOf(VIEWER)!;
   const created = main.frames.length;
 
-  const canceled = views.reloadExtensionView(host, view);
+  const canceled = views.reloadExtensionView(host, view, VIEWER);
   assert.deepEqual(currentConfirmation(), {
     kind: "discard-unsaved",
     items: [
@@ -360,23 +664,23 @@ test("Reload view asks before discarding unsaved changes and reloads only after 
   });
   await answer(false);
   await canceled;
-  assert.equal(host.frameIdOfView(VIEWER), frameId);
+  assert.equal(host.frameIdOf(VIEWER), frameId);
   assert.equal(main.frames.length, created);
   assert.equal(main.destroyed.includes(frameId), false);
-  assert.deepEqual(host.getSnapshot().unsavedViewIds, [VIEWER, OUTLINE]);
+  assert.deepEqual(host.getSnapshot().unsavedInstanceKeys, [VIEWER, OUTLINE]);
 
-  const discarded = views.reloadExtensionView(host, view);
+  const discarded = views.reloadExtensionView(host, view, VIEWER);
   await answer(true);
   await discarded;
   assert.equal(main.destroyed.includes(frameId), true);
   assert.equal(main.frames.length, created + 1);
-  const reloadedFrameId = host.frameIdOfView(VIEWER)!;
+  const reloadedFrameId = host.frameIdOf(VIEWER)!;
   assert.notEqual(reloadedFrameId, frameId);
   assert.deepEqual(hooks(main.pages.get(reloadedFrameId)!), ["view.onLoad"]);
-  assert.deepEqual(host.getSnapshot().unsavedViewIds, [OUTLINE]);
+  assert.deepEqual(host.getSnapshot().unsavedInstanceKeys, [OUTLINE]);
 
   // 没有未保存修改时直接重新加载。Without unsaved changes the view reloads at once.
-  await views.reloadExtensionView(host, view);
+  await views.reloadExtensionView(host, view, VIEWER);
   assert.equal(currentConfirmation(), null);
   assert.equal(main.frames.length, created + 2);
 });
@@ -404,7 +708,7 @@ test("message boxes from views join the confirmation queue in order and resolve 
     buttons: ["1".repeat(40), "2", "3", "4"],
   });
   await reportUnsaved(outline.page, false);
-  const discard = host.confirmDiscardUnsaved([VIEWER]);
+  const discard = host.confirmDiscardUnsaved({ instanceKeys: [VIEWER] });
 
   assert.deepEqual(currentConfirmation(), {
     kind: "message",
@@ -481,7 +785,7 @@ test("closing a frame removes its queued and shown message boxes and the calls f
     cancelId: 0,
   });
 
-  host.retainFileViewers([OUTLINE]);
+  await host.tabs.close([viewerTab]);
   await shownFailure;
   await queuedFailure;
   assert.deepEqual(currentConfirmation(), {
@@ -555,7 +859,7 @@ test("closing a frame closes its image preview and the call fails with ERR_FRAME
   const failure = assert.rejects(pending, { code: "ERR_FRAME_GONE" });
   const shown = await until(currentPreview, "the preview");
 
-  host.retainFileViewers([OUTLINE]);
+  await host.tabs.close([viewerTab]);
   await failure;
   assert.equal(host.getSnapshot().imagePreview, null);
   assert.equal(await blobText(shown.src), null);
@@ -590,7 +894,7 @@ test("a file viewer's header items show under its view id, stay across files and
   ]);
 
   // 条目由页面按新文件更新，切换文件时宿主保留。The page updates its items for the new file; the host keeps them.
-  host.setFileViewerFile(VIEWER, fileNamed("other.md"));
+  host.setFileViewerFile(VIEWER, VIEWER_ID, fileNamed("other.md"));
   assert.deepEqual(host.getSnapshot().fileHeaderItems[VIEWER], HEADER_ITEMS);
 
   await api.workspace.setFileHeaderItems([]);
@@ -605,7 +909,7 @@ test("a file viewer's header items show under its view id, stay across files and
 test("a replaced page's header items are cleared while the frame stays", async () => {
   const viewer = await showLoaded(VIEWER, fileNamed("notes.md"));
   await (await viewer.page.api).workspace.setFileHeaderItems(HEADER_ITEMS);
-  const frameId = host.frameIdOfView(VIEWER)!;
+  const frameId = host.frameIdOf(VIEWER)!;
 
   main.emit({
     type: "frame-page-replaced",
@@ -618,7 +922,7 @@ test("a replaced page's header items are cleared while the frame stays", async (
     () => host.getSnapshot().fileHeaderItems[VIEWER] === undefined,
     "the header items to clear",
   );
-  assert.equal(host.frameIdOfView(VIEWER), frameId);
+  assert.equal(host.frameIdOf(VIEWER), frameId);
 });
 
 test("a replaced page's image preview closes while the frame stays", async () => {
@@ -626,7 +930,7 @@ test("a replaced page's image preview closes while the frame stays", async () =>
   const viewer = await showLoaded(VIEWER, file);
   const pending = (await viewer.page.api).ui.previewImage(svgImage("replaced"));
   await until(currentPreview, "the preview");
-  const frameId = host.frameIdOfView(VIEWER)!;
+  const frameId = host.frameIdOf(VIEWER)!;
 
   main.emit({
     type: "frame-page-replaced",
@@ -638,7 +942,7 @@ test("a replaced page's image preview closes while the frame stays", async () =>
   viewer.page.endpoint.close();
   await assert.rejects(pending, { code: "ERR_CONNECTION_CLOSED" });
   await until(() => host.getSnapshot().imagePreview === null, "the preview to close");
-  assert.equal(host.frameIdOfView(VIEWER), frameId);
+  assert.equal(host.frameIdOf(VIEWER), frameId);
 });
 
 test("the host shows a view's image preview over the window and settles the call when the user closes it", async () => {
@@ -686,7 +990,7 @@ test("a replaced page's message boxes leave the queue while the frame stays", as
     buttons: ["OK", "No"],
   });
   await reportUnsaved(outline.page, false);
-  const frameId = host.frameIdOfView(VIEWER)!;
+  const frameId = host.frameIdOf(VIEWER)!;
 
   main.emit({
     type: "frame-page-replaced",
@@ -697,7 +1001,7 @@ test("a replaced page's message boxes leave the queue while the frame stays", as
   // 旧文档已经不存在，它一侧的端口随之关闭。The old document is gone and its side of the port closes with it.
   viewer.page.endpoint.close();
   await assert.rejects(replaced, { code: "ERR_CONNECTION_CLOSED" });
-  assert.equal(host.frameIdOfView(VIEWER), frameId);
+  assert.equal(host.frameIdOf(VIEWER), frameId);
   assert.deepEqual(currentConfirmation(), {
     kind: "message",
     origin: SAMPLE_ORIGIN,

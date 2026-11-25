@@ -52,8 +52,9 @@ function snapshot(overrides: Partial<ExtensionHostSnapshot> = {}): ExtensionHost
     serverSyncError: null,
     recoveryNotices: [],
     extensions: [],
-    viewErrors: {},
-    unsavedViewIds: [],
+    instanceErrors: {},
+    unsavedInstanceKeys: [],
+    unsavedSourceTabIds: [],
     saveStatuses: {},
     fileHeaderItems: {},
     imagePreview: null,
@@ -125,9 +126,10 @@ test("a view whose handshake failed shows an error panel with Reload view", () =
     environment.React.createElement(views.ExtensionView, {
       host,
       layout,
+      instanceKey: "tab:one",
       snapshot: snapshot({
-        viewErrors: {
-          "sample:app": {
+        instanceErrors: {
+          "tab:one": {
             code: "HANDSHAKE_TIMEOUT",
             message: "The page did not connect within 15 seconds.",
           },
@@ -167,10 +169,47 @@ test("a failed view inside ExtensionView renders the failed-extension panel", ()
     environment.React.createElement(views.ExtensionView, {
       host,
       layout,
+      instanceKey: "tab:one",
       snapshot: snapshot(),
       view: { ...view, failure: { code: "UNRESPONSIVE", message: "The page stopped responding." } },
       openRequest: undefined,
     }),
   );
   assert.ok(environment.screen.getByRole("button", { name: "Reload extension" }));
+});
+
+test("an unregistered view shows a Close tab action and appears once registered", () => {
+  const tab = {
+    id: "one",
+    kind: "extension",
+    viewId: view.id,
+    key: null,
+    title: "Greeting",
+    preview: false,
+    sequence: 0,
+    params: null,
+  } as const;
+  let closed = false;
+  const rendered = render(
+    environment.React.createElement(views.ExtensionTabView, {
+      host,
+      layout,
+      tab,
+      snapshot: snapshot(),
+      active: false,
+      onClose: () => {
+        closed = true;
+      },
+    }),
+  );
+  assert.equal(
+    environment.screen.getByRole("alert").textContent?.includes("This view isn't available."),
+    true,
+  );
+  environment.fireEvent.click(environment.screen.getByRole("button", { name: "Close tab" }));
+  assert.equal(closed, true);
+  environment.act(() => host.registry.registerExtension("sample", { views: [view], entries: {} }));
+  assert.equal(environment.screen.queryByRole("alert"), null);
+  assert.ok(rendered.container.querySelector('[data-extension-view="sample:app"]'));
+  environment.act(() => host.registry.unregisterExtension("sample"));
 });

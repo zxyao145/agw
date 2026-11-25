@@ -6,6 +6,7 @@ import type { DesktopUpdateCheckResult } from "./update";
 import type { ImageContextMenuRequest } from "./image";
 import type { DesktopNotificationFrame } from "./notification";
 import type { DecodedText, EncodedText, EncodeTextOptions, TextEncodingInfo } from "./text";
+import type { PersistedTabGroup, WorkspaceCommand } from "./workspace-tabs";
 import type {
   CreateExtensionFrameRequest,
   ExtensionActivation,
@@ -60,6 +61,10 @@ export type AgwDesktopBridge = {
   getRuntimeState(): Promise<DesktopRuntimeState>;
   checkForUpdates(): Promise<DesktopUpdateCheckResult>;
   saveSettings(settings: DesktopSettingsUpdate): Promise<DesktopRuntimeState>;
+  getWorkspaceTabs(serverId: string, projectId: string): Promise<PersistedTabGroup | null>;
+  saveWorkspaceTabs(serverId: string, projectId: string, group: PersistedTabGroup): Promise<void>;
+  pruneWorkspaceTabs(serverId: string, projectIds: string[]): Promise<void>;
+  onWorkspaceCommand(listener: (command: WorkspaceCommand) => void): () => void;
   /** 文件类型 → 默认查看器 id。File type → default viewer id. */
   getFileViewerDefaults(): Promise<Record<string, string>>;
   /** 设置文件类型的默认查看器，null 删除该项；返回更新后的设置。Sets a file type's default viewer; null removes it. */

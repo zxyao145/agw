@@ -475,6 +475,64 @@ div[role="option"]:hover {
     @apply relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
   }
 
+  .agw-workspace-tabs {
+    @apply flex min-w-0 shrink-0 items-stretch overflow-x-auto overflow-y-hidden overscroll-x-contain border-b bg-muted/30;
+    scrollbar-width: none;
+  }
+
+  .agw-workspace-tab {
+    @apply relative flex h-9 max-w-60 shrink-0 items-center gap-1 border-r border-b border-b-transparent pr-1 text-muted-foreground;
+  }
+
+  .agw-workspace-tab:hover {
+    @apply bg-muted/70 text-foreground;
+  }
+
+  .agw-workspace-tab.is-active {
+    @apply border-b-border bg-background text-foreground;
+  }
+
+  .agw-workspace-tab-label {
+    @apply flex h-full min-w-0 items-center gap-2 pl-2.5 text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring;
+  }
+
+  .agw-workspace-tab-label.is-preview .agw-workspace-tab-title {
+    @apply italic;
+  }
+
+  .agw-workspace-tab-close {
+    @apply grid size-5 shrink-0 place-items-center rounded-md opacity-55 hover:bg-muted hover:opacity-100;
+  }
+
+  .agw-workspace-tab-close > svg {
+    @apply size-3;
+  }
+
+  .agw-workspace-tab.is-unsaved .agw-workspace-tab-close > svg,
+  .agw-workspace-tab:hover .agw-workspace-tab-unsaved {
+    @apply hidden;
+  }
+
+  .agw-workspace-tab.is-unsaved:hover .agw-workspace-tab-close > svg {
+    @apply block;
+  }
+
+  .agw-workspace-tab-unsaved {
+    @apply size-2 rounded-full bg-current;
+  }
+
+  .agw-workspace-tab.insert-before::before,
+  .agw-workspace-tab.insert-after::after {
+    @apply pointer-events-none absolute inset-y-0 z-10 w-0.5 bg-primary content-[''];
+  }
+
+  .agw-workspace-tab.insert-before::before {
+    left: 0;
+  }
+  .agw-workspace-tab.insert-after::after {
+    right: 0;
+  }
+
   .agw-extension-view-header {
     @apply flex h-8 shrink-0 items-center gap-2 border-b px-2.5 text-sm text-muted-foreground;
   }

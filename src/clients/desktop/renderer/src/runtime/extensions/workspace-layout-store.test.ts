@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import { BUILT_IN_VIEWS } from "./workspace-ids";
 import { DEFAULT_WORKSPACE_LAYOUT, WorkspaceLayoutStore } from "./workspace-layout-store";
 import { type WorkspaceView, WorkspaceRegistry } from "./workspace-registry";
+import { activeTabOf } from "./workspace-tabs-store";
+import { createTestTabs } from "./workspace-tabs-store.test-helper";
 
 function view(
   id: string,
@@ -24,16 +26,13 @@ function view(
   };
 }
 
-function createStore() {
+async function createStore(t: TestContext) {
+  const { conversations, files, chat, file, jobs, events, notifications } = BUILT_IN_VIEWS;
   const registry = new WorkspaceRegistry({
     views: [
-      view(BUILT_IN_VIEWS.conversations, "sidebar"),
-      view(BUILT_IN_VIEWS.files, "sidebar"),
-      view(BUILT_IN_VIEWS.chat, "main"),
-      view(BUILT_IN_VIEWS.file, "main"),
-      view(BUILT_IN_VIEWS.jobs, "main"),
-      view(BUILT_IN_VIEWS.events, "main"),
-      view(BUILT_IN_VIEWS.notifications, "main"),
+      view(conversations, "sidebar"),
+      view(files, "sidebar"),
+      ...[chat, file, jobs, events, notifications].map((id) => view(id, "main")),
     ],
     entries: {},
   });
@@ -41,131 +40,130 @@ function createStore() {
     views: [view("sample:list", "sidebar", "sample"), view("sample:app", "main", "sample")],
     entries: {},
   });
-  return { registry, layout: new WorkspaceLayoutStore(registry) };
+  const tabs = await createTestTabs(t, () => layout.leaveFullWorkspaceView());
+  const layout = new WorkspaceLayoutStore(registry, tabs);
+  return { registry, layout, tabs };
 }
 
-test("the default layout shows the conversation list and the chat", () => {
-  const { layout } = createStore();
+test("the default layout shows the conversation sidebar and the tabs", async (t) => {
+  const { layout } = await createStore(t);
   assert.deepEqual(layout.getSnapshot(), DEFAULT_WORKSPACE_LAYOUT);
   assert.equal(layout.getServerSnapshot(), DEFAULT_WORKSPACE_LAYOUT);
+  assert.equal(layout.getSnapshot().fullWorkspaceViewId, null);
 });
 
-test("toggling the shown sidebar view hides the sidebar; another view shows and switches", () => {
-  const { layout } = createStore();
+test("toggling the current sidebar hides it and another view shows it", async (t) => {
+  const { layout, tabs } = await createStore(t);
+  const original = tabs.getSnapshot().group;
   let notifications = 0;
   layout.subscribe(() => (notifications += 1));
-
   layout.toggleSidebarView(BUILT_IN_VIEWS.conversations);
   assert.equal(layout.getSnapshot().sidebarVisible, false);
-
   layout.toggleSidebarView(BUILT_IN_VIEWS.files);
   assert.equal(layout.getSnapshot().sidebarVisible, true);
   assert.equal(layout.getSnapshot().activeSidebarViewId, BUILT_IN_VIEWS.files);
-
-  layout.toggleSidebarView(BUILT_IN_VIEWS.conversations);
-  assert.equal(layout.getSnapshot().sidebarVisible, true);
-  assert.equal(layout.getSnapshot().activeSidebarViewId, BUILT_IN_VIEWS.conversations);
-
-  layout.setSidebarVisible(false);
-  layout.setSidebarVisible(false);
-  assert.equal(notifications, 4);
-});
-
-test("opening a main view switches it, records the params and navigates to the chat route", () => {
-  const { layout } = createStore();
-  let navigations = 0;
-  layout.setNavigateToChat(() => (navigations += 1));
-
-  layout.openMainView("sample:app", { message: "hi" });
-  const first = layout.getSnapshot().openRequests["sample:app"];
-  assert.equal(layout.getSnapshot().activeMainViewId, "sample:app");
-  assert.deepEqual(first.params, { message: "hi" });
-
-  layout.openMainView("sample:app", { message: "again" });
-  const second = layout.getSnapshot().openRequests["sample:app"];
-  assert.ok(second.sequence > first.sequence);
-  assert.deepEqual(second.params, { message: "again" });
-  assert.equal(navigations, 2);
-});
-
-test("opening Jobs hides the current sidebar", () => {
-  for (const sidebar of [BUILT_IN_VIEWS.conversations, BUILT_IN_VIEWS.files]) {
-    const { layout } = createStore();
-    layout.showSidebarView(sidebar);
-    layout.openMainView(BUILT_IN_VIEWS.jobs);
-
-    assert.equal(layout.getSnapshot().activeMainViewId, BUILT_IN_VIEWS.jobs);
-    assert.equal(layout.getSnapshot().sidebarVisible, false);
-  }
-});
-
-test("selecting a built-in sidebar from Jobs opens its main view", () => {
-  for (const [sidebar, main] of [
-    [BUILT_IN_VIEWS.conversations, BUILT_IN_VIEWS.chat],
-    [BUILT_IN_VIEWS.files, BUILT_IN_VIEWS.file],
-  ]) {
-    const { layout } = createStore();
-    layout.openMainView(BUILT_IN_VIEWS.jobs);
-    layout.toggleSidebarView(sidebar);
-
-    assert.equal(layout.getSnapshot().sidebarVisible, true);
-    assert.equal(layout.getSnapshot().activeSidebarViewId, sidebar);
-    assert.equal(layout.getSnapshot().activeMainViewId, main);
-  }
-});
-
-test("showing the sidebar from Jobs returns to its main view", () => {
-  const { layout } = createStore();
-  layout.showSidebarView(BUILT_IN_VIEWS.files);
-  layout.openMainView(BUILT_IN_VIEWS.jobs);
   layout.setSidebarVisible(true);
+  assert.equal(notifications, 2);
+  assert.equal(tabs.getSnapshot().group, original);
+});
 
+test("Events hides the sidebar and switching to Files returns to the same tabs", async (t) => {
+  const { layout, tabs } = await createStore(t);
+  const original = tabs.getSnapshot().group;
+  layout.openMainView(BUILT_IN_VIEWS.events);
+  assert.equal(layout.getSnapshot().fullWorkspaceViewId, BUILT_IN_VIEWS.events);
+  assert.equal(layout.getSnapshot().sidebarVisible, false);
+  layout.showSidebarView(BUILT_IN_VIEWS.files);
+  assert.equal(layout.getSnapshot().fullWorkspaceViewId, null);
   assert.equal(layout.getSnapshot().sidebarVisible, true);
   assert.equal(layout.getSnapshot().activeSidebarViewId, BUILT_IN_VIEWS.files);
-  assert.equal(layout.getSnapshot().activeMainViewId, BUILT_IN_VIEWS.file);
+  assert.equal(tabs.getSnapshot().group, original);
 });
 
-test("openingEventsOrNotifications_HidesSidebarAndRestoresChatWhenSidebarReturns", () => {
-  for (const main of [BUILT_IN_VIEWS.events, BUILT_IN_VIEWS.notifications]) {
-    const { layout } = createStore();
-
-    layout.openMainView(main);
-    assert.equal(layout.getSnapshot().activeMainViewId, main);
-    assert.equal(layout.getSnapshot().sidebarVisible, false);
-
-    layout.setSidebarVisible(true);
-    assert.equal(layout.getSnapshot().activeMainViewId, BUILT_IN_VIEWS.chat);
-    assert.equal(layout.getSnapshot().sidebarVisible, true);
-  }
+test("leaving full views restores the original sidebar visibility", async (t) => {
+  const { layout, tabs } = await createStore(t);
+  layout.setSidebarVisible(false);
+  layout.openMainView(BUILT_IN_VIEWS.events);
+  layout.openMainView(BUILT_IN_VIEWS.notifications, { notificationId: "n1" });
+  assert.deepEqual(layout.getSnapshot().openRequests[BUILT_IN_VIEWS.notifications]?.params, {
+    notificationId: "n1",
+  });
+  tabs.activate(tabs.getSnapshot().group!.activeTabId!);
+  assert.equal(layout.getSnapshot().fullWorkspaceViewId, null);
+  assert.equal(layout.getSnapshot().sidebarVisible, false);
 });
 
-test("opening Chat or File from Jobs restores the corresponding sidebar", () => {
-  for (const [main, sidebar] of [
-    [BUILT_IN_VIEWS.chat, BUILT_IN_VIEWS.conversations],
-    [BUILT_IN_VIEWS.file, BUILT_IN_VIEWS.files],
-  ]) {
-    const { layout } = createStore();
-    layout.openMainView(BUILT_IN_VIEWS.jobs);
-    layout.openMainView(main);
-
-    assert.equal(layout.getSnapshot().sidebarVisible, true);
-    assert.equal(layout.getSnapshot().activeSidebarViewId, sidebar);
-    assert.equal(layout.getSnapshot().activeMainViewId, main);
-  }
+test("openMainView opens Jobs and extension views as tabs and leaves a full view", async (t) => {
+  const { layout, tabs } = await createStore(t);
+  layout.openMainView(BUILT_IN_VIEWS.events);
+  layout.openMainView(BUILT_IN_VIEWS.jobs);
+  assert.equal(layout.getSnapshot().sidebarVisible, true);
+  layout.openMainView("sample:app", { a: 1 }, { key: "k", title: "K", preview: true });
+  assert.equal(layout.getSnapshot().fullWorkspaceViewId, null);
+  assert.deepEqual(
+    tabs.getSnapshot().group!.tabs.map((tab) => tab.kind),
+    ["chat", "jobs", "extension"],
+  );
+  assert.equal("sample:app" in layout.getSnapshot().openRequests, false);
+  const tab = activeTabOf(tabs.getSnapshot().group);
+  assert.ok(tab?.kind === "extension");
+  assert.deepEqual(tab.params, { a: 1 });
 });
 
-test("unknown views or views in the wrong area are rejected", () => {
-  const { layout } = createStore();
-  assert.throws(() => layout.openMainView("missing:app"), { code: "ERR_UNKNOWN_VIEW" });
+test("unsupported views and built-in options are rejected", async (t) => {
+  const { layout } = await createStore(t);
+  assert.throws(() => layout.openMainView(BUILT_IN_VIEWS.chat), {
+    code: "ERR_UNSUPPORTED_OPERATION",
+  });
+  assert.throws(() => layout.openMainView(BUILT_IN_VIEWS.file), {
+    code: "ERR_UNSUPPORTED_OPERATION",
+  });
+  assert.throws(() => layout.openMainView(BUILT_IN_VIEWS.jobs, {}, { preview: true }), {
+    code: "ERR_INVALID_ARGUMENT",
+  });
   assert.throws(() => layout.openMainView("sample:list"), { code: "ERR_UNKNOWN_VIEW" });
   assert.throws(() => layout.toggleSidebarView("sample:app"), { code: "ERR_UNKNOWN_VIEW" });
 });
 
-test("an unregistered current view falls back to the default built-in view", () => {
-  const { registry, layout } = createStore();
+test("an extension view requested from Settings opens when navigation loads the Project", async (t) => {
+  const { layout, tabs } = await createStore(t);
+  const scope = tabs.getSnapshot().scope!;
+  await tabs.setScope(null);
+  let navigating = false;
+  layout.setNavigateToChat(() => {
+    navigating = true;
+  });
+  const opening = layout.openMainView("sample:app", { name: "from settings" }, { key: "settings" });
+  assert.equal(navigating, true);
+  assert.equal(tabs.getSnapshot().group, null);
+  await tabs.setScope(scope);
+  await opening;
+  const tab = activeTabOf(tabs.getSnapshot().group);
+  assert.ok(tab?.kind === "extension");
+  assert.equal(tab.key, "settings");
+  assert.deepEqual(tab.params, { name: "from settings" });
+});
+
+test("an open requested during a group read belongs to that Project", async (t) => {
+  const { layout, tabs } = await createStore(t);
+  const a = { serverId: "local", projectId: "a" };
+  const b = { serverId: "local", projectId: "b" };
+  const loading = tabs.setScope(a);
+  const opening = layout.openMainView(BUILT_IN_VIEWS.jobs);
+  const rejected = assert.rejects(Promise.resolve(opening), { code: "ERR_CONNECTION_CHANGED" });
+  await Promise.all([loading, tabs.setScope(b), rejected]);
+  assert.deepEqual(
+    tabs.getSnapshot().group?.tabs.map((tab) => tab.kind),
+    ["chat"],
+  );
+});
+
+test("unregistering an extension resets its sidebar and keeps its open tab", async (t) => {
+  const { registry, layout, tabs } = await createStore(t);
   layout.showSidebarView("sample:list");
   layout.openMainView("sample:app");
+  const id = tabs.getSnapshot().group!.activeTabId;
   registry.unregisterExtension("sample");
   assert.equal(layout.getSnapshot().activeSidebarViewId, BUILT_IN_VIEWS.conversations);
-  assert.equal(layout.getSnapshot().activeMainViewId, BUILT_IN_VIEWS.chat);
+  assert.equal(tabs.getSnapshot().group!.activeTabId, id);
 });

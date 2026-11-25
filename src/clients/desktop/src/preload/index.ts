@@ -13,6 +13,7 @@ import type {
   TurnNotificationRequest,
   UninstallRequest,
   UninstallResult,
+  WorkspaceCommand,
 } from "../shared/contracts";
 
 // 主进程交付的 extension 端口转交给宿主页面。Hands extension ports from the main process to the host page.
@@ -36,6 +37,18 @@ const bridge: AgwDesktopBridge = {
     ipcRenderer.invoke("agw:check-for-updates") as Promise<DesktopUpdateCheckResult>,
   saveSettings: (settings: DesktopSettingsUpdate) =>
     ipcRenderer.invoke("agw:save-settings", settings) as Promise<DesktopRuntimeState>,
+  getWorkspaceTabs: (serverId, projectId) =>
+    ipcRenderer.invoke("agw:get-workspace-tabs", serverId, projectId),
+  saveWorkspaceTabs: (serverId, projectId, group) =>
+    ipcRenderer.invoke("agw:save-workspace-tabs", serverId, projectId, group),
+  pruneWorkspaceTabs: (serverId, projectIds) =>
+    ipcRenderer.invoke("agw:prune-workspace-tabs", serverId, projectIds),
+  onWorkspaceCommand: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, command: WorkspaceCommand) =>
+      listener(command);
+    ipcRenderer.on("agw:workspace-command", handler);
+    return () => ipcRenderer.off("agw:workspace-command", handler);
+  },
   getFileViewerDefaults: () => ipcRenderer.invoke("agw:get-file-viewer-defaults"),
   setFileViewerDefault: (fileType, viewerId) =>
     ipcRenderer.invoke("agw:set-file-viewer-default", fileType, viewerId),

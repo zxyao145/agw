@@ -15,6 +15,16 @@ const workspace = {
 };
 const server = { id: "remote-1", name: "Office", kind: "remote" as const };
 
+test("context subscribers receive the empty workspace once when tab metadata changes", () => {
+  const context = new ContextService(app, workspace);
+  const changes: (string | null)[] = [];
+  context.subscribe((snapshot) => changes.push(snapshot.workspace.activeMainViewId));
+  context.setWorkspace({ ...workspace });
+  context.setWorkspace({ ...workspace, activeMainViewId: null });
+  context.setWorkspace({ ...workspace, activeMainViewId: null });
+  assert.deepEqual(changes, [null]);
+});
+
 function selection(projectId: string) {
   return {
     project: { id: projectId, name: projectId, description: null, directories: [] },

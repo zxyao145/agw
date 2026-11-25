@@ -22,17 +22,25 @@ export function getScopePrefix(scope: ConversationComposerScope) {
   return `${STORAGE_KEY_PREFIX}${encodeURIComponent(scope.serverId)}:${encodeURIComponent(scope.projectId)}:`;
 }
 
-// conversationId 为 null 表示尚未发送的新对话。
-// A null conversationId stands for the new conversation that has not been sent yet.
-export function getStorageKey(scope: ConversationComposerScope, conversationId: string | null) {
-  return conversationId === null
-    ? `${getScopePrefix(scope)}new`
-    : `${getScopePrefix(scope)}conversation:${encodeURIComponent(conversationId)}`;
+export type ComposerDraftKey = { conversationId: string } | { draftId: string };
+
+export function keysToClear(scope: ConversationComposerScope, keepDraft?: { draftId: string }) {
+  const prefix = getScopePrefix(scope);
+  const keep = keepDraft && getStorageKey(scope, keepDraft);
+  return (key: string) => key !== keep && key.startsWith(prefix);
+}
+
+export function getStorageKey(scope: ConversationComposerScope, key: ComposerDraftKey) {
+  const suffix =
+    "conversationId" in key
+      ? `conversation:${encodeURIComponent(key.conversationId)}`
+      : `draft:${encodeURIComponent(key.draftId)}`;
+  return getScopePrefix(scope) + suffix;
 }
 
 export const conversationComposerStorage = {
-  get(scope: ConversationComposerScope, conversationId: string | null): ConversationComposerValues {
-    const value = window.localStorage.getItem(getStorageKey(scope, conversationId));
+  get(scope: ConversationComposerScope, key: ComposerDraftKey): ConversationComposerValues {
+    const value = window.localStorage.getItem(getStorageKey(scope, key));
     return value ? (JSON.parse(value) as ConversationComposerValues) : {};
   },
   /**
@@ -41,14 +49,14 @@ export const conversationComposerStorage = {
    */
   set(
     scope: ConversationComposerScope,
-    conversationId: string | null,
+    draftKey: ComposerDraftKey,
     values: ConversationComposerValues,
   ): void {
     const { targetValue, input } = {
-      ...conversationComposerStorage.get(scope, conversationId),
+      ...conversationComposerStorage.get(scope, draftKey),
       ...values,
     };
-    const key = getStorageKey(scope, conversationId);
+    const key = getStorageKey(scope, draftKey);
     if (!targetValue && !input) {
       window.localStorage.removeItem(key);
       return;
@@ -59,18 +67,19 @@ export const conversationComposerStorage = {
       JSON.stringify({ targetValue: targetValue || undefined, input: input || undefined }),
     );
   },
-  remove(scope: ConversationComposerScope, conversationId: string | null): void {
-    window.localStorage.removeItem(getStorageKey(scope, conversationId));
+  remove(scope: ConversationComposerScope, key: ComposerDraftKey): void {
+    window.localStorage.removeItem(getStorageKey(scope, key));
   },
-  /**
-   * 删除项目内所有已有对话的记录，保留新对话的记录。
-   * Removes the entries of every existing conversation in the project and keeps the new conversation's entry.
-   */
-  removeConversations(scope: ConversationComposerScope): void {
-    const prefix = `${getScopePrefix(scope)}conversation:`;
+  move(scope: ConversationComposerScope, from: ComposerDraftKey, to: ComposerDraftKey): void {
+    conversationComposerStorage.set(scope, to, conversationComposerStorage.get(scope, from));
+    if (getStorageKey(scope, from) !== getStorageKey(scope, to))
+      conversationComposerStorage.remove(scope, from);
+  },
+  removeConversations(scope: ConversationComposerScope, keepDraft?: { draftId: string }): void {
+    const remove = keysToClear(scope, keepDraft);
     for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
       const key = window.localStorage.key(index);
-      if (key?.startsWith(prefix)) {
+      if (key !== null && remove(key)) {
         window.localStorage.removeItem(key);
       }
     }

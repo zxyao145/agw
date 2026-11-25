@@ -1,4 +1,6 @@
+import { conversationComposerStorage, conversationImageDrafts } from "@agw/chat";
 import { chatHttpClient } from "@agw/chat-runtime";
+import { toast } from "sonner";
 import type {
   AgwDesktopBridge,
   ExtensionEvent,
@@ -25,12 +27,15 @@ import {
   type FileViewerFile,
   type FileViewerParams,
   type HostContext,
+  type OpenFileOptions,
   normalizeFloatingChatContext,
 } from "@agw/extension-sdk";
 import { DEFAULT_THEME_ID } from "@desktop/shared/appearance";
 import { extensionDisplayName } from "@desktop/shared/extension-manifest";
 import { parseHostPermissions } from "@desktop/shared/extension-host-permissions";
+import { sameWorkspaceTabScope } from "@desktop/shared/contracts/workspace-tabs";
 import { DEFAULT_THEME_TITLE } from "../appearance/resolve-theme";
+import { SourceDocuments } from "../source/source-documents";
 import { A2AService } from "./a2a-service";
 import {
   CloudAccessGrants,
@@ -47,10 +52,19 @@ import {
   type HostTheme,
   type ImagePreviewRequest,
   type MessageBoxRequest,
+  workspaceViewParams,
 } from "./extension-bridge-broker";
 import { ExecutionService, type SessionOwner } from "./execution-service";
-import { BUILT_IN_VIEWS, isBuiltInViewId } from "./workspace-ids";
+import {
+  BUILT_IN_VIEWS,
+  isBuiltInViewId,
+  settingsExtensionId,
+  settingsInstanceKey,
+  tabIdOfInstance,
+} from "./workspace-ids";
 import { WorkspaceLayoutStore } from "./workspace-layout-store";
+import { activeViewIdOf } from "./workspace-tab";
+import { activeTabOf, WorkspaceTabsStore, type TabGroupScope } from "./workspace-tabs-store";
 import { type WorkspaceView, WorkspaceRegistry } from "./workspace-registry";
 
 export const HANDSHAKE_TIMEOUT_MS = 15_000;
@@ -76,6 +90,7 @@ export type BlockedRequest = { url: string; resourceType: string; reason: string
 
 export type HostFrameState = {
   frameId: string;
+  instanceKey: string;
   instanceId: string;
   extensionId: string;
   kind: ExtensionFrameKind;
@@ -103,9 +118,6 @@ type PendingMessageBox = {
   reject(error: Error): void;
 };
 
-/** 文件视图打开文件的位置。Where the Files view opens a file. */
-export type FileOpenLocation = { directoryId: string | null; path: string };
-
 export type ExtensionHostSnapshot = {
   started: boolean;
   safeMode: ExtensionSafeModeState | null;
@@ -113,12 +125,13 @@ export type ExtensionHostSnapshot = {
   recoveryNotices: readonly ExtensionRecoveryNotice[];
   extensions: readonly ExtensionState[];
   /** 握手失败、崩溃或失去响应的视图。Views whose handshake failed, crashed or hung. */
-  viewErrors: Readonly<Record<string, ExtensionFailure>>;
+  instanceErrors: Readonly<Record<string, ExtensionFailure>>;
   /** 有未保存修改的文件查看器。File viewers with unsaved changes. */
-  unsavedViewIds: readonly string[];
-  /** 文件查看器报告的保存状态，按视图 id 记录。The save statuses file viewers reported, by view id. */
+  unsavedInstanceKeys: readonly string[];
+  unsavedSourceTabIds: readonly string[];
+  /** 各个查看器实例的保存状态。Save status by viewer instance. */
   saveStatuses: Readonly<Record<string, DocumentSaveStatus>>;
-  /** 文件查看器设置的文件标题栏条目，按视图 id 记录。The file header items file viewers set, by view id. */
+  /** 各个查看器实例的文件标题栏条目。File header items by viewer instance. */
   fileHeaderItems: Readonly<Record<string, readonly FileHeaderItem[]>>;
   /** 视图请求的图片预览（`ui.previewImage`）；没有时为 null。The image preview a view requested (`ui.previewImage`), or null. */
   imagePreview: ExtensionImagePreview | null;
@@ -131,6 +144,16 @@ export type FloatingChatSnapshot = {
   context: Record<string, string>;
   ownerFrameId: string | null;
   ownerPageId: string | null;
+};
+
+type FullViewFloatingChat = {
+  scope: TabGroupScope;
+  contextScope: { serverId: string; projectId: string | null };
+  tabId: string | null;
+  instanceKey: string;
+  sidebarViewId: string | null;
+  buttonOwner: string;
+  chat: FloatingChatSnapshot;
 };
 
 /** 宿主显示的图片预览；`src` 为宿主页面中的 Blob URL。An image preview the host shows; `src` is a Blob URL in the host page. */
@@ -177,6 +200,9 @@ function deferred(): Deferred {
 
 type HostFrame = {
   frameId: string;
+  instanceKey: string;
+  tabId: string | null;
+  releaseWhenClean: boolean;
   extensionId: string;
   instanceId: string;
   manifestId: string;
@@ -210,6 +236,11 @@ type ExtensionRecord = {
   activation: AbortController | null;
   storageUri: string | null;
   registered: boolean;
+};
+
+type FramePage = Pick<HostFrame, "extensionId" | "kind" | "viewId" | "params"> & {
+  entry: string | null;
+  instanceKey?: string;
 };
 
 export type ExtensionHostOptions = {
@@ -283,6 +314,8 @@ function afterNextPaint(): Promise<void> {
 export class ExtensionHost {
   public readonly hostInstanceId = crypto.randomUUID();
   public readonly registry: WorkspaceRegistry;
+  public readonly tabs: WorkspaceTabsStore;
+  public readonly sourceDocuments = new SourceDocuments((tabId) => this.recordTabScope(tabId));
   public readonly layout: WorkspaceLayoutStore;
   public readonly context: ContextService;
   public readonly cloudGrants = new CloudAccessGrants();
@@ -297,10 +330,14 @@ export class ExtensionHost {
   private recoveryNotices: ExtensionRecoveryNotice[] = [];
   private readonly records = new Map<string, ExtensionRecord>();
   private readonly frames = new Map<string, HostFrame>();
-  private readonly viewFrames = new Map<string, HostFrame>();
-  private readonly viewHolds = new Map<string, number>();
-  private readonly viewReleaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private readonly viewErrors = new Map<string, ExtensionFailure>();
+  private readonly instanceFrames = new Map<string, HostFrame>();
+  private readonly instanceHolds = new Map<string, { count: number; viewId: string }>();
+  private readonly instanceReleaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly instanceErrors = new Map<
+    string,
+    { failure: ExtensionFailure; extensionId: string }
+  >();
+  private readonly tabScopes = new Map<string, TabGroupScope>();
   private readonly pendingLayout = new Map<
     string,
     { bounds: ExtensionFrameBounds; visible: boolean }
@@ -315,20 +352,15 @@ export class ExtensionHost {
     style: null,
   };
   private themeBackground = "#ffffff";
-  private composer: { insertText(text: string): void } | null = null;
+  private readonly composers: { insertText(text: string): void }[] = [];
   private serverVersionMismatchHandler: () => void = () => undefined;
   private refreshConversations: ((projectId: string) => void) | null = null;
-  private fileOpener: ((location: FileOpenLocation) => Promise<boolean>) | null = null;
   private fileWriteListener: ((location: FileWriteLocation) => void) | null = null;
-  /** 文件查看器当前显示的文件，按视图 id 记录。The file each file viewer shows, by view id. */
+  /** 各个查看器实例显示的文件。The file shown by each viewer instance. */
   private readonly fileViewerFiles = new Map<string, FileViewerFile>();
-  /** 当前仍有文件查看器贡献的视图。Views that still have a file viewer contribution. */
-  private readonly retainedFileViewerIds = new Set<string>();
-  private fileViewerRetentionInitialized = false;
   /** 报告了未保存修改的 frame。Frames that reported unsaved changes. */
   private readonly unsavedFrames = new Set<string>();
-  /** 宿主 Source 中有未保存修改的文件名；没有时为 null。The file with unsaved changes in the host's Source, or null. */
-  private sourceUnsavedFile: string | null = null;
+  private readonly unsavedSources = new Map<string, string>();
   private readonly cloud: CloudFileSystem;
   /** frame 报告的保存状态：frameId → 状态。Save statuses frames reported: frameId → status. */
   private readonly saveStatuses = new Map<string, DocumentSaveStatus>();
@@ -341,6 +373,8 @@ export class ExtensionHost {
   private imagePreview: PendingImagePreview | null = null;
   private nextImagePreviewId = 1;
   private floatingChat: FloatingChatSnapshot | null = null;
+  private fullViewFloatingChat: FullViewFloatingChat | null = null;
+  private showingFullWorkspace = false;
   private sourceFloatingChatContext: Record<string, string> | null = null;
   private floatingChatButtonObscured = false;
   private readonly floatingChatContexts = new Map<string, Record<string, string>>();
@@ -356,8 +390,9 @@ export class ExtensionHost {
     serverSyncError: null,
     recoveryNotices: [],
     extensions: [],
-    viewErrors: {},
-    unsavedViewIds: [],
+    instanceErrors: {},
+    unsavedInstanceKeys: [],
+    unsavedSourceTabIds: [],
     saveStatuses: {},
     fileHeaderItems: {},
     imagePreview: null,
@@ -367,6 +402,10 @@ export class ExtensionHost {
 
   public constructor(private readonly options: ExtensionHostOptions) {
     this.desktopBridge = options.bridge;
+    const reportWorkspaceError = (message: string, error: unknown) => {
+      console.error(message, error);
+      toast.error(`${message}: ${error instanceof Error ? error.message : String(error)}`);
+    };
     this.registry = new WorkspaceRegistry({
       views: [
         builtInView(BUILT_IN_VIEWS.conversations, "sidebar", "Conversations", "MessagesSquare"),
@@ -422,9 +461,38 @@ export class ExtensionHost {
         ],
       },
     });
-    this.layout = new WorkspaceLayoutStore(this.registry);
+    this.tabs = new WorkspaceTabsStore({
+      bridge: {
+        getWorkspaceTabs: (serverId, projectId) =>
+          this.bridge.getWorkspaceTabs(serverId, projectId),
+        saveWorkspaceTabs: (serverId, projectId, group) =>
+          this.bridge.saveWorkspaceTabs(serverId, projectId, group),
+      },
+      resources: {
+        confirmDiscard: (tabIds) => this.confirmDiscardUnsaved({ tabIds }),
+        release: (tabIds, keepUnsaved) => this.releaseTabs(tabIds, keepUnsaved),
+        discardDrafts: (scope, ids) => {
+          for (const draftId of ids) {
+            conversationComposerStorage.remove(scope, { draftId });
+            void conversationImageDrafts
+              .remove(scope, { draftId })
+              .catch((error: unknown) =>
+                reportWorkspaceError("Unable to remove draft images", error),
+              );
+          }
+        },
+      },
+      reportError: reportWorkspaceError,
+      onActivate: () => this.layout.leaveFullWorkspaceView(),
+    });
+    this.layout = new WorkspaceLayoutStore(this.registry, this.tabs);
     this.context = new ContextService(options.app, this.workspaceState());
-    this.layout.subscribe(() => this.context.setWorkspace(this.workspaceState()));
+    const workspaceChanged = () => {
+      this.updateFullViewFloatingChat();
+      this.context.setWorkspace(this.workspaceState());
+    };
+    this.layout.subscribe(workspaceChanged);
+    this.tabs.subscribe(workspaceChanged);
     this.context.onConnectionChanged(() => this.cloudGrants.clear());
     this.context.onConnectionChanged(() => this.clearFloatingChat());
     this.context.onConnectionChanged(() => this.markServerExtensionsUnavailableLocally());
@@ -433,6 +501,7 @@ export class ExtensionHost {
         scope.projectId !== (context.project?.id ?? null) || scope.serverId !== context.server.id;
       if (
         (this.floatingChatScope && scopeChanged(this.floatingChatScope)) ||
+        (this.fullViewFloatingChat && scopeChanged(this.fullViewFloatingChat.contextScope)) ||
         [...this.floatingChatContextScopes.values()].some(scopeChanged)
       ) {
         this.clearFloatingChat();
@@ -463,9 +532,10 @@ export class ExtensionHost {
       theme: () => this.theme,
       isFrameClosing: (frameId) => this.frames.get(frameId)?.closing !== null,
       insertComposerText: (text) => {
-        if (!this.composer)
-          throw createExtensionError("ERR_UNAVAILABLE", "The chat composer is not available.");
-        this.composer.insertText(text);
+        const composer = this.composers.at(-1);
+        if (!composer)
+          throw createExtensionError("ERR_UNAVAILABLE", "No chat composer is visible.");
+        composer.insertText(text);
       },
       notify: (extensionId, notification) =>
         options.notify(
@@ -476,7 +546,8 @@ export class ExtensionHost {
         const frame = this.frames.get(frameId);
         if (frame && frame.pageId === pageId) frame.lastPong = Date.now();
       },
-      openFile: (extensionId, uri) => this.openFile(extensionId, uri),
+      openFile: (extensionId, uri, options, checkCaller) =>
+        this.openFile(extensionId, uri, options, checkCaller),
       setUnsavedChanges: (frameId, pageId, unsaved) => {
         const frame = this.frames.get(frameId);
         if (frame?.kind === "fileViewer" && frame.pageId === pageId && frame.closing === null) {
@@ -644,13 +715,8 @@ export class ExtensionHost {
   /** 停用 → 主进程重新校验 → 权限没有新增时重新激活。Deactivate, revalidate in main, reactivate unless grants grew. */
   public async reload(extensionId: string): Promise<void> {
     await this.deactivate(extensionId);
-    for (const viewId of this.viewErrors.keys()) {
-      if (
-        this.registry.view(viewId)?.extensionId === extensionId ||
-        viewId.startsWith(`${extensionId}:`)
-      ) {
-        this.viewErrors.delete(viewId);
-      }
+    for (const [key, error] of this.instanceErrors) {
+      if (error.extensionId === extensionId) this.instanceErrors.delete(key);
     }
     await this.bridge.reloadExtension(extensionId);
     await this.refreshList();
@@ -690,12 +756,18 @@ export class ExtensionHost {
     this.publish();
   }
 
-  public setComposer(composer: { insertText(text: string): void } | null): void {
-    this.composer = composer;
+  public registerComposer(composer: { insertText(text: string): void }): () => void {
+    const registration = { insertText: (text: string) => composer.insertText(text) };
+    this.composers.push(registration);
+    return () => {
+      const index = this.composers.indexOf(registration);
+      if (index !== -1) this.composers.splice(index, 1);
+    };
   }
 
   public openSourceFloatingChat(context: Record<string, string>): void {
     this.requireFloatingChatWorkspace();
+    this.fullViewFloatingChat = null;
     this.floatingChat = {
       open: true,
       context: normalizeFloatingChatContext(context),
@@ -724,8 +796,13 @@ export class ExtensionHost {
   }
 
   public closeFloatingChat(): void {
-    if (!this.floatingChat?.open) return;
-    this.floatingChat = { ...this.floatingChat, open: false };
+    const full = this.fullViewFloatingChat;
+    if (!full?.chat.open && !this.floatingChat?.open) return;
+    if (full) {
+      if (this.showingFullWorkspace) full.chat = { ...full.chat, open: false };
+      else this.fullViewFloatingChat = null;
+    }
+    if (this.floatingChat?.open) this.floatingChat = { ...this.floatingChat, open: false };
     this.publish();
   }
 
@@ -739,25 +816,38 @@ export class ExtensionHost {
   }
 
   public openFloatingChatButton(owner: string): void {
-    const button = this.windowFloatingChatButton();
-    if (button?.owner !== owner || button.obscured) return;
-    if (owner === "source") {
-      this.openSourceFloatingChat(this.sourceFloatingChatContext!);
+    if (this.floatingChatButtonObscured) return;
+    if (this.showingFullWorkspace) {
+      const full = this.fullViewFloatingChat;
+      if (full?.buttonOwner === owner) {
+        full.chat = { ...full.chat, open: true };
+        this.publish();
+      }
       return;
     }
-    const frame = [...this.frames.values()].find(
-      (item) => item.pageId && this.floatingChatOwnerKey(item.frameId, item.pageId) === owner,
-    );
-    if (!frame?.pageId) throw createExtensionError("ERR_FRAME_GONE", "The Chat view is gone.");
+    const offer = this.offeredFloatingChat();
+    if (offer?.owner !== owner) return;
+    const frame = offer.frame;
+    if (frame === null) {
+      this.openSourceFloatingChat(offer.context);
+      return;
+    }
     this.openExtensionFloatingChat(
-      { extensionId: frame.extensionId, frameId: frame.frameId, pageId: frame.pageId },
-      this.floatingChatContexts.get(owner)!,
+      { extensionId: frame.extensionId, frameId: frame.frameId, pageId: frame.pageId! },
+      offer.context,
     );
   }
 
   private windowFloatingChatButton(): { owner: string; obscured: boolean } | null {
+    const owner = this.showingFullWorkspace
+      ? this.fullViewFloatingChat?.buttonOwner
+      : this.offeredFloatingChat()?.owner;
+    return owner ? { owner, obscured: this.floatingChatButtonObscured } : null;
+  }
+
+  private offeredFloatingChat() {
     if (this.sourceFloatingChatContext) {
-      return { owner: "source", obscured: this.floatingChatButtonObscured };
+      return { owner: "source", frame: null, context: this.sourceFloatingChatContext };
     }
     const frames = [...this.frames.values()].filter(
       (frame) =>
@@ -767,12 +857,76 @@ export class ExtensionHost {
         this.floatingChatContexts.has(this.floatingChatOwnerKey(frame.frameId, frame.pageId)),
     );
     const frame = frames.find((item) => item.kind !== "sidebarView") ?? frames[0];
-    return frame?.pageId
-      ? {
-          owner: this.floatingChatOwnerKey(frame.frameId, frame.pageId),
-          obscured: this.floatingChatButtonObscured,
-        }
-      : null;
+    if (!frame?.pageId) return null;
+    const owner = this.floatingChatOwnerKey(frame.frameId, frame.pageId);
+    return { owner, frame, context: this.floatingChatContexts.get(owner)! };
+  }
+
+  private updateFullViewFloatingChat(): void {
+    const layout = this.layout.getSnapshot();
+    const full = layout.fullWorkspaceViewId !== null;
+    const { group, scope } = this.tabs.getSnapshot();
+    const previous = this.fullViewFloatingChat;
+    const changedTab =
+      previous && (previous.scope !== scope || previous.tabId !== group?.activeTabId);
+    const changedSidebar =
+      !full &&
+      previous?.sidebarViewId &&
+      (!layout.sidebarVisible || previous.sidebarViewId !== layout.activeSidebarViewId);
+    if (changedTab || changedSidebar) this.fullViewFloatingChat = null;
+    if (this.showingFullWorkspace === full && this.fullViewFloatingChat === previous) return;
+    if (full && !this.showingFullWorkspace && group && scope) {
+      this.fullViewFloatingChat ??= this.captureFullViewChat(scope, group.activeTabId);
+      if (this.floatingChat?.open) this.floatingChat = { ...this.floatingChat, open: false };
+    }
+    const returningToChat = !full && activeTabOf(group)?.kind === "chat";
+    if (returningToChat || (!full && !this.fullViewFloatingChat?.chat.open))
+      this.fullViewFloatingChat = null;
+    this.showingFullWorkspace = full;
+    this.publish();
+  }
+
+  private captureFullViewChat(
+    scope: TabGroupScope,
+    tabId: string | null,
+  ): FullViewFloatingChat | null {
+    const open = this.floatingChat?.open ? this.floatingChat : null;
+    const offered = this.offeredFloatingChat();
+    const ownerFrameId = open ? open.ownerFrameId : offered?.frame?.frameId;
+    const frame = ownerFrameId ? this.frames.get(ownerFrameId) : null;
+    const context = open?.context ?? offered?.context;
+    if (!context) return null;
+    return {
+      scope,
+      tabId,
+      contextScope: this.currentFloatingChatScope(),
+      instanceKey: frame?.instanceKey ?? "source",
+      sidebarViewId: frame?.kind === "sidebarView" ? frame.viewId : null,
+      buttonOwner: crypto.randomUUID(),
+      chat: { open: open !== null, context: { ...context }, ownerFrameId: null, ownerPageId: null },
+    };
+  }
+
+  private resumeFloatingChatOwner(): void {
+    const previous = this.fullViewFloatingChat;
+    if (this.showingFullWorkspace || !previous) return;
+    const frame = this.instanceFrames.get(previous.instanceKey);
+    let context = this.sourceFloatingChatContext;
+    if (previous.instanceKey !== "source") {
+      if (!frame?.shown || frame.closing || !frame.pageId) return;
+      context =
+        this.floatingChatContexts.get(this.floatingChatOwnerKey(frame.frameId, frame.pageId)) ??
+        null;
+    }
+    if (context === null) return;
+    this.floatingChat = {
+      ...previous.chat,
+      context: Object.keys(context).length ? context : previous.chat.context,
+      ownerFrameId: frame?.frameId ?? null,
+      ownerPageId: frame?.pageId ?? null,
+    };
+    this.floatingChatScope = this.currentFloatingChatScope();
+    this.fullViewFloatingChat = null;
   }
 
   private registerExtensionFloatingChat(
@@ -813,6 +967,7 @@ export class ExtensionHost {
   private openExtensionFloatingChat(owner: SessionOwner, context: Record<string, string>): void {
     this.assertFloatingChatOwner(owner);
     this.requireFloatingChatWorkspace();
+    this.fullViewFloatingChat = null;
     const ownerKey = this.floatingChatOwnerKey(owner.frameId, owner.pageId);
     if (!this.floatingChatContexts.has(ownerKey)) {
       throw createExtensionError("ERR_UNAVAILABLE", "Create the floating Chat component first.");
@@ -862,7 +1017,9 @@ export class ExtensionHost {
   }
 
   private requireFloatingChatWorkspace(): void {
-    if (!this.composer) {
+    if (this.showingFullWorkspace)
+      throw createExtensionError("ERR_UNAVAILABLE", "The Chat view is hidden.");
+    if (!this.tabs.getSnapshot().group) {
       throw createExtensionError("ERR_UNAVAILABLE", "The Chat workspace is not available.");
     }
   }
@@ -912,6 +1069,7 @@ export class ExtensionHost {
   }
 
   private clearFloatingChat(): void {
+    this.fullViewFloatingChat = null;
     this.sourceFloatingChatContext = null;
     this.floatingChat = null;
     this.floatingChatScope = null;
@@ -935,10 +1093,13 @@ export class ExtensionHost {
   }
 
   /** 贡献点被点击：打开视图或在 background 中执行命令。Runs a contribution: open a view or execute a background command. */
-  public runAction(extensionId: string | null, action: ExtensionAction, args: unknown): void {
+  public async runAction(
+    extensionId: string | null,
+    action: ExtensionAction,
+    args: unknown,
+  ): Promise<void> {
     if (action.type === "openMainView") {
-      this.layout.openMainView(action.view, args);
-      return;
+      return this.layout.openMainView(action.view, workspaceViewParams(args));
     }
     if (action.type === "toggleSidebarView") {
       this.layout.toggleSidebarView(action.view);
@@ -956,7 +1117,7 @@ export class ExtensionHost {
       : Promise.reject(
           createExtensionError("ERR_FRAME_GONE", "The extension has no running background."),
         );
-    run.catch((error: unknown) => {
+    await run.catch((error: unknown) => {
       console.error(`[extension ${extensionId}] Command ${action.command} failed.`, error);
       this.options.notify(name, { type: "error", message: "Command failed" });
     });
@@ -970,27 +1131,33 @@ export class ExtensionHost {
     }
   }
 
-  /** Desktop 工作区提供的打开文件函数；返回 false 表示用户取消。The workspace's file opener; false means the user canceled. */
-  public setFileOpener(opener: ((location: FileOpenLocation) => Promise<boolean>) | null): void {
-    this.fileOpener = opener;
-  }
-
   /**
    * 文件视图把文件交给文件查看器：授予读取权限；frame 已加载且文件变化时发送 `view.onShow`。
    * The Files view hands a file to a viewer: grants read access, and sends `view.onShow` when a loaded frame gets
    * another file.
    */
-  public setFileViewerFile(viewId: string, file: FileViewerFile): void {
+  public setFileViewerFile(instanceKey: string, viewId: string, file: FileViewerFile): void {
     const view = this.registry.view(viewId);
     if (view?.location !== "file" || view.extensionId === null) return;
+    const { group, scope } = this.tabs.getSnapshot();
+    const tabId = tabIdOfInstance(instanceKey);
+    if (
+      !scope ||
+      scope.projectId !== file.projectId ||
+      !group?.tabs.some((tab) => tab.id === tabId && tab.kind === "file")
+    )
+      return;
+    const location = parseCloudUri(file.uri);
+    if (!sameWorkspaceTabScope(scope, location)) return;
+    const frame = this.instanceFrames.get(instanceKey);
+    const sameFile = this.fileViewerFiles.get(instanceKey)?.uri === file.uri;
+    if (!sameFile && frame && this.unsavedFrames.has(frame.frameId)) return;
     this.grantCloudRead(view.extensionId, file.uri, false);
-    if (this.fileViewerFiles.get(viewId)?.uri === file.uri) return;
-    this.fileViewerFiles.set(viewId, file);
-    const frame = this.viewFrames.get(viewId);
+    if (sameFile) return;
+    this.fileViewerFiles.set(instanceKey, file);
     if (!frame || frame.closing !== null) return;
     const params: FileViewerParams = { file };
     frame.params = params;
-    this.setUnsaved(frame.frameId, false);
     this.setSaveStatus(frame.frameId, null);
     if (frame.loaded) {
       void this.broker.call(frame.frameId, "view.onShow", { params }).catch((error: unknown) => {
@@ -999,69 +1166,143 @@ export class ExtensionHost {
     }
   }
 
-  /** 只保留匹配当前文件的文件查看器，其余关闭。Keeps the file viewers matching the current file and closes the rest. */
-  public retainFileViewers(viewIds: readonly string[]): void {
-    this.fileViewerRetentionInitialized = true;
-    this.retainedFileViewerIds.clear();
-    for (const viewId of viewIds) this.retainedFileViewerIds.add(viewId);
+  private recordTabScope(tabId: string): void {
+    const { scope, group } = this.tabs.getSnapshot();
+    if (scope && group?.tabs.some((tab) => tab.id === tabId)) this.tabScopes.set(tabId, scope);
+  }
 
-    for (const [viewId, frame] of this.viewFrames) {
-      if (
-        frame.kind === "fileViewer" &&
-        !this.retainedFileViewerIds.has(viewId) &&
-        !this.unsavedFrames.has(frame.frameId)
-      ) {
+  private releaseTabs(tabIds: readonly string[], keepUnsaved: boolean): void {
+    const ids = new Set(tabIds);
+    const retained = new Set<string>();
+    for (const key of this.instanceHolds.keys()) {
+      const id = tabIdOfInstance(key);
+      if (id !== null && ids.has(id)) this.instanceHolds.delete(key);
+    }
+    for (const frame of this.instanceFrames.values()) {
+      if (frame.tabId === null || !ids.has(frame.tabId)) continue;
+      if (keepUnsaved && this.unsavedFrames.has(frame.frameId)) {
+        retained.add(frame.tabId);
+        frame.releaseWhenClean = true;
+        void this.hideView(frame.instanceKey);
+      } else {
         void this.closeFrame(frame, "frame-unloaded", true);
       }
     }
-    for (const viewId of this.fileViewerFiles.keys()) {
-      const frame = this.viewFrames.get(viewId);
+    for (const key of this.fileViewerFiles.keys()) {
+      const id = tabIdOfInstance(key);
+      const frame = this.instanceFrames.get(key);
       if (
-        !this.retainedFileViewerIds.has(viewId) &&
-        (!frame || !this.unsavedFrames.has(frame.frameId))
-      ) {
-        this.fileViewerFiles.delete(viewId);
-      }
+        id !== null &&
+        ids.has(id) &&
+        !(keepUnsaved && frame && this.unsavedFrames.has(frame.frameId))
+      )
+        this.fileViewerFiles.delete(key);
     }
+    for (const key of this.instanceErrors.keys()) {
+      const id = tabIdOfInstance(key);
+      if (id !== null && ids.has(id)) this.instanceErrors.delete(key);
+    }
+    for (const id of ids) {
+      if (!keepUnsaved || !this.unsavedSources.has(id))
+        this.sourceDocuments.release(id, keepUnsaved);
+      if (!keepUnsaved) this.unsavedSources.delete(id);
+      if (!retained.has(id) && !this.unsavedSources.has(id)) this.tabScopes.delete(id);
+    }
+    this.publish();
+  }
+
+  private tabIdsForScope(scope: TabGroupScope): string[] {
+    return [...this.tabScopes].flatMap(([id, owner]) =>
+      sameWorkspaceTabScope(owner, scope) ? [id] : [],
+    );
+  }
+
+  public confirmDiscardScope(scope: TabGroupScope): Promise<boolean> {
+    return this.confirmDiscardUnsaved({ tabIds: this.tabIdsForScope(scope) });
+  }
+
+  public releaseScope(scope: TabGroupScope): void {
+    if (sameWorkspaceTabScope(this.fullViewFloatingChat?.scope, scope))
+      this.fullViewFloatingChat = null;
+    this.releaseTabs(this.tabIdsForScope(scope), false);
   }
 
   public hasUnsavedChanges(): boolean {
-    return this.unsavedFrames.size > 0 || this.sourceUnsavedFile !== null;
+    return this.unsavedFrames.size > 0 || this.unsavedSources.size > 0;
   }
 
   /**
    * 宿主 Source 的未保存文件（设计文档 5.5 节），null 表示没有未保存修改。
    * The unsaved file of the host's Source (design section 5.5); null means no unsaved changes.
    */
-  public setSourceUnsaved(fileName: string | null): void {
-    this.sourceUnsavedFile = fileName;
+  public setSourceUnsaved(tabId: string, fileName: string | null): void {
+    if ((this.unsavedSources.get(tabId) ?? null) === fileName) return;
+    if (fileName === null) {
+      this.unsavedSources.delete(tabId);
+      const document = this.sourceDocuments.get(tabId);
+      if (document)
+        queueMicrotask(() => {
+          if (
+            this.sourceDocuments.get(tabId) === document &&
+            !this.tabs.getSnapshot().group?.tabs.some((tab) => tab.id === tabId)
+          ) {
+            this.sourceDocuments.release(tabId, true);
+            this.forgetUnusedScope(tabId);
+          }
+        });
+    } else {
+      this.recordTabScope(tabId);
+      this.unsavedSources.set(tabId, fileName);
+      this.pinIfCurrent(tabId);
+    }
+    this.publish();
   }
 
-  /**
-   * 存在未保存修改时由用户确认放弃；传入 `viewIds` 时只考虑这些 extension 视图，不包括 Source。
-   * Asks the user to discard unsaved changes when there are any; with `viewIds`, only those extension views count and
-   * Source is left out.
-   */
-  public confirmDiscardUnsaved(viewIds?: readonly string[]): Promise<boolean> {
+  private pinIfCurrent(tabId: string): void {
+    if (this.tabs.getSnapshot().group?.tabs.some((tab) => tab.id === tabId && tab.preview))
+      this.tabs.pin(tabId);
+  }
+
+  private forgetUnusedScope(tabId: string): void {
+    if (
+      !this.sourceDocuments.get(tabId) &&
+      !this.unsavedSources.has(tabId) &&
+      ![...this.instanceFrames.values()].some((frame) => frame.tabId === tabId && !frame.closing)
+    )
+      this.tabScopes.delete(tabId);
+  }
+
+  public confirmDiscardUnsaved(
+    scope?: { tabIds: readonly string[] } | { instanceKeys: readonly string[] },
+  ): Promise<boolean> {
     const items: UnsavedFileItem[] = [...this.unsavedFrames].flatMap((frameId) => {
       const frame = this.frames.get(frameId);
       const view = frame?.viewId ? this.registry.view(frame.viewId) : undefined;
-      if (!frame || !view || (viewIds !== undefined && !viewIds.includes(view.id))) return [];
+      if (
+        !frame ||
+        frame.closing ||
+        (scope &&
+          ("tabIds" in scope
+            ? !frame.tabId || !scope.tabIds.includes(frame.tabId)
+            : !scope.instanceKeys.includes(frame.instanceKey)))
+      )
+        return [];
       return [
         {
           fileName: (frame.params as FileViewerParams).file.name,
-          viewerTitle: view.title,
+          viewerTitle: view?.title ?? frame.viewId!,
           origin: {
             kind: "extension" as const,
             extensionId: frame.extensionId,
-            extensionName: view.extensionName ?? frame.extensionId,
+            extensionName: view?.extensionName ?? frame.extensionId,
           },
         },
       ];
     });
-    if (viewIds === undefined && this.sourceUnsavedFile !== null) {
+    for (const [tabId, fileName] of this.unsavedSources) {
+      if (scope && (!("tabIds" in scope) || !scope.tabIds.includes(tabId))) continue;
       items.push({
-        fileName: this.sourceUnsavedFile,
+        fileName,
         viewerTitle: "Source",
         origin: { kind: "host" },
       });
@@ -1156,56 +1397,58 @@ export class ExtensionHost {
       if (this.workspaceHolds > 0) return;
       this.workspaceReleaseTimer = setTimeout(() => {
         this.workspaceReleaseTimer = null;
-        for (const frame of this.viewFrames.values()) {
+        this.clearFloatingChat();
+        for (const frame of this.instanceFrames.values()) {
           if (frame.kind !== "settings") void this.closeFrame(frame, "frame-unloaded", true);
         }
+        this.sourceDocuments.dispose();
       }, 0);
     };
   }
 
   /** 视图占位组件挂载。A view slot mounted. */
-  public acquireView(viewId: string): () => void {
-    this.viewHolds.set(viewId, (this.viewHolds.get(viewId) ?? 0) + 1);
-    const timer = this.viewReleaseTimers.get(viewId);
+  public acquireView(instanceKey: string, viewId: string): () => void {
+    const hold = this.instanceHolds.get(instanceKey) ?? { count: 0, viewId };
+    hold.count += 1;
+    this.instanceHolds.set(instanceKey, hold);
+    const timer = this.instanceReleaseTimers.get(instanceKey);
     if (timer !== undefined) {
       clearTimeout(timer);
-      this.viewReleaseTimers.delete(viewId);
+      this.instanceReleaseTimers.delete(instanceKey);
     }
-    if (this.viewHolds.get(viewId) === 1) void this.showView(viewId);
+    if (hold.count === 1) void this.showView(instanceKey, viewId);
     return () => {
-      const holds = (this.viewHolds.get(viewId) ?? 1) - 1;
-      if (holds > 0) {
-        this.viewHolds.set(viewId, holds);
-        return;
-      }
-      this.viewHolds.delete(viewId);
-      this.viewReleaseTimers.set(
-        viewId,
+      if (this.instanceHolds.get(instanceKey) !== hold || --hold.count > 0) return;
+      this.instanceHolds.delete(instanceKey);
+      this.instanceReleaseTimers.set(
+        instanceKey,
         setTimeout(() => {
-          this.viewReleaseTimers.delete(viewId);
-          void this.hideView(viewId);
+          this.instanceReleaseTimers.delete(instanceKey);
+          void this.hideView(instanceKey);
         }, 0),
       );
     };
   }
 
   /** 视图已经显示时再次打开。The view is opened again while shown. */
-  public reopenView(viewId: string, params: unknown): void {
-    const frame = this.viewFrames.get(viewId);
-    if (!frame || !frame.loaded || frame.closing) return;
+  public reopenView(instanceKey: string, params: unknown): void {
+    const frame = this.instanceFrames.get(instanceKey);
+    if (!frame || frame.closing) return;
     frame.params = params;
+    if (!frame.loaded) return;
     void this.broker.call(frame.frameId, "view.onShow", { params }).catch((error: unknown) => {
-      console.error(`[extension ${frame.extensionId}/${viewId}] onShow failed.`, error);
+      console.error(`[extension ${frame.extensionId}/${frame.viewId}] onShow failed.`, error);
     });
   }
 
   /** 错误面板的 "Reload view"。The error panel's "Reload view". */
-  public async reloadView(viewId: string): Promise<void> {
-    this.viewErrors.delete(viewId);
-    const frame = this.viewFrames.get(viewId);
+  public async reloadView(instanceKey: string): Promise<void> {
+    this.instanceErrors.delete(instanceKey);
+    const frame = this.instanceFrames.get(instanceKey);
     if (frame) await this.closeFrame(frame, "frame-unloaded", false);
     this.publish();
-    if ((this.viewHolds.get(viewId) ?? 0) > 0) await this.showView(viewId);
+    const hold = this.instanceHolds.get(instanceKey);
+    if (hold) await this.showView(instanceKey, hold.viewId);
   }
 
   /**
@@ -1213,8 +1456,8 @@ export class ExtensionHost {
    * The Reload after "Changed on disk" next to the file name: the file viewer reads its documents changed on disk
    * again, confirming discarding unsaved changes first.
    */
-  public reloadFileViewerDocument(viewId: string): void {
-    const frame = this.viewFrames.get(viewId);
+  public reloadFileViewerDocument(instanceKey: string): void {
+    const frame = this.instanceFrames.get(instanceKey);
     if (frame?.kind !== "fileViewer" || !frame.loaded || frame.closing !== null) return;
     this.broker.emit(frame.frameId, frame.pageId, "documents.reloadRequested", null);
   }
@@ -1223,8 +1466,8 @@ export class ExtensionHost {
    * 用户在文件标题栏中选择了文件查看器的条目或它的菜单项，交给查看器页面。
    * The user chose a file viewer's file header item or one of its menu entries; hands the choice to the viewer page.
    */
-  public selectFileHeaderItem(viewId: string, itemId: string, entryId: string | null): void {
-    const frame = this.viewFrames.get(viewId);
+  public selectFileHeaderItem(instanceKey: string, itemId: string, entryId: string | null): void {
+    const frame = this.instanceFrames.get(instanceKey);
     if (frame?.kind !== "fileViewer" || !frame.loaded || frame.closing !== null) return;
     this.broker.emit(frame.frameId, frame.pageId, "workspace.fileHeaderItemSelected", {
       itemId,
@@ -1232,8 +1475,8 @@ export class ExtensionHost {
     });
   }
 
-  public frameIdOfView(viewId: string): string | null {
-    return this.viewFrames.get(viewId)?.frameId ?? null;
+  public frameIdOf(instanceKey: string): string | null {
+    return this.instanceFrames.get(instanceKey)?.frameId ?? null;
   }
 
   public reportLayout(frameId: string, bounds: ExtensionFrameBounds, visible: boolean): void {
@@ -1329,7 +1572,8 @@ export class ExtensionHost {
 
   /** Extensions 设置页显示的设置页 frame。The settings frame shown on the extension settings page. */
   public acquireSettings(extensionId: string): () => void {
-    return this.acquireView(settingsViewId(extensionId));
+    const id = settingsInstanceKey(extensionId);
+    return this.acquireView(id, id);
   }
 
   /* ---------- 生命周期 Lifecycle ---------- */
@@ -1362,7 +1606,13 @@ export class ExtensionHost {
       );
       record.storageUri = toFileUri(storageDirectory);
       if (manifest.background !== undefined) {
-        const frame = await this.createFrame(extensionId, "background", null, null, {});
+        const frame = await this.createFrame({
+          extensionId,
+          kind: "background",
+          viewId: null,
+          entry: null,
+          params: {},
+        });
         await abortable(frame.handshake.promise, abort.signal);
         const previous = installed.lastActivatedVersion;
         const reason =
@@ -1533,23 +1783,45 @@ export class ExtensionHost {
 
   /* ---------- frame ---------- */
 
-  private async createFrame(
-    extensionId: string,
-    kind: ExtensionFrameKind,
-    viewId: string | null,
-    entry: string | null,
-    params: unknown,
-  ): Promise<HostFrame> {
+  private async createFrame(page: FramePage): Promise<HostFrame> {
+    const { extensionId, kind, viewId, entry } = page;
     const installed = this.records.get(extensionId)?.activeInstalled;
     if (!installed) throw new Error(`Extension instance ${extensionId} is not installed.`);
+    const frame = this.registerFrame(page, installed);
+    try {
+      await this.bridge.createExtensionFrame(this.hostInstanceId, {
+        instanceId: frame.instanceId,
+        extensionId: installed.id,
+        origin: frame.origin,
+        releaseHash: frame.releaseHash,
+        frameId: frame.frameId,
+        kind,
+        viewId: viewId === null ? null : localViewId(viewId),
+        entry,
+        backgroundColor: this.themeBackground,
+      });
+    } catch (error) {
+      if (frame.kind !== "background" && !frame.closing)
+        await this.frameFailed(frame, failureOf(error, "LOAD_FAILED"));
+      throw error;
+    }
+    return frame;
+  }
+
+  private registerFrame(page: FramePage, installed: InstalledExtension): HostFrame {
+    const { extensionId, kind, viewId, params, instanceKey } = page;
     const instanceId = installed.instanceId ?? installed.id;
     const origin = installed.source === "server" ? (installed.origin ?? null) : null;
     const releaseHash = installed.source === "server" ? (installed.releaseHash ?? null) : null;
     if (installed.source === "server" && (!origin || !releaseHash)) {
       throw new Error("A Server extension frame requires its source and release identity.");
     }
+    const frameId = crypto.randomUUID();
     const frame: HostFrame = {
-      frameId: crypto.randomUUID(),
+      frameId,
+      instanceKey: instanceKey ?? frameId,
+      tabId: instanceKey ? tabIdOfInstance(instanceKey) : null,
+      releaseWhenClean: false,
       extensionId,
       instanceId,
       manifestId: installed.id,
@@ -1564,7 +1836,7 @@ export class ExtensionHost {
       closing: null,
       lastPong: Date.now(),
       terminated: false,
-      shown: false,
+      shown: kind !== "background",
       loaded: false,
       snapshot: null,
       snapshotToken: 0,
@@ -1572,20 +1844,10 @@ export class ExtensionHost {
       obscureRequest: 0,
     };
     this.frames.set(frame.frameId, frame);
-    if (viewId !== null) this.viewFrames.set(viewId, frame);
+    if (instanceKey !== undefined) this.instanceFrames.set(instanceKey, frame);
+    if (frame.tabId !== null) this.recordTabScope(frame.tabId);
     this.startHandshakeTimer(frame);
     this.publish();
-    await this.bridge.createExtensionFrame(this.hostInstanceId, {
-      instanceId,
-      extensionId: installed.id,
-      origin,
-      releaseHash,
-      frameId: frame.frameId,
-      kind,
-      viewId: viewId === null ? null : localViewId(viewId),
-      entry,
-      backgroundColor: this.themeBackground,
-    });
     return frame;
   }
 
@@ -1650,8 +1912,9 @@ export class ExtensionHost {
       this.unsavedFrames.delete(frame.frameId);
       this.saveStatuses.delete(frame.frameId);
       this.fileHeaderItems.delete(frame.frameId);
-      if (frame.viewId !== null && this.viewFrames.get(frame.viewId) === frame)
-        this.viewFrames.delete(frame.viewId);
+      if (this.instanceFrames.get(frame.instanceKey) === frame)
+        this.instanceFrames.delete(frame.instanceKey);
+      if (frame.tabId !== null && frame.releaseWhenClean) this.forgetUnusedScope(frame.tabId);
       this.publish();
     })();
     return frame.closing;
@@ -1671,53 +1934,82 @@ export class ExtensionHost {
       await this.fail(frame.extensionId, failure);
       return;
     }
-    if (frame.viewId !== null) this.viewErrors.set(frame.viewId, failure);
+    this.instanceErrors.set(frame.instanceKey, { extensionId: frame.extensionId, failure });
     await this.closeFrame(frame, "frame-unloaded", false);
   }
 
-  private async showView(viewId: string): Promise<void> {
+  private async showView(instanceKey: string, viewId: string): Promise<void> {
     const view = this.registry.view(viewId) ?? this.settingsView(viewId);
-    if (!view || view.extensionId === null || view.failure || this.viewErrors.has(viewId)) return;
+    if (!view || view.extensionId === null || view.failure || this.instanceErrors.has(instanceKey))
+      return;
     const record = this.records.get(view.extensionId);
     if (!record || record.status !== "active") return;
-    const file = this.fileViewerFiles.get(viewId);
+    const tabId = tabIdOfInstance(instanceKey);
+    const tab = this.tabs.getSnapshot().group?.tabs.find((item) => item.id === tabId);
+    if (tabId !== null && !tab) return;
+    const file = this.fileViewerFiles.get(instanceKey);
     if (view.location === "file" && !file) return;
     const params: unknown =
       view.location === "file"
         ? ({ file } satisfies Partial<FileViewerParams>)
-        : (this.layout.getSnapshot().openRequests[viewId]?.params ?? {});
-    const existing = this.viewFrames.get(viewId);
+        : tab?.kind === "extension"
+          ? tab.params
+          : (this.layout.getSnapshot().openRequests[viewId]?.params ?? {});
+    const existing = this.instanceFrames.get(instanceKey);
     if (existing && existing.closing === null) {
       const wasShown = existing.shown;
+      existing.releaseWhenClean = false;
       existing.shown = true;
       if (!wasShown) this.publish();
       // 文件查看器从隐藏变为显示时收到 onShow；释放计时器被取消时 frame 一直显示，不重复发送。
       // File viewers get onShow when they go from hidden to shown; after a canceled release timer the frame stayed
       // shown, so nothing is sent again.
       if (existing.loaded && (existing.kind !== "fileViewer" || !wasShown))
-        this.reopenView(viewId, params);
+        this.reopenView(instanceKey, params);
       return;
     }
     const kind: ExtensionFrameKind =
-      viewId === settingsViewId(view.extensionId)
+      viewId === settingsInstanceKey(view.extensionId)
         ? "settings"
         : view.location === "main"
           ? "mainView"
           : view.location === "file"
             ? "fileViewer"
             : "sidebarView";
+    await this.loadNewView({
+      extensionId: view.extensionId,
+      kind,
+      viewId,
+      entry: view.entry,
+      params,
+      instanceKey,
+    });
+  }
+
+  private async loadNewView(page: FramePage & { instanceKey: string }): Promise<void> {
+    const { instanceKey, extensionId } = page;
+    const hold = this.instanceHolds.get(instanceKey);
     let frame: HostFrame;
     try {
-      frame = await this.createFrame(view.extensionId, kind, viewId, view.entry, params);
+      frame = await this.createFrame(page);
     } catch (error) {
-      this.viewErrors.set(viewId, failureOf(error, "LOAD_FAILED"));
-      this.publish();
+      console.error(`Unable to create extension view ${instanceKey}.`, error);
+      const stillHeld = hold !== undefined && this.instanceHolds.get(instanceKey) === hold;
+      if (stillHeld && !this.instanceErrors.has(instanceKey)) {
+        this.instanceErrors.set(instanceKey, {
+          extensionId,
+          failure: failureOf(error, "LOAD_FAILED"),
+        });
+        this.publish();
+      }
       return;
     }
-    frame.shown = true;
+    if (frame.closing) return;
     try {
       await frame.handshake.promise;
-    } catch {
+    } catch (error) {
+      if (failureOf(error, "HANDSHAKE_FAILED").code !== "ERR_FRAME_CLOSING")
+        console.error(`Extension view ${instanceKey} could not connect.`, error);
       return;
     }
     await this.loadView(frame);
@@ -1741,20 +2033,23 @@ export class ExtensionHost {
     }
   }
 
-  private async hideView(viewId: string): Promise<void> {
-    const frame = this.viewFrames.get(viewId);
-    if (!frame || frame.closing) return;
+  private async hideView(instanceKey: string): Promise<void> {
+    const frame = this.instanceFrames.get(instanceKey);
+    if (!frame || frame.closing || !frame.shown) return;
     frame.shown = false;
-    const view = this.registry.view(viewId);
+    const view = frame.viewId && this.registry.view(frame.viewId);
     // 保留页面的主区视图与文件查看器只隐藏。Retained main views and file viewers are only hidden.
     if (
-      (view?.location === "main" && view.retainContextWhenHidden && frame.kind === "mainView") ||
+      (view &&
+        view.location === "main" &&
+        view.retainContextWhenHidden &&
+        frame.kind === "mainView") ||
       frame.kind === "fileViewer"
     ) {
       this.clearFloatingChatOwner(frame.frameId, frame.pageId ?? undefined, true);
       if (frame.loaded) {
         void this.broker.call(frame.frameId, "view.onHide", {}).catch((error: unknown) => {
-          console.error(`[extension ${frame.extensionId}/${viewId}] onHide failed.`, error);
+          console.error(`[extension ${frame.extensionId}/${frame.viewId}] onHide failed.`, error);
         });
       }
       return;
@@ -1999,18 +2294,15 @@ export class ExtensionHost {
 
   private setUnsaved(frameId: string, unsaved: boolean): void {
     if (this.unsavedFrames.has(frameId) === unsaved) return;
-    if (unsaved) this.unsavedFrames.add(frameId);
-    else this.unsavedFrames.delete(frameId);
+    const frame = this.frames.get(frameId);
+    if (unsaved) {
+      this.unsavedFrames.add(frameId);
+      if (frame?.tabId) this.pinIfCurrent(frame.tabId);
+    } else this.unsavedFrames.delete(frameId);
     this.publish();
     if (!unsaved) {
-      const frame = this.frames.get(frameId);
-      if (
-        frame?.kind === "fileViewer" &&
-        frame.viewId !== null &&
-        this.fileViewerRetentionInitialized &&
-        !this.retainedFileViewerIds.has(frame.viewId)
-      ) {
-        this.fileViewerFiles.delete(frame.viewId);
+      if (frame?.releaseWhenClean) {
+        this.fileViewerFiles.delete(frame.instanceKey);
         void this.closeFrame(frame, "frame-unloaded", true);
       }
       const record = frame ? this.records.get(frame.instanceId) : undefined;
@@ -2052,26 +2344,43 @@ export class ExtensionHost {
     if (this.hasUnsavedChanges()) event.preventDefault();
   };
 
-  private async openFile(extensionId: string, uri: string): Promise<void> {
+  private async openFile(
+    extensionId: string,
+    uri: string,
+    options: OpenFileOptions,
+    checkCaller: () => void,
+  ): Promise<void> {
     const location = parseCloudUri(uri);
-    const context = this.context.snapshot();
-    if (
-      location.serverId !== context.server.id ||
-      !context.project ||
-      location.projectId !== context.project.id ||
-      location.path === ""
-    ) {
+    if (location.path === "" || !sameWorkspaceTabScope(this.currentProjectScope(), location)) {
       throw createExtensionError(
         "ERR_INVALID_URI",
         `${uri} is not a file of the current Project on the current Server.`,
       );
     }
-    if (!this.fileOpener) {
-      throw createExtensionError("ERR_UNAVAILABLE", "The Files view is not available.");
-    }
-    if (!(await this.fileOpener({ directoryId: location.directoryId, path: location.path }))) {
-      throw createExtensionError("ERR_CANCELED", `Opening the file was canceled (${extensionId}).`);
-    }
+    const key = this.context.connectionKey;
+    const expectedScope = this.tabs.getSnapshot().scope;
+    if (!sameWorkspaceTabScope(expectedScope, location))
+      throw createExtensionError("ERR_UNAVAILABLE", "The tab group for this file is unavailable.");
+    await this.tabs.whenLoaded();
+    checkCaller();
+    const { group, scope } = this.tabs.getSnapshot();
+    const currentCaller =
+      this.context.connectionKey === key &&
+      sameWorkspaceTabScope(this.currentProjectScope(), location);
+    if (!group || scope !== expectedScope || !currentCaller)
+      throw createExtensionError(
+        "ERR_UNAVAILABLE",
+        `The tab group for this file is unavailable (${extensionId}).`,
+      );
+    this.tabs.openFile(
+      { directoryId: location.directoryId, path: location.path, diffScope: null },
+      { preview: options.preview ?? false },
+    );
+  }
+
+  private currentProjectScope(): TabGroupScope | null {
+    const { project, server } = this.context.snapshot();
+    return project ? { serverId: server.id, projectId: project.id } : null;
   }
 
   /** 已完成握手的页面被新文档替换。A connected page was replaced by a new document. */
@@ -2203,8 +2512,8 @@ export class ExtensionHost {
   }
 
   private settingsView(viewId: string): WorkspaceView | undefined {
-    if (!viewId.startsWith("settings:")) return undefined;
-    const extensionId = viewId.slice("settings:".length);
+    const extensionId = settingsExtensionId(viewId);
+    if (extensionId === null) return undefined;
     const record = this.records.get(extensionId);
     const installed = record?.activeInstalled;
     if (record?.installed.source === "server" && record.installed.serverAvailable === false)
@@ -2227,38 +2536,45 @@ export class ExtensionHost {
 
   private workspaceState() {
     const layout = this.layout.getSnapshot();
+    const active = activeTabOf(this.tabs.getSnapshot().group);
     return {
       sidebarVisible: layout.sidebarVisible,
       activeSidebarViewId: layout.activeSidebarViewId,
-      activeMainViewId: layout.activeMainViewId,
+      activeMainViewId: layout.fullWorkspaceViewId ?? (active && activeViewIdOf(active)) ?? null,
     };
   }
 
   private publish(): void {
+    this.resumeFloatingChatOwner();
     this.snapshot = {
       started: this.started,
       safeMode: this.safeMode,
       serverSyncError: this.serverSyncError,
       recoveryNotices: this.recoveryNotices,
-      viewErrors: Object.fromEntries(this.viewErrors),
-      unsavedViewIds: [...this.unsavedFrames].flatMap((frameId) => {
-        const viewId = this.frames.get(frameId)?.viewId;
-        return viewId ? [viewId] : [];
+      instanceErrors: Object.fromEntries(
+        [...this.instanceErrors].map(([key, error]) => [key, error.failure]),
+      ),
+      unsavedSourceTabIds: [...this.unsavedSources.keys()],
+      unsavedInstanceKeys: [...this.unsavedFrames].flatMap((frameId) => {
+        const frame = this.frames.get(frameId);
+        return frame && !frame.closing ? [frame.instanceKey] : [];
       }),
       saveStatuses: Object.fromEntries(
         [...this.saveStatuses].flatMap(([frameId, status]) => {
-          const viewId = this.frames.get(frameId)?.viewId;
-          return viewId ? [[viewId, status]] : [];
+          const frame = this.frames.get(frameId);
+          return frame && !frame.closing ? [[frame.instanceKey, status]] : [];
         }),
       ),
       fileHeaderItems: Object.fromEntries(
         [...this.fileHeaderItems].flatMap(([frameId, items]) => {
-          const viewId = this.frames.get(frameId)?.viewId;
-          return viewId ? [[viewId, items]] : [];
+          const frame = this.frames.get(frameId);
+          return frame && !frame.closing ? [[frame.instanceKey, items]] : [];
         }),
       ),
       imagePreview: this.imagePreview?.preview ?? null,
-      floatingChat: this.floatingChat,
+      floatingChat: this.showingFullWorkspace
+        ? (this.fullViewFloatingChat?.chat ?? null)
+        : this.floatingChat,
       floatingChatButton: this.windowFloatingChatButton(),
       extensions: [...this.records.values()]
         .sort((left, right) =>
@@ -2286,6 +2602,7 @@ export class ExtensionHost {
             blockedRequests: record.blocked,
             frames: frames.map((frame) => ({
               frameId: frame.frameId,
+              instanceKey: frame.instanceKey,
               extensionId: frame.manifestId,
               instanceId: frame.instanceId,
               kind: frame.kind,
@@ -2300,12 +2617,8 @@ export class ExtensionHost {
   }
 }
 
-export function settingsViewId(extensionId: string): string {
-  return `settings:${extensionId}`;
-}
-
 function localViewId(viewId: string): string {
-  return viewId.startsWith("settings:") ? "settings" : viewId.slice(viewId.indexOf(":") + 1);
+  return settingsExtensionId(viewId) !== null ? "settings" : viewId.slice(viewId.indexOf(":") + 1);
 }
 
 function builtInView(

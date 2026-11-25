@@ -31,6 +31,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { repositoryFileTabOptions } from "./file-tab-options";
 import type { ManageParams } from "./project-workspace";
 import { readProxyUrl } from "./proxy-settings";
 import { errorMessage, startView, type FileParams, type OpenRequest } from "./view";
@@ -228,24 +229,26 @@ function RepositorySidebar({
     if (!tree.has(path)) void loadDirectory(path, generation.current);
   }
 
-  async function open(path: string) {
+  async function open(path: string, pinned: boolean) {
     if (!repo) return;
     setSelectedPath(path);
     try {
-      const root = await loadDirectory("", generation.current);
+      const treeGeneration = generation.current;
+      const root = await loadDirectory("", treeGeneration);
       if (!root) return;
       if (root.checkout !== null)
         await api.workspace.openFile(
           cloudUri(serverId, project.id, root.checkout === "" ? path : `${root.checkout}/${path}`),
+          { preview: !pinned },
         );
-      else
-        await api.workspace.openMainView("file", {
-          repository: repo.name,
-          branch,
-          path,
-        } satisfies FileParams);
+      else {
+        const file = { repository: repo.name, branch, path } satisfies FileParams;
+        const options = await repositoryFileTabOptions(file, !pinned);
+        if (treeGeneration !== generation.current) return;
+        await api.workspace.openMainView("file", file, options);
+      }
     } catch (caught) {
-      if ((caught as { code?: string }).code !== "ERR_CANCELED") setError(errorMessage(caught));
+      setError(errorMessage(caught));
     }
   }
 
@@ -515,7 +518,8 @@ function RepositorySidebar({
                     aria-current={selectedPath === change.path ? "true" : undefined}
                     disabled={change.status === "deleted"}
                     title={change.status === "deleted" ? `${change.path} (deleted)` : change.path}
-                    onClick={() => void open(change.path)}
+                    onClick={() => void open(change.path, false)}
+                    onDoubleClick={() => void open(change.path, true)}
                   >
                     <span className={`status ${change.status}`}>
                       {STATUS_LETTERS[change.status]}
@@ -541,7 +545,7 @@ function RepositorySidebar({
                   selectedPath={selectedPath}
                   changes={checkout !== null ? changes : []}
                   onToggle={toggle}
-                  onOpen={(path) => void open(path)}
+                  onOpen={(path, pinned) => void open(path, pinned)}
                 />
               )}
             </div>
@@ -569,7 +573,7 @@ function TreeLevel({
   selectedPath: string;
   changes: RepositoryChange[];
   onToggle(path: string): void;
-  onOpen(path: string): void;
+  onOpen(path: string, pinned: boolean): void;
 }) {
   const entries = tree.get(path);
   if (!entries)
@@ -598,7 +602,8 @@ function TreeLevel({
               aria-current={selectedPath === entry.path ? "true" : undefined}
               data-path={entry.path}
               title={entry.path}
-              onClick={() => (entry.isDirectory ? onToggle(entry.path) : onOpen(entry.path))}
+              onClick={() => (entry.isDirectory ? onToggle(entry.path) : onOpen(entry.path, false))}
+              onDoubleClick={entry.isDirectory ? undefined : () => onOpen(entry.path, true)}
             >
               {entry.isDirectory ? (
                 open ? (

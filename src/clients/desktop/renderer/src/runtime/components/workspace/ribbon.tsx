@@ -9,7 +9,7 @@ export type RibbonProps = {
   entries: readonly WorkspaceEntry[];
   sidebarVisible: boolean;
   activeSidebarViewId: string;
-  activeMainViewId: string;
+  activeMainViewId: string | null;
   unreadNotificationCount?: number;
   onSelect(entry: WorkspaceEntry): void;
 };

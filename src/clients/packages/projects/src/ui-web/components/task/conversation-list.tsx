@@ -66,7 +66,8 @@ interface ConversationListProps {
    * The turnId of the current conversation's status record; when the conversation is outside the loaded pages, a turn start fetches its record once.
    */
   currentConversationTurnId?: string | null;
-  onConversationSelect: (conversation: ConversationSummary) => void;
+  onConversationSelect: (conversation: ConversationSummary, options: { pinned: boolean }) => void;
+  onConversationsLoaded?: (items: readonly ConversationSummary[]) => void;
   onNewConversation: () => void;
   onAllConversationsDeleted: () => void;
   onConversationDeleted?: (conversationId: string) => void;
@@ -117,6 +118,7 @@ export function ConversationList({
   conversationStatuses = EMPTY_CONVERSATION_STATUSES,
   currentConversationTurnId = null,
   onConversationSelect,
+  onConversationsLoaded,
   onNewConversation,
   onAllConversationsDeleted,
   onConversationDeleted,
@@ -168,6 +170,19 @@ export function ConversationList({
     }
     return [...conversationsById.values()];
   }, [conversationsQuery.data]);
+
+  const reportConversationsLoaded = React.useEffectEvent(() => {
+    onConversationsLoaded?.(conversations);
+  });
+  React.useEffect(() => {
+    if (conversationsQuery.isSuccess && !conversationsQuery.isFetching) {
+      reportConversationsLoaded();
+    }
+  }, [
+    conversationsQuery.dataUpdatedAt,
+    conversationsQuery.isSuccess,
+    conversationsQuery.isFetching,
+  ]);
 
   const matchesCurrentSession = React.useCallback(
     (conversation: ConversationSummary) => conversation.conversationId === currentConversationId,
@@ -328,9 +343,6 @@ export function ConversationList({
 
       toast.success("Conversation deleted");
       onConversationDeleted?.(conversation.conversationId);
-      if (conversation.conversationId === currentConversationId) {
-        onAllConversationsDeleted();
-      }
       await refreshConversations();
     } catch (error) {
       console.error("Delete conversation error:", error);
@@ -438,7 +450,8 @@ export function ConversationList({
             return (
               <div
                 key={conversation.conversationId}
-                onClick={() => onConversationSelect(conversation)}
+                onClick={() => onConversationSelect(conversation, { pinned: false })}
+                onDoubleClick={() => onConversationSelect(conversation, { pinned: true })}
                 className={cn(
                   "group relative py-2.5 pl-3 pr-3 rounded-md cursor-pointer transition-colors",
                   isActive
@@ -495,6 +508,7 @@ export function ConversationList({
                     className="absolute inset-y-1 right-0
                         hidden group-hover:flex has-[[data-state=open]]:flex
                         items-center"
+                    onDoubleClick={(event) => event.stopPropagation()}
                   >
                     {/* Fade the title out before it reaches the actions
                         让标题在进入操作按钮之前淡出 */}

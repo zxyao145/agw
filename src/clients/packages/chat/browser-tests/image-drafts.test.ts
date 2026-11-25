@@ -224,7 +224,11 @@ test("accepting a new conversation moves persisted images and its in-flight past
   await page.evaluate(async (scope) => {
     const fixture = window.imageDraftFixture;
     const pending = fixture.current!.add([fixture.createImageFile("reading.png")]);
-    const accepted = fixture.drafts.accept(scope, "accepted");
+    const accepted = fixture.drafts.accept(
+      scope,
+      { draftId: "web" },
+      { conversationId: "accepted" },
+    );
     fixture.select({ conversationId: "accepted" });
     await Promise.all([pending, accepted]);
   }, scope);
@@ -246,14 +250,14 @@ test("clearing and deleting invalidate unfinished reads", async (t) => {
     const pending = fixture.current!.add([fixture.createImageFile("late.png")]);
     await Promise.all([pending, fixture.current!.clear()]);
     const next = fixture.current!.add([fixture.createImageFile("deleted.png")]);
-    await Promise.all([next, fixture.drafts.remove(scope, "conversation-a")]);
+    await Promise.all([next, fixture.drafts.remove(scope, { conversationId: "conversation-a" })]);
   }, scope);
   await page.reload();
   await ready(page);
   assert.deepEqual(await names(page), []);
 });
 
-test("clearing a project's conversations preserves new drafts and other scopes", async (t) => {
+test("clearing a project's conversations removes new drafts and preserves other scopes", async (t) => {
   const { page } = await openFixture(t);
   await paste(page, "existing.png");
   await select(page, { conversationId: null });
@@ -265,9 +269,25 @@ test("clearing a project's conversations preserves new drafts and other scopes",
   await ready(page);
   assert.deepEqual(await names(page), []);
   await select(page, { conversationId: null });
-  assert.deepEqual(await names(page), ["new.png"]);
+  assert.deepEqual(await names(page), []);
   await select(page, { projectId: "project-b", conversationId: "conversation-a" });
   assert.deepEqual(await names(page), ["other-project.png"]);
+});
+
+test("clearing Web conversations keeps the Web image draft after a restart", async (t) => {
+  const { page } = await openFixture(t);
+  await paste(page, "old.png");
+  await select(page, { conversationId: null });
+  await paste(page, "new.png");
+  await page.evaluate(
+    (scope) => window.imageDraftFixture.drafts.removeConversations(scope, { draftId: "web" }),
+    scope,
+  );
+  await page.reload();
+  await ready(page);
+  assert.deepEqual(await names(page), []);
+  await select(page, { conversationId: null });
+  assert.deepEqual(await names(page), ["new.png"]);
 });
 
 test("the full 10 MiB attachment allowance survives a reload", async (t) => {

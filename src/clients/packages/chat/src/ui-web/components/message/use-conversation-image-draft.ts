@@ -1,7 +1,10 @@
 import * as React from "react";
 import { toast } from "sonner";
 
-import type { ConversationComposerScope } from "../../../lib/chat/conversation-composer-storage";
+import type {
+  ComposerDraftKey,
+  ConversationComposerScope,
+} from "../../../lib/chat/conversation-composer-storage";
 import {
   ConversationImageDraft,
   conversationImageDrafts,
@@ -19,16 +22,13 @@ export function notifyImageDraftError(error: unknown) {
 
 export function useConversationImageDraft(
   scope: ConversationComposerScope | null,
-  conversationId: string | null,
+  key: ComposerDraftKey,
   sessionRevision: string | number,
 ) {
   const transientRevision = scope ? null : sessionRevision;
   const draft = React.useMemo(
-    () =>
-      scope
-        ? conversationImageDrafts.get(scope, conversationId)
-        : new ConversationImageDraft(null, conversationId),
-    [scope, conversationId, transientRevision],
+    () => (scope ? conversationImageDrafts.get(scope, key) : new ConversationImageDraft(null, key)),
+    [scope, key, transientRevision],
   );
   const snapshot = React.useSyncExternalStore(
     draft.subscribe,

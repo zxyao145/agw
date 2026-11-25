@@ -3,6 +3,10 @@ import test, { afterEach, before } from "node:test";
 
 import type { WorkspaceEntry } from "../../extensions/workspace-registry";
 import { BUILT_IN_VIEWS } from "../../extensions/workspace-ids";
+import { WorkspaceLayoutStore } from "../../extensions/workspace-layout-store";
+import { activeViewIdOf } from "../../extensions/workspace-tab";
+import { activeTabOf } from "../../extensions/workspace-tabs-store";
+import { createTestTabs } from "../../extensions/workspace-tabs-store.test-helper";
 
 type DomEnvironment = Awaited<ReturnType<typeof import("@agw/test-harness").setupDomEnvironment>>;
 let environment: DomEnvironment;
@@ -51,7 +55,7 @@ const entries: WorkspaceEntry[] = [
 function renderRibbon(options: {
   sidebarVisible: boolean;
   activeSidebarViewId: string;
-  activeMainViewId?: string;
+  activeMainViewId?: string | null;
   selected: WorkspaceEntry[];
 }) {
   const { createElement } = environment.React;
@@ -63,7 +67,8 @@ function renderRibbon(options: {
         entries,
         sidebarVisible: options.sidebarVisible,
         activeSidebarViewId: options.activeSidebarViewId,
-        activeMainViewId: options.activeMainViewId ?? BUILT_IN_VIEWS.chat,
+        activeMainViewId:
+          options.activeMainViewId === undefined ? BUILT_IN_VIEWS.chat : options.activeMainViewId,
         onSelect: (entry: WorkspaceEntry) => options.selected.push(entry),
       }),
     ) as Parameters<DomEnvironment["render"]>[0],
@@ -81,14 +86,17 @@ test("clicking an item runs its action", () => {
   );
 });
 
-test("Jobs appears below Files and opens the Jobs main view", () => {
+test("Jobs opens a tab and is highlighted when active; full views hide the sidebar", async (t) => {
   const host = new ExtensionHost({
     bridge: null,
     app: { version: "0.5.0", platform: "darwin", architecture: "arm64" },
     notify: () => undefined,
   });
+  const tabs = await createTestTabs(t);
+  const workspace = new WorkspaceLayoutStore(host.registry, tabs);
   const render = () => {
-    const layout = host.layout.getSnapshot();
+    const layout = workspace.getSnapshot();
+    const tab = activeTabOf(tabs.getSnapshot().group);
     const { createElement } = environment.React;
     return createElement(
       TooltipProvider,
@@ -97,8 +105,11 @@ test("Jobs appears below Files and opens the Jobs main view", () => {
         entries: host.registry.getSnapshot().ribbon,
         sidebarVisible: layout.sidebarVisible,
         activeSidebarViewId: layout.activeSidebarViewId,
-        activeMainViewId: layout.activeMainViewId,
-        onSelect: (entry: WorkspaceEntry) => host.runAction(entry.extensionId, entry.action, {}),
+        activeMainViewId: layout.fullWorkspaceViewId ?? (tab ? activeViewIdOf(tab) : null),
+        onSelect: ({ action }: WorkspaceEntry) => {
+          if (action.type === "openMainView") workspace.openMainView(action.view);
+          if (action.type === "toggleSidebarView") workspace.toggleSidebarView(action.view);
+        },
       }),
     );
   };
@@ -111,38 +122,40 @@ test("Jobs appears below Files and opens the Jobs main view", () => {
     ["Conversations", "Files", "Jobs", "Events", "Notifications"],
   );
   environment.fireEvent.click(environment.screen.getByRole("button", { name: "Jobs" }));
-  assert.equal(host.layout.getSnapshot().activeMainViewId, "agw.jobs");
+  assert.equal(activeTabOf(tabs.getSnapshot().group)?.kind, "jobs");
   assert.equal(host.registry.view("agw.jobs")?.location, "main");
   view.rerender(render());
   const jobs = environment.screen.getByRole("button", { name: "Jobs" });
   assert.equal(jobs.classList.contains("is-active"), true);
   assert.equal(jobs.getAttribute("aria-pressed"), "true");
-  assert.equal(host.layout.getSnapshot().sidebarVisible, false);
-  assert.equal(view.container.querySelectorAll(".agw-ribbon-item.is-active").length, 1);
+  assert.equal(workspace.getSnapshot().sidebarVisible, true);
+  environment.fireEvent.click(environment.screen.getByRole("button", { name: "Events" }));
+  view.rerender(render());
+  assert.equal(workspace.getSnapshot().sidebarVisible, false);
+  assert.equal(
+    environment.screen.getByRole("button", { name: "Jobs" }).getAttribute("aria-pressed"),
+    "false",
+  );
+  environment.fireEvent.click(environment.screen.getByRole("button", { name: "Files" }));
+  view.rerender(render());
+  assert.equal(workspace.getSnapshot().fullWorkspaceViewId, null);
+  assert.equal(
+    environment.screen.getByRole("button", { name: "Jobs" }).getAttribute("aria-pressed"),
+    "true",
+  );
+});
 
-  for (const [title, main] of [
-    ["Conversations", BUILT_IN_VIEWS.chat],
-    ["Files", BUILT_IN_VIEWS.file],
-  ]) {
-    environment.fireEvent.click(environment.screen.getByRole("button", { name: title }));
-    view.rerender(render());
-    assert.equal(host.layout.getSnapshot().activeMainViewId, main);
-    assert.equal(host.layout.getSnapshot().sidebarVisible, true);
-    assert.equal(
-      environment.screen.getByRole("button", { name: title }).getAttribute("aria-pressed"),
-      "true",
-    );
-    assert.equal(view.container.querySelectorAll(".agw-ribbon-item.is-active").length, 1);
-
-    environment.fireEvent.click(environment.screen.getByRole("button", { name: "Jobs" }));
-    view.rerender(render());
-    assert.equal(host.layout.getSnapshot().sidebarVisible, false);
-    assert.equal(view.container.querySelectorAll(".agw-ribbon-item.is-active").length, 1);
-    assert.equal(
-      environment.screen.getByRole("button", { name: "Jobs" }).getAttribute("aria-pressed"),
-      "true",
-    );
-  }
+test("empty tabs do not highlight a main-view Ribbon item", () => {
+  renderRibbon({
+    sidebarVisible: false,
+    activeSidebarViewId: "agw.files",
+    activeMainViewId: null,
+    selected: [],
+  });
+  assert.equal(
+    environment.screen.getByRole("button", { name: "Open (Sample)" }).getAttribute("aria-pressed"),
+    "false",
+  );
 });
 
 test("the item of the shown sidebar view is highlighted", () => {

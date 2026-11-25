@@ -11,7 +11,9 @@ import type {
   ExtensionHostSnapshot,
 } from "../../extensions/extension-host";
 import type { ExtensionLayoutSampler } from "../../extensions/extension-layout-sampler";
+import { tabInstanceKey } from "../../extensions/workspace-ids";
 import type { WorkspaceView } from "../../extensions/workspace-registry";
+import type { ExtensionTab } from "../../extensions/workspace-tab";
 import { ExtensionViewSlot } from "./extension-view-slot";
 import { WorkspaceIconView } from "./workspace-icon";
 
@@ -19,10 +21,14 @@ import { WorkspaceIconView } from "./workspace-icon";
  * 重新加载视图；extension 已失败时重新加载 extension。视图有未保存修改时先由用户确认放弃。
  * Reloads the view, or the extension once it failed. With unsaved changes the user confirms discarding them first.
  */
-export async function reloadExtensionView(host: ExtensionHost, view: WorkspaceView): Promise<void> {
-  if (!(await host.confirmDiscardUnsaved([view.id]))) return;
+export async function reloadExtensionView(
+  host: ExtensionHost,
+  view: WorkspaceView,
+  instanceKey: string,
+): Promise<void> {
+  if (!(await host.confirmDiscardUnsaved({ instanceKeys: [instanceKey] }))) return;
   if (view.failure !== null && view.extensionId) await host.reload(view.extensionId);
-  else await host.reloadView(view.id);
+  else await host.reloadView(instanceKey);
 }
 
 /** 宿主绘制的标题条，标明这块内容由哪个 extension 提供。The host-drawn title bar naming the extension behind the view. */
@@ -132,6 +138,7 @@ export type ExtensionViewProps = {
   layout: ExtensionLayoutSampler;
   snapshot: ExtensionHostSnapshot;
   view: WorkspaceView;
+  instanceKey: string;
   /** 最近一次打开请求的序号与参数。The latest open request's sequence and params. */
   openRequest: { sequence: number; params: unknown } | undefined;
   /** 保留页面状态的视图切走后仍挂载但不再显示。A retained view stays mounted but inactive after switching away. */
@@ -151,12 +158,13 @@ export function ExtensionView({
   layout,
   snapshot,
   view,
+  instanceKey,
   openRequest,
   active = true,
   file,
   showHeader = true,
 }: ExtensionViewProps) {
-  const viewError = snapshot.viewErrors[view.id] ?? null;
+  const viewError = snapshot.instanceErrors[instanceKey] ?? null;
   const failed = view.failure !== null;
 
   // 先交给宿主文件，再获取视图，新 frame 的 onLoad 才带着文件。Hand over the file before acquiring, so onLoad carries it.
@@ -165,22 +173,34 @@ export function ExtensionView({
   const fileProjectId = file?.projectId;
   React.useEffect(() => {
     if (fileUri === undefined || fileName === undefined || fileProjectId === undefined) return;
-    host.setFileViewerFile(view.id, { uri: fileUri, name: fileName, projectId: fileProjectId });
-  }, [host, view.id, fileUri, fileName, fileProjectId]);
+    host.setFileViewerFile(instanceKey, view.id, {
+      uri: fileUri,
+      name: fileName,
+      projectId: fileProjectId,
+    });
+  }, [host, instanceKey, view.id, fileUri, fileName, fileProjectId]);
 
   React.useEffect(() => {
     if (!active || failed || viewError) return;
-    return host.acquireView(view.id);
-  }, [host, view.id, active, failed, viewError]);
+    return host.acquireView(instanceKey, view.id);
+  }, [host, instanceKey, view.id, active, failed, viewError]);
 
   const firstRequest = React.useRef(openRequest?.sequence);
+  const wasActive = React.useRef(active);
   React.useEffect(() => {
-    if (!openRequest || openRequest.sequence === firstRequest.current) return;
-    firstRequest.current = openRequest.sequence;
-    host.reopenView(view.id, openRequest.params);
-  }, [host, view.id, openRequest]);
+    if (
+      active &&
+      wasActive.current &&
+      openRequest &&
+      openRequest.sequence !== firstRequest.current
+    ) {
+      host.reopenView(instanceKey, openRequest.params);
+    }
+    wasActive.current = active;
+    firstRequest.current = openRequest?.sequence;
+  }, [host, instanceKey, active, openRequest]);
 
-  const frameId = host.frameIdOfView(view.id);
+  const frameId = host.frameIdOf(instanceKey);
   const frame = snapshot.extensions
     .flatMap((extension) => extension.frames)
     .find((item) => item.frameId === frameId);
@@ -188,7 +208,10 @@ export function ExtensionView({
   return (
     <div className="flex h-full min-h-0 w-full flex-col" data-extension-view={view.id}>
       {showHeader ? (
-        <ExtensionViewHeader view={view} onReload={() => void reloadExtensionView(host, view)} />
+        <ExtensionViewHeader
+          view={view}
+          onReload={() => void reloadExtensionView(host, view, instanceKey)}
+        />
       ) : null}
       {failed && view.failure && view.extensionId ? (
         <ExtensionErrorView
@@ -202,7 +225,7 @@ export function ExtensionView({
           viewTitle={view.title}
           error={viewError}
           actionLabel="Reload view"
-          onAction={() => void host.reloadView(view.id)}
+          onAction={() => void reloadExtensionView(host, view, instanceKey)}
         />
       ) : frameId ? (
         <ExtensionViewSlot
@@ -213,6 +236,65 @@ export function ExtensionView({
         />
       ) : (
         <div className="agw-extension-view-slot" />
+      )}
+    </div>
+  );
+}
+
+export function ExtensionTabView({
+  host,
+  layout,
+  snapshot,
+  tab,
+  active,
+  onClose,
+}: {
+  host: ExtensionHost;
+  layout: ExtensionLayoutSampler;
+  snapshot: ExtensionHostSnapshot;
+  tab: ExtensionTab;
+  active: boolean;
+  onClose(): void;
+}) {
+  const registry = React.useSyncExternalStore(
+    host.registry.subscribe,
+    host.registry.getSnapshot,
+    host.registry.getSnapshot,
+  );
+  const view = registry.views.get(tab.viewId);
+  if (view) {
+    return (
+      <ExtensionView
+        host={host}
+        layout={layout}
+        snapshot={snapshot}
+        view={view}
+        instanceKey={tabInstanceKey(tab.id)}
+        openRequest={{ params: tab.params, sequence: tab.sequence }}
+        active={active}
+      />
+    );
+  }
+  const extensionId = tab.viewId.split(":", 1)[0];
+  const starting =
+    !snapshot.started ||
+    snapshot.extensions.some(
+      (extension) => extension.id === extensionId && extension.status === "activating",
+    );
+  return (
+    <div
+      role={starting ? "status" : "alert"}
+      className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center text-sm"
+    >
+      {starting ? (
+        "Loading view…"
+      ) : (
+        <>
+          <p>This view isn't available. Enable or install its extension, or close this tab.</p>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Close tab
+          </Button>
+        </>
       )}
     </div>
   );

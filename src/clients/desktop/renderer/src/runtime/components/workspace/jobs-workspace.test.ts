@@ -78,11 +78,7 @@ test("Jobs opens logs and returns to the list inside the workspace", () => {
   );
   const { createElement } = environment.React;
   const view = environment.render(
-    createElement(
-      query.QueryClientProvider,
-      { client },
-      createElement(JobsWorkspace, { onOpenChat: () => undefined }),
-    ),
+    createElement(query.QueryClientProvider, { client }, createElement(JobsWorkspace)),
   );
   assert.ok(environment.screen.getByRole("heading", { name: "Jobs" }));
   environment.fireEvent.click(

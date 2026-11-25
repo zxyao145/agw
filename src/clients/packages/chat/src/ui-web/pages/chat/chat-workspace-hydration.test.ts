@@ -13,7 +13,8 @@ import { conversationComposerStorage } from "../../../lib/chat/conversation-comp
 import * as sessionRouting from "./lib/session-routing";
 import { getTargetValue } from "./lib/target-options";
 import type { ChatProps } from "../../components/message/chat";
-import type { ChatWorkspaceContextValue } from "./chat-workspace";
+import type { ChatProjectContextValue } from "./chat-project-provider";
+import type { ChatSessionContextValue } from "./chat-session-provider";
 import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@agw/components/query";
 import * as chatRuntime from "@agw/chat-runtime";
@@ -109,13 +110,18 @@ async function checkConversationSession(kind: string, strictMode = false) {
   let messageRequests = 0;
   const detailsScopes: chatRuntime.ChatConversationScope[] = [];
   const observed: {
+    project?: ChatProjectContextValue;
+    session?: ChatSessionContextValue;
     explorer?: {
+      onFileDeleted: (path: string) => void;
+      selectedFilePath?: string | null;
       directoryId?: string | null;
       onDirectoryChange: (value: string | null) => void;
       onFileSelected: (path: string) => void;
       refreshSignal?: number;
     };
     file?: {
+      fileContent: string;
       selectedFile: string | null;
       setComments: React.Dispatch<React.SetStateAction<import("@agw/projects").LineComment[]>>;
     };
@@ -133,6 +139,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
     };
     inputValue?: string;
     newChat?: () => void;
+    clearAll?: () => void;
     selectConversation?: (conversation: import("@agw/projects").ConversationSummary) => void;
     refreshSignal?: number;
     conversationStatuses?: ReadonlyMap<string, string>;
@@ -321,6 +328,8 @@ async function checkConversationSession(kind: string, strictMode = false) {
         conversationStatuses?: ReadonlyMap<string, string>;
         currentConversationTurnId?: string | null;
         onNewConversation?: () => void;
+        onProjectConversationsCleared(): void;
+        onAllConversationsDeleted(): void;
         onConversationSelect?: typeof observed.selectConversation;
         onActiveConversationResolved?: (value: unknown) => void;
       }) => {
@@ -328,6 +337,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
         observed.conversationStatuses = props.conversationStatuses;
         observed.currentConversationTurnId = props.currentConversationTurnId;
         observed.newChat = props.onNewConversation;
+        observed.clearAll = () => {
+          props.onProjectConversationsCleared();
+          props.onAllConversationsDeleted();
+        };
         observed.selectConversation = props.onConversationSelect;
         React.useEffect(() => {
           props.onActiveConversationResolved?.(conversation);
@@ -465,11 +478,26 @@ async function checkConversationSession(kind: string, strictMode = false) {
   modules["../../components/message/chat"] = {
     Chat: (props: ChatProps) => {
       observed.chat = props;
+      if (!kind.startsWith("drawer") && kind !== "settings-change") {
+        observed.project = projectModule.useChatProject();
+        observed.session = sessionModule.useChatSession();
+      }
       return React.createElement(Chat, props);
     },
   };
   modules["../../conversation-statuses"] = await loadComponent(
     new URL("../../conversation-statuses.ts", import.meta.url),
+  );
+  const projectModule = (await loadComponent(
+    new URL("./chat-project-provider.tsx", import.meta.url),
+  )) as unknown as typeof import("./chat-project-provider");
+  modules["./chat-project-provider"] = projectModule;
+  const sessionModule = (await loadComponent(
+    new URL("./chat-session-provider.tsx", import.meta.url),
+  )) as unknown as typeof import("./chat-session-provider");
+  modules["./chat-session-provider"] = sessionModule;
+  modules["./file-document-provider"] = await loadComponent(
+    new URL("./file-document-provider.tsx", import.meta.url),
   );
   const workspaceModule = (await loadComponent(
     new URL("./chat-workspace.tsx", import.meta.url),
@@ -559,112 +587,38 @@ async function checkConversationSession(kind: string, strictMode = false) {
       assert.deepEqual(errors, []);
       return;
     }
-    if (kind === "desktop-cached-project") {
-      // 从 Settings 回到对话：查询已有缓存，路由只带 projectId。Back from Settings: queries are cached and the route has only projectId.
-      const { ChatWorkspaceProvider, useChatWorkspace } = workspaceModule;
-      let workspace: ChatWorkspaceContextValue | undefined;
-      function WorkspaceProbe() {
-        workspace = useChatWorkspace();
-        return null;
-      }
-      await React.act(async () =>
-        renderWithQueries(
-          React.createElement(
-            ChatWorkspaceProvider,
-            { routeBasePath: "/desktop/chat" },
-            React.createElement(WorkspaceProbe),
-          ),
-        ),
-      );
-      assert.equal(workspace?.selectedProject?.id, "project-1");
-      assert.equal(workspace?.conversationId, null);
-      assert.equal(workspace?.selectedTarget?.id, "agent-1", "the first target is selected");
-      assert.deepEqual(errors, []);
-      return;
-    }
-    if (kind === "desktop-confirm-file-change") {
-      // Desktop 在当前文件改变前确认（文件查看器有未保存修改）。Desktop confirms before the current file changes.
-      const { ChatFilePane, ChatFilesSidebar, ChatWorkspaceProvider, useChatWorkspace } =
-        workspaceModule;
-      let workspace: ChatWorkspaceContextValue | undefined;
-      function WorkspaceProbe() {
-        workspace = useChatWorkspace();
-        return null;
-      }
-      let allowChange = true;
-      let confirmations = 0;
-      const confirmFileChange = async () => {
-        confirmations += 1;
-        return allowChange;
-      };
-      await React.act(async () =>
-        renderWithQueries(
-          React.createElement(
-            ChatWorkspaceProvider,
-            { routeBasePath: "/desktop/chat", confirmFileChange },
-            React.createElement(ChatFilesSidebar),
-            React.createElement(ChatFilePane),
-            React.createElement(WorkspaceProbe),
-          ),
-        ),
-      );
+    if (
+      ["desktop-cached-project", "file-written", "desktop", "desktop-confirm-file-change"].includes(
+        kind,
+      )
+    ) {
+      await React.act(async () => renderWorkspace());
       await React.act(async () => finishHistory());
-      await React.act(async () => observed.explorer!.onFileSelected("README.md"));
-      assert.equal(confirmations, 1);
-      assert.equal(observed.file?.selectedFile, "README.md");
-      const readCount = fileReads.length;
-
-      allowChange = false;
-      await React.act(async () => observed.explorer!.onFileSelected("guide.md"));
-      assert.equal(
-        await React.act(async () => workspace!.openFile("extra", "notes.md")),
-        false,
-        "openFile reports the cancel",
-      );
-      await React.act(async () => observed.explorer!.onDirectoryChange("extra"));
-      await React.act(async () => workspace!.selectProject("project-2"));
-      assert.equal(confirmations, 5);
-      assert.equal(observed.file?.selectedFile, "README.md");
-      assert.equal(workspace?.selectedDirectory?.id, null);
-      assert.equal(workspace?.selectedProject?.id, "project-1");
-      assert.equal(fileReads.length, readCount, "nothing is read after a cancel");
-
-      allowChange = true;
-      assert.equal(await React.act(async () => workspace!.openFile("extra", "notes.md")), true);
-      assert.equal(workspace?.selectedDirectory?.id, "extra");
-      assert.equal(observed.file?.selectedFile, "notes.md");
-      assert.equal(fileReads.at(-1)?.at(-1), "extra");
-      await React.act(async () => workspace!.selectProject("project-2"));
-      assert.equal(workspace?.selectedProject?.id, "project-2");
-      assert.equal(observed.file?.selectedFile, null);
-      assert.equal(confirmations, 7);
-      assert.deepEqual(errors, []);
-      return;
-    }
-    if (kind === "file-written") {
-      // 文件被写入：当前文件的 Source 重新读取并保留行评论，其他文件只刷新文件树，Only diff 模式不读取。
-      // A file write rereads the current file's Source and keeps line comments, other files only refresh the tree, and Only diff does not read.
-      const { ChatFilePane, ChatFilesSidebar, ChatWorkspaceProvider, useChatWorkspace } =
-        workspaceModule;
-      let workspace: ChatWorkspaceContextValue | undefined;
-      function WorkspaceProbe() {
-        workspace = useChatWorkspace();
-        return null;
+      assert.equal(observed.project?.selectedProjectId, "project-1");
+      assert.equal(observed.session?.selectedTarget?.id, "agent-1");
+      if (kind === "desktop-cached-project") {
+        assert.equal(observed.session?.conversationId, null);
+        return;
       }
-      await React.act(async () =>
-        renderWithQueries(
-          React.createElement(
-            ChatWorkspaceProvider,
-            { routeBasePath: "/desktop/chat" },
-            React.createElement(ChatFilesSidebar),
-            React.createElement(ChatFilePane),
-            React.createElement(WorkspaceProbe),
-          ),
-        ),
+      assert.deepEqual(
+        { ...detailsScopes[0] },
+        { serverId: "local", projectId: "project-1", conversationId: "conversation-1" },
       );
-      await React.act(async () => finishHistory());
+      assert.equal(detailsRequests, 1);
+      assert.equal("usage" in observed.chat!.sessionSeed, false);
+      assert.deepEqual(observed.chat?.sessionSeed.messages, messages);
+      assert.equal(observed.input?.isTransitioning, false);
+      assert.equal(observed.chat?.composerRef, observed.session?.composerRef);
+      const refreshSignal = observed.refreshSignal!;
+      await React.act(async () => observed.project!.refreshConversations());
+      assert.equal(observed.refreshSignal, refreshSignal + 1);
+      await React.act(async () => observed.selectTab!("files"));
       await React.act(async () => observed.explorer!.onFileSelected("README.md"));
-      assert.equal(workspace?.fileContent, "contents");
+      const reads = fileReads.length;
+      assert.equal(observed.file?.selectedFile, "README.md");
+      assert.equal(observed.file?.fileContent, "contents");
+      await React.act(async () => observed.explorer!.onFileSelected("README.md"));
+      assert.equal(fileReads.length, reads);
       const comment: import("@agw/projects").LineComment = {
         id: "comment-1",
         side: "current",
@@ -673,143 +627,105 @@ async function checkConversationSession(kind: string, strictMode = false) {
         content: "Keep me",
         timestamp: new Date(0),
       };
-      await React.act(async () => workspace!.setComments([comment]));
-      const initialSignal = observed.explorer!.refreshSignal!;
-      assert.equal(initialSignal, 0);
-      let readCount = fileReads.length;
-
-      diskContent = "written";
-      await React.act(async () => workspace!.handleFileWritten(null, "README.md"));
-      assert.equal(fileReads.length, readCount + 1);
-      assert.equal(workspace?.fileContent, "written");
-      assert.deepEqual(workspace?.comments, [comment]);
-      assert.equal(observed.explorer!.refreshSignal, initialSignal + 1);
-
-      readCount = fileReads.length;
-      diskContent = "other";
-      await React.act(async () => workspace!.handleFileWritten(null, "guide.md"));
-      await React.act(async () => workspace!.handleFileWritten("extra", "README.md"));
-      assert.equal(fileReads.length, readCount, "other files and directories are not read");
-      assert.equal(workspace?.fileContent, "written");
-      assert.equal(observed.explorer!.refreshSignal, initialSignal + 3);
-
-      await React.act(async () => workspace!.setOnlyDiff(true));
-      const diffReadCount = fileReads.length;
-      await React.act(async () => workspace!.handleFileWritten(null, "README.md"));
-      assert.equal(fileReads.length, diffReadCount, "Only diff mode does not read the file");
-      assert.equal(observed.explorer!.refreshSignal, initialSignal + 4);
-      assert.deepEqual(errors, []);
-      return;
-    }
-    if (kind === "desktop") {
-      // Desktop 用 Provider 组合分别导出的组件，不经过 Tabs 布局。
-      // Desktop composes the Provider with the separately exported panes, without the Tabs layout.
-      const {
-        ChatConversationPane,
-        ChatConversationSidebar,
-        ChatFilePane,
-        ChatFilesSidebar,
-        ChatWorkspaceProvider,
-        useChatWorkspace,
-      } = workspaceModule;
-      let workspace: ChatWorkspaceContextValue | undefined;
-      function WorkspaceProbe() {
-        workspace = useChatWorkspace();
-        return null;
-      }
-      let conversationsOpened = 0;
-      let filesOpened = 0;
-      await React.act(async () =>
-        renderWithQueries(
-          React.createElement(
-            ChatWorkspaceProvider,
-            { routeBasePath: "/desktop/chat" },
-            React.createElement(ChatConversationSidebar, {
-              onConversationOpened: () => (conversationsOpened += 1),
-            }),
-            React.createElement(ChatFilesSidebar, { onFileOpened: () => (filesOpened += 1) }),
-            React.createElement(ChatConversationPane, {
-              compact: true,
-              showUserInputNavigation: true,
-            }),
-            React.createElement(ChatFilePane),
-            React.createElement(WorkspaceProbe),
-          ),
-        ),
-      );
-      await React.act(async () => finishHistory());
-
-      assert.equal(detailsRequests, 1);
-      // 作用范围在 vm 上下文中创建，复制到本上下文后再比较。The scope is created in the vm context, so it is copied into this one before comparing.
-      assert.deepEqual(
-        { ...detailsScopes[0] },
-        { serverId: "local", projectId: "project-1", conversationId: "conversation-1" },
-      );
-      assert.equal("usage" in observed.chat!.sessionSeed, false);
-      assert.equal(workspace?.selectedProject?.id, "project-1");
-      assert.equal(workspace?.conversationId, "conversation-1");
-      assert.equal(workspace?.selectedTarget?.id, "agent-1", "the server's target is restored");
-      assert.equal(observed.chat?.conversationId, "conversation-1");
-      assert.deepEqual(observed.chat?.sessionSeed.messages, messages);
-      assert.equal(observed.chat?.composerRef, workspace?.composerRef);
-      assert.equal(observed.input?.isTransitioning, false);
-
-      const refreshSignal = observed.refreshSignal!;
-      await React.act(async () => workspace!.refreshConversations());
-      assert.equal(
-        observed.refreshSignal,
-        refreshSignal + 1,
-        "refreshConversations refreshes the list",
-      );
-
-      await React.act(async () => observed.explorer!.onFileSelected("README.md"));
-      assert.equal(observed.file?.selectedFile, "README.md");
-      assert.equal(filesOpened, 1);
-      const fileReadCount = fileReads.length;
-      await React.act(async () => observed.explorer!.onFileSelected("README.md"));
-      assert.equal(filesOpened, 2, "selecting the current file again still opens the file view");
-      assert.equal(fileReads.length, fileReadCount, "the unchanged file is not read again");
-
-      const comment: import("@agw/projects").LineComment = {
-        id: "comment-1",
-        side: "current",
-        filePath: "README.md",
-        lineNumber: 3,
-        content: "Explain this line",
-        timestamp: new Date(0),
-      };
       await React.act(async () => observed.file!.setComments([comment]));
       assert.deepEqual(observed.chat?.pendingFileComments, [comment]);
-
-      await React.act(async () =>
-        observed.selectConversation!({
+      if (kind === "file-written") {
+        const initialSignal = observed.explorer!.refreshSignal!;
+        diskContent = "written";
+        await React.act(async () => observed.project!.notifyFileWritten(null, "README.md"));
+        assert.equal(fileReads.length, reads + 1);
+        assert.equal(observed.file?.fileContent, "written");
+        assert.deepEqual(observed.project?.comments, [comment]);
+        await React.act(async () => observed.project!.notifyFileWritten(null, "other.md"));
+        await React.act(async () => observed.project!.notifyFileWritten("extra", "README.md"));
+        assert.equal(fileReads.length, reads + 1);
+        assert.equal(observed.explorer!.refreshSignal, initialSignal + 3);
+        await React.act(async () => observed.project!.setOnlyDiff(true));
+        const diffReads = fileReads.length;
+        await React.act(async () => observed.project!.notifyFileWritten(null, "README.md"));
+        assert.equal(fileReads.length, diffReads + 1);
+        assert.equal(observed.explorer!.refreshSignal, initialSignal + 4);
+      } else if (kind === "desktop-confirm-file-change") {
+        await React.act(async () => observed.explorer!.onDirectoryChange("extra"));
+        assert.equal(observed.file?.selectedFile, null);
+        await React.act(async () => observed.explorer!.onFileSelected("notes.md"));
+        assert.equal(fileReads.at(-1)?.at(-1), "extra");
+        await React.act(async () => observed.project!.selectProject("project-2"));
+        assert.equal(observed.project?.selectedProjectId, "project-2");
+        assert.equal(observed.file?.selectedFile, null);
+        await React.act(async () => observed.project!.selectProject("project-1"));
+        assert.equal(observed.project?.selectedDirectory?.id, "extra");
+        assert.deepEqual(observed.project?.comments, [comment]);
+      } else {
+        const second = {
           projectId: "project-1",
           conversationId: "conversation-2",
           contextId: "context-2",
           kind: "native",
-          relateId: null,
           title: "Second",
+          relateId: null,
           executionCount: 1,
           messageCount: 0,
           createTime: "2026-10-17T00:00:00Z",
           extensionId: "host",
           openToExtensions: false,
-        }),
-      );
-      assert.equal(conversationsOpened, 0, "the conversation opens once its history loads");
-      await React.act(async () =>
-        pending
-          .get("conversation-2")!
-          .resolve({ ...conversation, conversationId: "conversation-2", contextId: "context-2" }),
-      );
-      assert.equal(conversationsOpened, 1);
-      assert.equal(observed.chat?.conversationId, "conversation-2");
-      assert.equal(
-        new URLSearchParams(dom.window.location.search).get("conversationId"),
-        "conversation-2",
-      );
-      await React.act(async () => observed.newChat!());
-      assert.equal(conversationsOpened, 2, "starting a new conversation opens it");
+        };
+        await React.act(async () => observed.explorer!.onFileSelected("docs/guide.md"));
+        assert.equal(observed.explorer!.selectedFilePath, undefined);
+        await React.act(async () => observed.explorer!.onFileDeleted("docs"));
+        assert.equal(observed.file!.selectedFile, "docs/guide.md");
+        assert.deepEqual(observed.project!.comments, [comment]);
+        await React.act(async () => observed.explorer!.onFileDeleted("docs/guide.md"));
+        assert.equal(observed.file!.selectedFile, null);
+        await React.act(async () => observed.selectTab!("chat"));
+        await React.act(async () => observed.selectConversation!(second));
+        assert.equal(observed.input!.isTransitioning, true);
+        await React.act(async () =>
+          pending
+            .get("conversation-2")!
+            .resolve({ ...conversation, conversationId: "conversation-2" }),
+        );
+        assert.equal(observed.input!.isTransitioning, false);
+        assert.equal(observed.chat?.conversationId, "conversation-2");
+        assert.equal(
+          new URLSearchParams(dom.window.location.search).get("conversationId"),
+          "conversation-2",
+        );
+        const detailCount = () =>
+          detailsScopes.filter((scope) => scope.conversationId === second.conversationId).length;
+        assert.equal(detailCount(), 1);
+        await React.act(async () => observed.selectConversation!(second));
+        assert.equal(detailCount(), 2);
+        const previousComposer = observed.session!.composerRef;
+        await React.act(async () =>
+          observed.selectConversation!({ ...second, conversationId: "conversation-3" }),
+        );
+        await React.act(async () =>
+          pending.get("conversation-3")!.reject(new Error("History unavailable")),
+        );
+        assert.equal(observed.chat?.conversationId, second.conversationId);
+        assert.equal(detailCount(), 2);
+        assert.equal(observed.session!.composerRef, previousComposer);
+        assert.equal(
+          new URLSearchParams(dom.window.location.search).get("conversationId"),
+          second.conversationId,
+        );
+        assert.deepEqual(errors.splice(0), ["Failed to load conversation: History unavailable"]);
+        const scope = { serverId: "local", projectId: "project-1" };
+        conversationComposerStorage.set(scope, { draftId: "web" }, { input: "Retained input" });
+        conversationComposerStorage.set(
+          scope,
+          { conversationId: second.conversationId },
+          { input: "Removed input" },
+        );
+        await React.act(async () => observed.clearAll!());
+        assert.equal(observed.chat?.conversationId, null);
+        assert.equal(observed.inputValue, "Retained input");
+        assert.deepEqual(
+          conversationComposerStorage.get(scope, { conversationId: second.conversationId }),
+          {},
+        );
+      }
       assert.deepEqual(errors, []);
       return;
     }
@@ -883,7 +799,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
         // A draft saved before the page loaded.
         conversationComposerStorage.set(
           { serverId: "local", projectId: "project-1" },
-          "conversation-1",
+          { conversationId: "conversation-1" },
           { input: "saved draft" },
         );
       }
@@ -1217,7 +1133,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
         assert.equal(executions.length, 1);
         assert.equal(executions[0].agentId, "agent-2");
         assert.deepEqual(
-          conversationComposerStorage.get(scope, executions[0].conversationId),
+          conversationComposerStorage.get(scope, { conversationId: executions[0].conversationId }),
           {},
           "a draft conversation ID is not a saved conversation yet",
         );
@@ -1227,11 +1143,11 @@ async function checkConversationSession(kind: string, strictMode = false) {
           transport().handlers.onMessage(turnMessage("agw-turn-start", executions[0])),
         );
         assert.deepEqual(
-          conversationComposerStorage.get(scope, executions[0].conversationId),
+          conversationComposerStorage.get(scope, { conversationId: executions[0].conversationId }),
           { targetValue: agent2, input: "typed after sending" },
           "acceptance hands the target and the newer draft to the new conversation ID",
         );
-        assert.deepEqual(conversationComposerStorage.get(scope, null), {});
+        assert.deepEqual(conversationComposerStorage.get(scope, { draftId: "web" }), {});
         assert.equal(observed.chat?.conversationId, executions[0].conversationId);
         assert.equal(
           new URLSearchParams(dom.window.location.search).get("conversationId"),
@@ -1391,9 +1307,9 @@ test("switching the browsing directory clears preview and removal restores prima
   checkConversationSession("directories"));
 test("the Provider mounted with cached queries and only a projectId selects a default target", () =>
   checkConversationSession("desktop-cached-project"));
-test("the Provider with separately composed panes restores the conversation and reports openings, comments and refreshes", () =>
+test("the Web workspace restores the conversation and reports openings, comments and refreshes", () =>
   checkConversationSession("desktop"));
-test("a file write rereads the current Source with its comments, refreshes the tree, and skips Only diff", () =>
+test("a file write rereads the current Source or diff with its comments and refreshes the tree", () =>
   checkConversationSession("file-written"));
-test("a declined file change keeps the current file, directory and Project", () =>
+test("project navigation restores its directory and pending comments", () =>
   checkConversationSession("desktop-confirm-file-change"));
