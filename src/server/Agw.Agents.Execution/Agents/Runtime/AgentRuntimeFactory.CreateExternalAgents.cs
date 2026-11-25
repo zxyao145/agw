@@ -1,9 +1,11 @@
 using System.Text.Json;
 using Agw.Agents.Application.A2A;
+using Agw.Agents.Application.Acp;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Agents.Execution.Agents.ExternalAgents.A2A;
+using Agw.Agents.Execution.Agents.ExternalAgents.Acp;
 using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
 using Agw.Agents.Execution.Agents.ExternalAgents.Codex;
 using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
@@ -13,6 +15,7 @@ using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Steering;
 using Agw.Agents.ExternalAgents;
 using Agw.Agents.ExternalAgents.A2A;
+using Agw.Agents.ExternalAgents.Acp;
 using Agw.Auth.Contracts;
 using Agw.Files.Abstracts;
 using Agw.Shared.Data.Entities.Agents;
@@ -194,7 +197,7 @@ public partial class AgentRuntimeFactory
     {
         cancellationToken.ThrowIfCancellationRequested();
         var agent = request.Agent;
-        ExecutionPermissionService.Validate(agent, request.PermissionMode);
+        ExecutionPermissionService.Validate(agent, _executionProvider, request.PermissionMode);
         var remote = A2ARemoteAgent.Create(
             agent,
             _services.GetRequiredService<IA2ARemoteHttpClientFactory>(),
@@ -230,7 +233,7 @@ public partial class AgentRuntimeFactory
         CancellationToken cancellationToken
     )
     {
-        ExecutionPermissionService.Validate(request.Agent, request.PermissionMode);
+        ExecutionPermissionService.Validate(request.Agent, _executionProvider, request.PermissionMode);
         var kind = EngineKinds.Resolve(request.Agent);
         AIAgent? aiAgent;
         IAsyncDisposable? ownedResource = null;
@@ -284,6 +287,16 @@ public partial class AgentRuntimeFactory
                     modelConfiguration
                 );
                 break;
+            case EngineKind.ACP:
+                aiAgent = CreateAcpAgent(
+                    request,
+                    project,
+                    environmentVariables,
+                    historyProvider,
+                    createMemoryContextAsync,
+                    isBackground
+                );
+                break;
             default:
                 return null;
         }
@@ -305,7 +318,7 @@ public partial class AgentRuntimeFactory
                     createMemoryContextAsync
                 ),
                 EngineKind.Codex => WrapExternalAgent(aiAgent, historyProvider, isBackground, createMemoryContextAsync),
-                EngineKind.Pi => aiAgent,
+                EngineKind.Pi or EngineKind.ACP => aiAgent,
                 _ => null,
             };
             return aiAgent == null ? null : new ExternalAgentCreation(aiAgent, ownedResource);
@@ -429,10 +442,60 @@ public partial class AgentRuntimeFactory
         return agentBuilder.Build();
     }
 
+    private AIAgent CreateAcpAgent(
+        CreateAiAgentRequest request,
+        Project project,
+        IReadOnlyDictionary<string, string> environmentVariables,
+        AgwChatHistoryProvider historyProvider,
+        Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync,
+        bool isBackground
+    )
+    {
+        var agent = request.Agent;
+        var workingDirectory = Path.GetFullPath(PathUtil.ExpandTilde(project.Workspace)!);
+        var settings = AcpAgentSettingsJson.Parse(agent.Extra ?? ExternalAgentDefaults.GetDefaultExtra(EngineKind.ACP));
+        var runtime = new AcpAgentRuntimeOptions(
+            agent.Id,
+            agent.Name,
+            settings,
+            workingDirectory,
+            project.AdditionalDirectories.Select(directory => directory.Path).ToArray(),
+            environmentVariables,
+            request.ProviderSessionId,
+            request.OnExternalSessionStartedAsync,
+            _services.GetRequiredService<IOptions<AcpAgentOptions>>().Value
+        );
+        var logger = _loggerFactory.CreateLogger<AcpAgent>();
+        var permissions = new AcpPermissionBridge(
+            _humanInteractionContextAccessor,
+            allowInteraction: !isBackground && _executionProvider == ExecutionProvider.InProcess,
+            request.PermissionMode,
+            workingDirectory,
+            agent.Id,
+            _executionContext,
+            _externalApprovals,
+            logger
+        );
+        var acp = new AcpAgent(
+            runtime,
+            new AcpLaunchResolver(_services.GetRequiredService<IAcpInstalledAgentCatalog>()),
+            permissions,
+            logger,
+            _timeProvider
+        );
+        var bound = acp.AsBuilder()
+            .Use(runFunc: permissions.BindRunAsync, runStreamingFunc: permissions.BindRunStreamingAsync)
+            .Build();
+        return new ResourceOwningAIAgent(
+            DecorateExternalAgent(bound, historyProvider, isBackground, createMemoryContextAsync),
+            acp
+        );
+    }
+
     private AIAgent? CreateClaudeCodeAgent(
         Agent agent,
         Project project,
-        Guid? providerSessionId,
+        string? providerSessionId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables,
         bool isBackground,
@@ -445,7 +508,7 @@ public partial class AgentRuntimeFactory
         var options = BuildClaudeCodeAIAgentOptions(
             agent,
             project,
-            providerSessionId,
+            providerSessionId is null ? null : Guid.Parse(providerSessionId),
             isResume,
             environmentVariables,
             historyProvider,
@@ -465,7 +528,7 @@ public partial class AgentRuntimeFactory
             workingDirectory: options.WorkingDirectory,
             agentId: agent.Id,
             executionContext: _executionContext,
-            cache: _claudeApprovals
+            cache: _externalApprovals
         );
         options = ExternalAgentModelOptions.ApplyClaudeCode(options, modelConfiguration);
         options = options with { CanUseTool = interactionBridge.HandleAsync };
@@ -572,7 +635,7 @@ public partial class AgentRuntimeFactory
     private async Task<ExternalAgentCreation?> CreateCodexAgentAsync(
         Agent agent,
         Project project,
-        Guid? providerSessionId,
+        string? providerSessionId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync,
@@ -588,7 +651,8 @@ public partial class AgentRuntimeFactory
             isResume,
             environmentVariables,
             onThreadStartedAsync,
-            permissionMode
+            permissionMode,
+            _executionProvider
         );
         if (runtimeOptions == null)
         {
@@ -642,7 +706,7 @@ public partial class AgentRuntimeFactory
     private AIAgent? CreatePiAgent(
         Agent agent,
         Project project,
-        Guid? providerSessionId,
+        string? providerSessionId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables,
         Func<string, CancellationToken, ValueTask>? onSessionStartedAsync,
@@ -663,7 +727,7 @@ public partial class AgentRuntimeFactory
             project,
             paths.ConfigDirectory,
             paths.SessionDirectory,
-            providerSessionId,
+            providerSessionId is null ? null : Guid.Parse(providerSessionId),
             isResume,
             environmentVariables,
             historyProvider,
@@ -772,11 +836,12 @@ public partial class AgentRuntimeFactory
     private static CodexAgentRuntimeOptions? BuildCodexAgentRuntimeOptions(
         Agent agent,
         Project project,
-        Guid? providerSessionId,
+        string? providerSessionId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null,
-        AgwPermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null,
+        ExecutionProvider provider = ExecutionProvider.InProcess
     )
     {
         var extra = agent.Extra;
@@ -785,7 +850,7 @@ public partial class AgentRuntimeFactory
             extra = ExternalAgentDefaults.GetDefaultExtra(EngineKind.Codex);
         }
 
-        ExecutionPermissionService.Validate(agent, permissionMode);
+        ExecutionPermissionService.Validate(agent, provider, permissionMode);
         return CodexAgentRuntimeOptionsMapper.Build(
             extra,
             project,

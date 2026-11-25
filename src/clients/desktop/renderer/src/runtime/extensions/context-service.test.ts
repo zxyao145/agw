@@ -47,6 +47,17 @@ test("the context target identifies an A2A agent", () => {
   assert.equal(context.snapshot().target?.externalAgentKind, "a2a");
 });
 
+test("the context target identifies an ACP agent", () => {
+  const target = toContextTarget("agent", {
+    id: "agent-1",
+    name: "external",
+    type: 1,
+    externalAgentKind: 5,
+  });
+
+  assert.equal(target?.externalAgentKind, "acp");
+});
+
 test("changing any part of the connection identity clears the selection with a single notification", () => {
   for (const change of [
     { profileId: "remote-2", baseUrl: "https://office.example.test", token: "agw_a" },

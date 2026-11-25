@@ -2373,6 +2373,45 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/agents/acp-registry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          refresh?: boolean;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfAcpRegistryResponse"];
+            "application/json": components["schemas"]["ApiResultOfAcpRegistryResponse"];
+            "text/json": components["schemas"]["ApiResultOfAcpRegistryResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/agents/external-options": {
     parameters: {
       query?: never;
@@ -7896,6 +7935,23 @@ export interface components {
       origin: string;
       names: string[];
     };
+    AcpRegistryAgentResponse: {
+      id: string;
+      name: string;
+      version: string;
+      description: string;
+      repository: null | string;
+      website: null | string;
+      license: null | string;
+      distributions: string[];
+    };
+    AcpRegistryResponse: {
+      /** Format: uri */
+      sourceUrl: string;
+      /** Format: date-time */
+      fetchedAt: string;
+      agents: components["schemas"]["AcpRegistryAgentResponse"][];
+    };
     Agent: {
       /** Format: uuid */
       id: string;
@@ -8538,6 +8594,13 @@ export interface components {
     };
     ApiResultOfA2ACardPreviewResponse: {
       data?: null | components["schemas"]["A2ACardPreviewResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfAcpRegistryResponse: {
+      data?: null | components["schemas"]["AcpRegistryResponse"];
       /** Format: int32 */
       code: number;
       title: string;

@@ -13,7 +13,7 @@ public sealed class A2ARemoteAgentTurnRecoveryTests
     [Fact]
     public async Task RunTurn_Unauthorized_ReturnsUnauthorizedCode()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         await using var server = await A2ATestAgentServer.StartAsync(
             new(ProtocolBindingNames.HttpJson, true, ScriptedAgentHandler.Echo())
             {
@@ -21,7 +21,7 @@ public sealed class A2ARemoteAgentTurnRecoveryTests
             },
             Ct
         );
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
 
         var turn = await harness.RunTurnAsync("go");
 
@@ -39,9 +39,9 @@ public sealed class A2ARemoteAgentTurnRecoveryTests
     [InlineData(true)]
     public async Task RunTurn_InputRequiredThenReply_ContinuesSameTask(bool rebuildRuntime)
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         await using var server = await StartAsync(InputRequiredHandler());
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
         var first = await harness.RunTurnAsync("ask");
         var waiting = await harness.ReadSessionAsync();
         Assert.Equal(TaskState.InputRequired, waiting.TaskState);
@@ -66,10 +66,10 @@ public sealed class A2ARemoteAgentTurnRecoveryTests
     [Fact]
     public async Task RunTurn_InterruptedInputRequiredReply_NextTurnStartsNewTask()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         var continuationStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var server = await StartAsync(InputRequiredHandler(continuationStarted));
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
         await harness.RunTurnAsync("ask");
         var waiting = await harness.ReadSessionAsync();
         Assert.Equal(TaskState.InputRequired, waiting.TaskState);
@@ -93,9 +93,9 @@ public sealed class A2ARemoteAgentTurnRecoveryTests
     [Fact]
     public async Task RunTurn_ContinuationRejectedWithTaskNotFound_ClearsRemoteState()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         await using var server = await StartAsync(InputRequiredHandler(), ProtocolBindingNames.JsonRpc);
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
         await harness.RunTurnAsync("ask");
         var waiting = await harness.ReadSessionAsync();
         Assert.Equal(TaskState.InputRequired, waiting.TaskState);
@@ -122,10 +122,10 @@ public sealed class A2ARemoteAgentTurnRecoveryTests
     [Fact]
     public async Task RunTurn_StreamDropped_ResubscribesAndCompletes()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var server = await StartAsync(ScriptedAgentHandler.StreamArtifacts(finish.Task, partial: true));
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
         var turn = await harness.StartTurnAsync("go");
         await WaitForAsync(() => harness.ReadMessages(turn).Any(message => HasText(message, "partial")));
 
@@ -148,10 +148,10 @@ public sealed class A2ARemoteAgentTurnRecoveryTests
     [Fact]
     public async Task RunTurn_NonStreamingAgent_PollsUntilCompleted()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var server = await StartAsync(ScriptedAgentHandler.StreamArtifacts(finish.Task), streaming: false);
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
 
         var turn = await harness.StartTurnAsync("go");
         await WaitForAsync(() => server.Requests.Count(request => request.Method == "GET") >= 3);

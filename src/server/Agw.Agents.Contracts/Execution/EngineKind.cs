@@ -15,4 +15,5 @@ public enum EngineKind
     Codex = 2,
     Pi = 3,
     A2A = 4,
+    ACP = 5,
 }

@@ -53,6 +53,39 @@ public sealed class ExecutionRuntimeConfigurationTests
     }
 
     [Fact]
+    public void AddAgentExecution_ProviderChangesAfterRegistration_KeepsStartupProvider()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection([
+                new(ExecutionRuntimeConfiguration.ProviderKey, nameof(ExecutionProvider.InProcess)),
+            ])
+            .Build();
+        var services = new ServiceCollection().AddAgents(configuration).AddAgentExecution(configuration);
+        configuration[ExecutionRuntimeConfiguration.ProviderKey] = nameof(ExecutionProvider.Distributed);
+        using var provider = services.BuildServiceProvider();
+
+        var runtime = provider.GetRequiredService<IOptions<ExecutionRuntimeOptions>>().Value;
+        Assert.Equal(ExecutionProvider.InProcess, runtime.Provider);
+        Assert.Same(runtime, provider.GetRequiredService<IOptions<ExecutionProviderOptions>>().Value);
+        Assert.Null(provider.GetService<DurableExecutionCoordinator>());
+    }
+
+    [Fact]
+    public void AddAgents_InvalidProviderName_ThrowsWhenBindingOptions()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection([new(ExecutionRuntimeConfiguration.ProviderKey, "invalid")])
+            .Build();
+        using var provider = new ServiceCollection().AddAgents(configuration).BuildServiceProvider();
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            provider.GetRequiredService<IOptions<ExecutionProviderOptions>>().Value
+        );
+
+        Assert.Contains(ExecutionRuntimeConfiguration.ProviderKey, error.Message);
+    }
+
+    [Fact]
     public void AddAgentExecution_DistributedWithSqlite_FailsFast()
     {
         var configuration = new ConfigurationBuilder()

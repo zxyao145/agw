@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Agw.Tools.Impl.ToolBlocks.Todo;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -91,24 +92,45 @@ internal static class ToolStateSnapshots
         )
             ? await provider.GetRemainingTodosAsync(session, cancellationToken).ConfigureAwait(false)
             : await provider.GetAllTodosAsync(session, cancellationToken).ConfigureAwait(false);
-        return CreateMessage(
+        return CreateTodoMessage(
+            toolName,
+            callId,
+            Guid.CreateVersion7().ToString("N"),
+            items
+                .Select(static item => new
+                {
+                    id = item.Id,
+                    title = item.Title,
+                    description = item.Description,
+                    isComplete = item.IsComplete,
+                })
+                .ToArray()
+        );
+    }
+
+    internal static ChatMessage CreateTodoSnapshotMessage(
+        string toolName,
+        string callId,
+        string messageId,
+        IReadOnlyList<TodoSnapshotItem> items
+    ) => CreateTodoMessage(toolName, callId, messageId, items);
+
+    private static ChatMessage CreateTodoMessage(
+        string toolName,
+        string callId,
+        string messageId,
+        IReadOnlyList<object> items
+    ) =>
+        CreateMessage(
             AgwMessageTypes.ToolTodoSnapshot,
             new AdditionalPropertiesDictionary
             {
                 ["toolName"] = toolName,
                 ["callId"] = callId,
-                ["items"] = items
-                    .Select(static item => new
-                    {
-                        id = item.Id,
-                        title = item.Title,
-                        description = item.Description,
-                        isComplete = item.IsComplete,
-                    })
-                    .ToArray(),
-            }
+                ["items"] = items,
+            },
+            messageId
         );
-    }
 
     private static HashSet<string> GetCompletedToolNames(IEnumerable<ChatMessage> turnMessages)
     {
@@ -196,14 +218,41 @@ internal static class ToolStateSnapshots
             || persistSeparately is not true;
     }
 
-    private static ChatMessage CreateMessage(string type, AdditionalPropertiesDictionary properties)
+    private static ChatMessage CreateMessage(
+        string type,
+        AdditionalPropertiesDictionary properties,
+        string? messageId = null
+    )
     {
         properties["type"] = type;
         return new ChatMessage(ChatRole.System, [new TextContent(string.Empty)])
         {
-            MessageId = Guid.CreateVersion7().ToString("N"),
+            MessageId = messageId ?? Guid.CreateVersion7().ToString("N"),
             AuthorName = "tools",
             AdditionalProperties = properties,
         };
     }
+}
+
+internal sealed record TodoSnapshotItem
+{
+    public TodoSnapshotItem(string id, string title, string? description, bool isComplete)
+    {
+        Id = id;
+        Title = title;
+        Description = description;
+        IsComplete = isComplete;
+    }
+
+    [JsonPropertyName("id")]
+    public string Id { get; }
+
+    [JsonPropertyName("title")]
+    public string Title { get; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; }
+
+    [JsonPropertyName("isComplete")]
+    public bool IsComplete { get; }
 }

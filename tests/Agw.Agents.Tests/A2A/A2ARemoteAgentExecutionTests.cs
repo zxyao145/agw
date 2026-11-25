@@ -23,7 +23,7 @@ public sealed class A2ARemoteAgentExecutionTests
     [InlineData(true)]
     public async Task RunTurn_WhetherWorkspaceExists_EmitsAssistantAndResult(bool workspaceExists)
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         await using var server = await A2ATestAgentServer.StartAsync(
             new(ProtocolBindingNames.HttpJson, true, ScriptedAgentHandler.Echo())
             {
@@ -31,7 +31,7 @@ public sealed class A2ARemoteAgentExecutionTests
             },
             Ct
         );
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(
+        await using var harness = await ExternalAgentHarness.CreateAsync(
             server,
             [Credentials(server.InterfaceUrl, "Bearer interface")],
             createWorkspace: workspaceExists
@@ -68,7 +68,7 @@ public sealed class A2ARemoteAgentExecutionTests
     [Fact]
     public async Task RunTurn_JsonRpcArtifactChunks_UseOneHistoryMessage()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         var handler = new ScriptedAgentHandler(
             async (context, queue, ct) =>
             {
@@ -93,7 +93,7 @@ public sealed class A2ARemoteAgentExecutionTests
             }
         );
         await using var server = await StartAsync(handler, ProtocolBindingNames.JsonRpc);
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
 
         var turn = await harness.RunTurnAsync("go");
 
@@ -114,9 +114,9 @@ public sealed class A2ARemoteAgentExecutionTests
     [Fact]
     public async Task RunTurn_AfterRuntimeRebuild_ReusesContext()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         await using var server = await StartAsync(ScriptedAgentHandler.Echo());
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
         await harness.RunTurnAsync("go");
         var previous = await harness.ReadSessionAsync();
 
@@ -133,9 +133,9 @@ public sealed class A2ARemoteAgentExecutionTests
     [Fact]
     public async Task RunTurn_AfterConversationCleared_StartsNewContext()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         await using var server = await StartAsync(ScriptedAgentHandler.Echo());
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
         await harness.RunTurnAsync("before");
 
         await harness.ClearConversationAsync();
@@ -148,7 +148,7 @@ public sealed class A2ARemoteAgentExecutionTests
     [Fact]
     public async Task RunTurn_RemoteTaskFailed_FinishesFailedAndSavesSession()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         var handler = new ScriptedAgentHandler(
             async (context, queue, ct) =>
             {
@@ -158,7 +158,7 @@ public sealed class A2ARemoteAgentExecutionTests
             }
         );
         await using var server = await StartAsync(handler);
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
 
         var turn = await harness.RunTurnAsync("go");
 
@@ -177,7 +177,7 @@ public sealed class A2ARemoteAgentExecutionTests
     [Fact]
     public async Task RunTurn_Interrupted_CancelsAndPersistsRemoteTask()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         var handler = new ScriptedAgentHandler(
             async (context, queue, ct) =>
             {
@@ -188,7 +188,7 @@ public sealed class A2ARemoteAgentExecutionTests
             }
         );
         await using var server = await StartAsync(handler);
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
         var turn = await harness.StartTurnAsync("go");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
@@ -212,7 +212,7 @@ public sealed class A2ARemoteAgentExecutionTests
     [Fact]
     public async Task RunTurn_EndpointUpdated_UsesMatchingOriginCredentialsAndRevision()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         await using var card = await A2ATestAgentServer.StartAsync(
             new(ProtocolBindingNames.HttpJson, true, ScriptedAgentHandler.Echo())
             {
@@ -222,7 +222,7 @@ public sealed class A2ARemoteAgentExecutionTests
         );
         await using var peer = await StartAsync(ScriptedAgentHandler.Echo());
         card.Card.SupportedInterfaces[0].Url = peer.InterfaceUrl.AbsoluteUri;
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(
+        await using var harness = await ExternalAgentHarness.CreateAsync(
             card,
             [Credentials(card.CardUrl, "Bearer card")]
         );
@@ -250,7 +250,7 @@ public sealed class A2ARemoteAgentExecutionTests
     [Fact]
     public async Task RefreshCard_InterfaceOriginChanged_DoesNotReuseCardCredentials()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         var authorization = new Dictionary<string, string> { ["Authorization"] = "Bearer card" };
         await using var card = await A2ATestAgentServer.StartAsync(
             new(ProtocolBindingNames.HttpJson, true, ScriptedAgentHandler.Echo())
@@ -261,7 +261,7 @@ public sealed class A2ARemoteAgentExecutionTests
             Ct
         );
         await using var peer = await StartAsync(ScriptedAgentHandler.Echo());
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(
+        await using var harness = await ExternalAgentHarness.CreateAsync(
             card,
             [Credentials(card.CardUrl, "Bearer card")]
         );
@@ -287,9 +287,9 @@ public sealed class A2ARemoteAgentExecutionTests
     [Fact]
     public async Task RunTurn_PermissionModeAlwaysAsk_IsRejected()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         await using var server = await StartAsync(ScriptedAgentHandler.Echo());
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
 
         var error = await Assert.ThrowsAsync<AgwException>(() =>
             harness.StartTurnAsync("go", AgwPermissionMode.AlwaysAsk)
@@ -302,16 +302,16 @@ public sealed class A2ARemoteAgentExecutionTests
     [Fact]
     public async Task GetOrCreateForNodeAsync_A2AAgentTwoNodes_KeepsSeparateSessions()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         await using var server = await StartAsync(ScriptedAgentHandler.Echo());
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
         await using var client = new A2ARemoteAgentTestClient(server);
         var store = harness.Services.GetRequiredService<AgentSessionStateStore>();
         var scopes = new[] { "flow:node-a", "flow:node-b" }
             .Select(node => new AgentSessionStateScope(
                 harness.ConversationId,
                 harness.ProjectId,
-                A2ARemoteAgentHarness.ContextId,
+                ExternalAgentHarness.ContextId,
                 harness.AgentId,
                 node
             ))
@@ -339,9 +339,9 @@ public sealed class A2ARemoteAgentExecutionTests
     [Fact]
     public async Task CreateRuntime_SystemAgentAllowingA2ABackgroundAgent_BuildsRuntimeWithoutFetchingCard()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         await using var server = await StartAsync(ScriptedAgentHandler.Echo());
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
         var parent = Guid.CreateVersion7();
         await harness.QueryAsync(db =>
         {
@@ -390,7 +390,7 @@ public sealed class A2ARemoteAgentExecutionTests
             {
                 ProjectId = harness.ProjectId,
                 ProjectConversationId = harness.ConversationId,
-                ContextId = A2ARemoteAgentHarness.ContextId,
+                ContextId = ExternalAgentHarness.ContextId,
             },
             new ExecutionSettings(harness.ProjectId, harness.ConversationId),
             Ct

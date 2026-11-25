@@ -312,7 +312,7 @@ public class AgentSuggestionAppServiceTests : IAsyncLifetime
         };
         var project = new Project { Id = Guid.CreateVersion7() };
         var service = CreateService(agents: [agent], projects: [project]);
-        var controller = new AgentsController(null!, service);
+        var controller = new AgentsController(null!, service, null!);
 
         var result = await controller.SuggestionsAsync(project.Id, agent.Id);
         var json = JsonSerializer.Serialize(

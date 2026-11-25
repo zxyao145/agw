@@ -82,7 +82,9 @@ export function AgentsTable({
                   ? "A2A"
                   : agent.externalAgentKind === ExternalAgentKind.Pi
                     ? "Pi"
-                    : "Unknown";
+                    : agent.externalAgentKind === ExternalAgentKind.ACP
+                      ? "ACP"
+                      : "Unknown";
 
           return (
             <TableRow key={agent.id}>

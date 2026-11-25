@@ -1,10 +1,11 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Contracts;
+using Agw.Agents.Execution.Configuration;
 using Agw.Auth.Contracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Definitions.Agents;
 
@@ -17,16 +18,10 @@ public sealed class ExecutionInputService
     private readonly IAgentsDbContext _db;
     private readonly ExecutionProvider _provider;
 
-    public ExecutionInputService(IAgentsDbContext db, IConfiguration configuration)
+    public ExecutionInputService(IAgentsDbContext db, IOptions<ExecutionProviderOptions> executionOptions)
     {
         _db = db;
-        _provider = Enum.TryParse<ExecutionProvider>(
-            configuration[ExecutionRuntimeConfiguration.ProviderKey],
-            ignoreCase: true,
-            out var provider
-        )
-            ? provider
-            : ExecutionProvider.InProcess;
+        _provider = executionOptions.Value.Provider;
     }
 
     public async Task<ExecutionInputCapabilities> GetAsync(

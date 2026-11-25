@@ -743,11 +743,11 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                     ?? throw new AgwException(ErrorCodes.AgentExecutionFailed, "Agent could not be created.");
                 await using (runtime)
                 {
-                    if (EngineKinds.UsesProviderSessionBinding(runtime.EngineKind))
+                    if (!EngineKinds.SupportsDistributedExecution(runtime.EngineKind))
                     {
                         throw new AgwException(
                             ErrorCodes.AgentExecutionFailed,
-                            "Distributed execution supports System Agents and A2A Agents."
+                            "Distributed execution supports System Agents, A2A Agents and ACP Agents."
                         );
                     }
 

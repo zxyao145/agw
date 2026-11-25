@@ -15,7 +15,7 @@ public sealed class CreateAiAgentRequest
     /// <summary>
     /// external agent session id
     /// </summary>
-    public Guid? ProviderSessionId { get; init; }
+    public string? ProviderSessionId { get; init; }
 
     public required Agent Agent { get; init; }
 

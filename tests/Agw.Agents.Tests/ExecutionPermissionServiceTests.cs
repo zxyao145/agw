@@ -1,12 +1,14 @@
 using System.Security.Claims;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Persistence;
+using Agw.Agents.Execution.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Tests;
 
@@ -18,16 +20,17 @@ public sealed class ExecutionPermissionServiceTests
     public void ExternalSdk_WithoutApprovalChannel_OnlyAllowsFullAccess(EngineKind kind)
     {
         var agent = new Agent { Type = AgentType.External, ExternalAgentKind = kind };
-        Assert.False(ExecutionPermissionService.ForAgent(agent).SupportsNoTools);
-        Assert.Equal(
-            [AgwPermissionMode.FullAccess],
-            ExecutionPermissionService.ForAgent(agent).SupportedPermissionModes
-        );
-        ExecutionPermissionService.Validate(agent, null);
-        ExecutionPermissionService.Validate(agent, AgwPermissionMode.FullAccess);
-        Assert.Throws<AgwException>(() => ExecutionPermissionService.Validate(agent, AgwPermissionMode.AlwaysAsk));
+        const ExecutionProvider provider = ExecutionProvider.InProcess;
+        var capabilities = ExecutionPermissionService.ForAgent(agent, provider);
+        Assert.False(capabilities.SupportsNoTools);
+        Assert.Equal([AgwPermissionMode.FullAccess], capabilities.SupportedPermissionModes);
+        ExecutionPermissionService.Validate(agent, provider, null);
+        ExecutionPermissionService.Validate(agent, provider, AgwPermissionMode.FullAccess);
         Assert.Throws<AgwException>(() =>
-            ExecutionPermissionService.Validate(agent, AgwPermissionMode.AllowSameArguments)
+            ExecutionPermissionService.Validate(agent, provider, AgwPermissionMode.AlwaysAsk)
+        );
+        Assert.Throws<AgwException>(() =>
+            ExecutionPermissionService.Validate(agent, provider, AgwPermissionMode.AllowSameArguments)
         );
     }
 
@@ -161,7 +164,7 @@ public sealed class ExecutionPermissionServiceTests
         await db.SaveChangesAsync(token);
         var snapshots = new AgentflowRevisionSnapshotReader(db);
         var snapshot = await snapshots.CreateRevisionSnapshotAsync(outer.Id, 0, token);
-        var service = new ExecutionPermissionService(db, snapshots);
+        var service = new ExecutionPermissionService(db, snapshots, Options.Create(new ExecutionProviderOptions()));
         var capabilities = await service.GetAsync(AgentRuntimeType.Agentflow, outer.Id, token);
         Assert.Equal([AgwPermissionMode.FullAccess], capabilities.SupportedPermissionModes);
         Assert.False(capabilities.SupportsNoTools);
@@ -235,11 +238,9 @@ public sealed class ExecutionPermissionServiceTests
             }
         )
         {
-            Assert.Equal(
-                Enum.GetValues<AgwPermissionMode>(),
-                ExecutionPermissionService.ForAgent(agent).SupportedPermissionModes
-            );
-            Assert.True(ExecutionPermissionService.ForAgent(agent).SupportsNoTools);
+            var capabilities = ExecutionPermissionService.ForAgent(agent, ExecutionProvider.InProcess);
+            Assert.Equal(Enum.GetValues<AgwPermissionMode>(), capabilities.SupportedPermissionModes);
+            Assert.True(capabilities.SupportsNoTools);
         }
     }
 }

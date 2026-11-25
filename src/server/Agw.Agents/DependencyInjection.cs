@@ -6,7 +6,9 @@ using Agw.Agents.Definitions.Domain.Repositories;
 using Agw.Agents.Definitions.Domain.Services;
 using Agw.Agents.Definitions.Facades;
 using Agw.Agents.Definitions.Persistence;
+using Agw.Agents.Execution.Configuration;
 using Agw.Agents.ExternalAgents.A2A;
+using Agw.Agents.ExternalAgents.Acp;
 using Agw.Agents.Infrastructure.A2A;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,7 +24,12 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddAgents(this IServiceCollection services, IConfiguration configuration)
     {
+        services.Configure<ExecutionProviderOptions>(
+            configuration.GetSection(ExecutionRuntimeConfiguration.SectionName)
+        );
         services.TryAddSingleton(TimeProvider.System);
+        services.AddAcpAgentInstallation(configuration);
+        services.AddScoped<AcpRegistryAppService>();
         services
             .AddOptions<A2ARemoteAgentOptions>()
             .Bind(configuration.GetSection(A2ARemoteAgentOptions.SectionName))

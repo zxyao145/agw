@@ -33,7 +33,7 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
     private readonly string? _workingDirectory;
     private readonly Guid _agentId;
     private readonly IAgentExecutionContextAccessor? _executionContext;
-    private readonly ClaudeToolApprovalCache _cache;
+    private readonly ExternalToolApprovalCache _cache;
     private string? _scope;
     private long _version;
     private InteractionSource _source = new();
@@ -77,7 +77,7 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
         string? workingDirectory = null,
         Guid agentId = default,
         IAgentExecutionContextAccessor? executionContext = null,
-        ClaudeToolApprovalCache? cache = null
+        ExternalToolApprovalCache? cache = null
     )
     {
         _contextAccessor = contextAccessor;
@@ -86,7 +86,7 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
         _workingDirectory = workingDirectory;
         _agentId = agentId;
         _executionContext = executionContext;
-        _cache = cache ?? new ClaudeToolApprovalCache();
+        _cache = cache ?? new ExternalToolApprovalCache();
     }
 
     /// <summary>
@@ -358,26 +358,12 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
             );
         }
 
-        _source = _contextAccessor?.Source ?? new InteractionSource { NodeId = InteractionIdentity.StandaloneNodeId };
-        var execution = _executionContext?.Current;
-        // 缓存作用域绑定用户、项目、会话代次、Agent、节点和工作区，避免授权跨边界复用。
-        // Scope cached grants to user, project, conversation generation, agent, node, and workspace.
-        _scope =
-            execution == null
-                ? null
-                : JsonSerializer.Serialize(
-                    new
-                    {
-                        execution.UserId,
-                        execution.ProjectId,
-                        execution.ProjectConversationId,
-                        execution.Generation,
-                        AgentId = _agentId,
-                        _source.NodeId,
-                        Workspace = _workingDirectory,
-                    }
-                );
-        _version = execution?.PermissionVersion ?? 0;
+        (_source, _scope, _version) = ExternalToolApprovalCache.BindScope(
+            _contextAccessor?.Source,
+            _executionContext?.Current,
+            _agentId,
+            _workingDirectory
+        );
         Volatile.Write(ref _activeChannel, _allowInteraction ? _contextAccessor?.Current : null);
         return new Binding(this);
     }

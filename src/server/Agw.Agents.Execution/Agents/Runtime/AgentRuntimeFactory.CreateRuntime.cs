@@ -64,7 +64,7 @@ public partial class AgentRuntimeFactory
         var providerSession = await _providerBindings.ReadStateAsync(agent, task, resolvedContextId, cancellationToken);
         var (providerSessionId, isResume) = ExternalProviderSessionBindings.ResolveExternalProviderSession(
             agent,
-            _providerBindings.ParseProviderSessionId(agent, providerSession),
+            _providerBindings.ResolveProviderSessionId(agent, providerSession),
             settings.Resume
         );
 

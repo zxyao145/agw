@@ -4,6 +4,7 @@ using System.Reflection;
 using Agw.A2A.Extensions;
 using Agw.Agents;
 using Agw.Agents.Execution;
+using Agw.Agents.ExternalAgents.Acp;
 using Agw.Auth.Extensions;
 using Agw.Events;
 using Agw.Events.Api;
@@ -96,6 +97,8 @@ public static class AgwHostApplication
 
             startupStage = ServerStartupStage.DataPaths;
             var dataPaths = AgwDataPaths.ResolveFromConfiguration(builder.Configuration);
+            if (await AcpCommand.TryRunAsync(args, builder.Configuration, dataPaths))
+                return;
 
             startupStage = ServerStartupStage.Directories;
             dataPaths.EnsureCreated(directory => startupPath = directory);

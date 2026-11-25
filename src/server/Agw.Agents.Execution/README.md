@@ -257,7 +257,7 @@ Definition Agent 的 Skill provider 明确把 Skill 内容与 Project Workspace 
 
 `RuntimeFactory` 负责把已解析好的 execution/turn 输入对应到具体 runtime，并将 runtime 输出接入统一的 `TurnPipeline`。task 与 workspace 的解析由 `ExecutionConnectionContext` 统一完成。Agent runtime 只有在 project、context、generation 和 Agent definition 版本仍兼容时才会复用；settings 或 target 变化会先释放旧 runtime。
 
-External Agent 通过 `Agent.ExternalAgentKind` 选择 Claude Code、Codex、Pi 或 A2A。同一 Engine 可以有多个独立定义，每个定义有稳定的 `Agent.Name`。Claude Code、Codex 和 Pi 从 `Agent.Extra` 解析 SDK 配置，创建时为空或空 JSON 对象会保存该 Engine 的默认配置，运行时也沿用对应的默认值。工作目录由 `Project.Workspace` 提供，环境变量按 Agent、Project、本次执行的顺序合并。Pi 的显式扩展和历史持久化超时分别配置在 `Agent.Extra` 的 `sessionOptions.extensions` 和 `historyPersistenceTimeout` 中。
+External Agent 通过 `Agent.ExternalAgentKind` 选择 Claude Code、Codex、Pi、A2A 或 ACP。同一 Engine 可以有多个独立定义，每个定义有稳定的 `Agent.Name`。Claude Code、Codex 和 Pi 从 `Agent.Extra` 解析 SDK 配置，创建时为空或空 JSON 对象会保存该 Engine 的默认配置，运行时也沿用对应的默认值。工作目录由 `Project.Workspace` 提供，环境变量按 Agent、Project、本次执行的顺序合并。Pi 的显式扩展和历史持久化超时分别配置在 `Agent.Extra` 的 `sessionOptions.extensions` 和 `historyPersistenceTimeout` 中。
 
 Codex 的 `Agent.Extra` 保留 `codexOptions`、`threadOptions` 和 `turnOptions` 字段，由 `CodexAgentSettings` 解析并转换为 app-server 请求。已有工具环境配置映射到 `shell_environment_policy.set`；模型 Endpoint 和凭据通过当前 thread 的 provider 配置传递。`CODEX_HOME` 需要在运行 Agw 的主机配置；在 Extra 或执行环境中提供该字段会返回 `InvalidParam`。`skipGitRepoCheck=false` 和 app-server 不支持的 `onFailure` 审批配置也会明确失败。
 
@@ -463,6 +463,16 @@ Pi 通过显式加载随应用发布的 `agw-model-provider.mjs` 注册进程内
 `EngineKind.A2A` 从 `AgentA2AEndpoint` 读取 Agent Card 快照和选定的 JSON-RPC 或 HTTP+JSON interface。Card 和 interface 请求各自使用目标 origin 的凭据。Agw 根据 Card 能力接收流式响应或轮询 Task，并在 SDK session 中保存 `InterfaceRevision`、`ContextId`、`TaskId` 与 `TaskState`。Interface 地址或 binding 变化时，下轮建立新的远端会话。
 
 A2A Agent 支持 `FullAccess` 权限模式，向远端发送文本、图片和文件内容。远端需要输入时，本轮返回状态消息，用户的下一条消息继续同一个 Task。用户中断时，Agw 会向已知的活动 Task 发送取消请求。
+
+### ACP Agent
+
+`EngineKind.ACP` 从 `Agent.Extra` 读取 `registry.agentId`，或者读取 `command` 与可选的 `args`。`registry.version` 可以指定已经安装的版本。Agent 进程在执行主机启动，通过标准输入和输出交换 ACP JSON-RPC 消息。模型、认证和会话选项可通过 `configOptions`、`authMethodId` 与 `modeId` 配置。
+
+单个 Agent 的 Conversation 通过 provider session binding 保存 ACP `sessionId`。Runtime 重新创建时，根据 agent 声明的能力使用 `session/resume` 或 `session/load` 恢复会话。Agent 不支持恢复，或者报告会话不存在时，Agw 创建新会话。Agentflow 节点的每次调用都创建独立的 ACP 会话。
+
+InProcess 支持 `FullAccess`、`AlwaysAsk` 和 `AllowSameArguments`。ACP 的工具权限请求进入统一审批流程，聊天工具摘要使用 agent 提供的 `toolTitle`。ACP Agent 不支持 `BackgroundToolPolicy.None`、输入建议或向运行中的 Turn 追加输入。用户中断时，Agw 发送 `session/cancel`，取消等待中的工具审批，并在宽限期内等待 prompt 响应。宽限期结束后，Agw 结束整个进程树。
+
+Distributed 仅支持 `FullAccess`。每个 Turn 在一个 segment 内执行，segment 结束时释放 Runtime 并结束 ACP 进程。后续 Turn 可以由另一副本启动新进程并恢复会话。Worker 故障后的 segment 重试可能再次提交同一条输入。部署时，各副本使用相同的安装版本，并共享 ACP agent 自己的会话目录。[ACP 安装与部署](../../../docs/4.Deployment.md#acp-agents)
 
 ### 在执行目标之间交接 Conversation
 

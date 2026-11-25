@@ -10,6 +10,7 @@ using Agw.Agents.Execution.Messaging.Durable;
 using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
+using Agw.Agents.Tests.A2A;
 using Agw.Auth.Extensions;
 using Agw.Files;
 using Agw.Host.Data;
@@ -33,12 +34,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
-namespace Agw.Agents.Tests.A2A;
+namespace Agw.Agents.Tests;
 
-internal sealed class A2ARemoteAgentHarness : IAsyncDisposable
+internal sealed class ExternalAgentHarness : IAsyncDisposable
 {
     private const string UserId = "1001";
-    internal const string ContextId = "a2a-conversation";
+    internal const string ContextId = "external-agent-conversation";
     private readonly string _root;
     private readonly ServiceProvider _services;
     private readonly bool _distributed;
@@ -47,7 +48,7 @@ internal sealed class A2ARemoteAgentHarness : IAsyncDisposable
     private InProcessExecutionCoordinator? _coordinator;
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private A2ARemoteAgentHarness(string root, ServiceProvider services, bool distributed)
+    private ExternalAgentHarness(string root, ServiceProvider services, bool distributed)
     {
         _root = root;
         _services = services;
@@ -60,26 +61,47 @@ internal sealed class A2ARemoteAgentHarness : IAsyncDisposable
     public Guid ConversationId { get; } = Guid.CreateVersion7();
     public string WorkspacePath => Path.Combine(_root, "workspace");
     public IServiceProvider Services => _connection.ServiceProvider;
+    public InProcessTurnHost? TurnHost => _coordinator?.Host;
 
     public static IDisposable EnterUser() =>
         UserInfoUtil.Push(
             new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, UserId)], "Test"))
         );
 
-    public static async Task<A2ARemoteAgentHarness> CreateAsync(
+    public static Task<ExternalAgentHarness> CreateAsync(
         A2ATestAgentServer server,
         IReadOnlyList<A2AOriginCredentialsRequest>? credentials = null,
         bool createWorkspace = true,
         string? postgres = null
+    ) =>
+        CreateAsync(
+            new Agent
+            {
+                Name = "a2a",
+                DisplayName = "A2A",
+                Type = AgentType.External,
+                ExternalAgentKind = EngineKind.A2A,
+            },
+            new() { A2AEndpoint = new A2AEndpointRequest(server.CardUrl.AbsoluteUri, credentials).ToInput() },
+            createWorkspace,
+            postgres
+        );
+
+    internal static async Task<ExternalAgentHarness> CreateAsync(
+        Agent agent,
+        AgentCreateCommand command,
+        bool createWorkspace = true,
+        string? postgres = null,
+        Action<Dictionary<string, string?>>? configure = null
     )
     {
-        var root = Path.Combine(AppContext.BaseDirectory, "test-data", $"a2a-{Guid.NewGuid():N}");
+        var root = Path.Combine(AppContext.BaseDirectory, "test-data", $"{agent.Name}-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
-        var provider = BuildServices(root, CreateConfiguration(root, postgres));
-        var harness = new A2ARemoteAgentHarness(root, provider, postgres is not null);
+        var provider = BuildServices(root, CreateConfiguration(root, postgres, configure));
+        var harness = new ExternalAgentHarness(root, provider, postgres is not null);
         try
         {
-            await harness.SeedAsync(server, credentials, createWorkspace);
+            await harness.SeedAsync(agent, command, createWorkspace);
             if (postgres is null)
             {
                 harness._coordinator = harness
@@ -95,26 +117,28 @@ internal sealed class A2ARemoteAgentHarness : IAsyncDisposable
         }
     }
 
-    private static IConfiguration CreateConfiguration(string root, string? postgres)
+    private static IConfiguration CreateConfiguration(
+        string root,
+        string? postgres,
+        Action<Dictionary<string, string?>>? configure
+    )
     {
         var connection = postgres is null
             ? $"Data Source={Path.Combine(root, "agw.db")};Pooling=False"
             : new NpgsqlConnectionStringBuilder(postgres)
             {
-                Database = $"agw_a2a_{Guid.NewGuid():N}",
+                Database = $"agw_external_{Guid.NewGuid():N}",
                 Pooling = false,
             }.ConnectionString;
-        return new ConfigurationBuilder()
-            .AddInMemoryCollection(
-                new Dictionary<string, string?>
-                {
-                    ["Database:Provider"] = postgres is null ? "sqlite" : "postgres",
-                    ["Database:ConnectionString"] = connection,
-                    ["Execution:Provider"] = postgres is null ? "InProcess" : "Distributed",
-                    ["Extensions:Directory"] = Path.Combine(root, "extensions"),
-                }
-            )
-            .Build();
+        var settings = new Dictionary<string, string?>
+        {
+            ["Database:Provider"] = postgres is null ? "sqlite" : "postgres",
+            ["Database:ConnectionString"] = connection,
+            ["Execution:Provider"] = postgres is null ? "InProcess" : "Distributed",
+            ["Extensions:Directory"] = Path.Combine(root, "extensions"),
+        };
+        configure?.Invoke(settings);
+        return new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
     }
 
     private static ServiceProvider BuildServices(string root, IConfiguration configuration)
@@ -150,11 +174,7 @@ internal sealed class A2ARemoteAgentHarness : IAsyncDisposable
         return services.BuildServiceProvider();
     }
 
-    private async Task SeedAsync(
-        A2ATestAgentServer server,
-        IReadOnlyList<A2AOriginCredentialsRequest>? credentials,
-        bool createWorkspace
-    )
+    private async Task SeedAsync(Agent agent, AgentCreateCommand command, bool createWorkspace)
     {
         await using var scope = _services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
@@ -168,7 +188,7 @@ internal sealed class A2ARemoteAgentHarness : IAsyncDisposable
             new Project
             {
                 Id = ProjectId,
-                Name = "A2A",
+                Name = agent.DisplayName,
                 Type = ProjectType.UserDefined,
                 Workspace = WorkspacePath,
             }
@@ -179,35 +199,28 @@ internal sealed class A2ARemoteAgentHarness : IAsyncDisposable
                 Id = ConversationId,
                 ProjectId = ProjectId,
                 ContextId = ContextId,
-                Title = "A2A",
+                Title = agent.DisplayName,
             }
         );
         await db.SaveChangesAsync(Ct);
         var app = scope.ServiceProvider.GetRequiredService<AgentAppService>();
-        Assert.NotNull(
-            await app.CreateAgentAsync(
-                new Agent
-                {
-                    Id = AgentId,
-                    Name = "a2a",
-                    DisplayName = "A2A",
-                    Type = AgentType.External,
-                    ExternalAgentKind = EngineKind.A2A,
-                },
-                new() { A2AEndpoint = new A2AEndpointRequest(server.CardUrl.AbsoluteUri, credentials).ToInput() },
-                Ct
-            )
-        );
+        agent.Id = AgentId;
+        Assert.NotNull(await app.CreateAgentAsync(agent, command, Ct));
     }
 
-    public async Task<Guid> StartTurnAsync(string text, AgwPermissionMode? permission = null, Guid? agentId = null)
+    public async Task<Guid> StartTurnAsync(
+        string text,
+        AgwPermissionMode? permission = null,
+        Guid? agentId = null,
+        AgentRuntimeType runtimeType = AgentRuntimeType.Agent
+    )
     {
         var acceptance = Services.GetRequiredService<TurnAcceptanceService>();
         var accepted = await acceptance.AcceptAsync(
             new TurnAcceptanceRequest(
                 UserId,
                 TurnId: null,
-                new ExecutionTarget(agentId ?? AgentId, AgentRuntimeType.Agent),
+                new ExecutionTarget(agentId ?? AgentId, runtimeType),
                 ConversationId,
                 TurnPersistenceTestKit.CreateInput(text),
                 SettingCommandMapper.FromCommand(

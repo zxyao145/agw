@@ -6,6 +6,7 @@ const { React, act, fireEvent, render, screen, waitFor } = await setupDomEnviron
 const { configureApiRuntime, resetApiRuntime } = await import("@agw/api");
 const { QueryClient, QueryClientProvider } = await import("@agw/components/query");
 const { TooltipProvider } = await import("@agw/components");
+const { Toaster } = await import("sonner");
 const { default: AgentsPage } = await import("./page.tsx");
 
 const agent = {
@@ -15,6 +16,7 @@ const agent = {
   description: "Reviews the current diff",
   systemPrompt: "You review code.",
   type: 0,
+  externalAgentKind: 0,
   enable: true,
   tools: [],
   skills: [],
@@ -25,7 +27,7 @@ const agent = {
   summaryModelProviderId: null,
   enableSummary: false,
   responseSchema: null,
-  extra: null,
+  extra: null as string | null,
   createTime: "2026-09-20T01:00:00Z",
   updateTime: "2026-09-21T01:00:00Z",
 };
@@ -36,10 +38,26 @@ const modelProvider = {
   providerType: "Anthropic",
 };
 
+let listedAgent = agent;
 const api = await startApiServer({
-  "GET /api/agents/paged": { items: [agent], total: 1, pageIndex: 1, pageSize: 20 },
+  "GET /api/agents/paged": () => ({ items: [listedAgent], total: 1, pageIndex: 1, pageSize: 20 }),
   "GET /api/model-providers": [modelProvider],
-  "GET /api/agents/external-options": [],
+  "GET /api/agents/external-options": [
+    { kind: 5, displayName: "ACP", defaultExtra: "{}", supportedProviderTypes: [] },
+  ],
+  "GET /api/agents/acp-registry": {
+    sourceUrl: "https://example.test/registry.json",
+    fetchedAt: "2026-11-23T08:00:00Z",
+    agents: [
+      {
+        id: "goose",
+        name: "Goose",
+        version: "1.60.2",
+        description: "Reviews code",
+        distributions: ["binary"],
+      },
+    ],
+  },
   "GET /api/tools": [],
   "GET /api/mcp-tool-servers": [],
   "GET /api/skills": [],
@@ -56,6 +74,7 @@ let activeClient: InstanceType<typeof QueryClient> | null = null;
 afterEach(() => {
   activeClient?.clear();
   activeClient = null;
+  listedAgent = agent;
   api.requests.length = 0;
 });
 
@@ -78,7 +97,12 @@ async function renderPage() {
     React.createElement(
       QueryClientProvider,
       { client },
-      React.createElement(TooltipProvider, null, React.createElement(AgentsPage)),
+      React.createElement(
+        TooltipProvider,
+        null,
+        React.createElement(AgentsPage),
+        React.createElement(Toaster),
+      ),
     ),
   );
   await screen.findByText("reviewer");
@@ -135,6 +159,65 @@ test("an agent without a model provider cannot be created", async () => {
   assert.equal(screen.getByRole("button", { name: "Create" }).hasAttribute("disabled"), true);
 });
 
+test("switching to ACP clears the selected model provider and shows a notification", async () => {
+  await renderPage();
+  await openDialog("Create");
+  fireEvent.click(screen.getByRole("combobox", { name: "Model Provider" }));
+  fireEvent.click(await screen.findByRole("option", { name: /claude-opus-5/ }));
+  fireEvent.click(screen.getByRole("combobox", { name: "Agent Type" }));
+  fireEvent.click(await screen.findByRole("option", { name: "External" }));
+  fireEvent.click(screen.getByRole("combobox", { name: "External Agent" }));
+  fireEvent.click(await screen.findByRole("option", { name: "ACP" }));
+
+  assert.ok(
+    await screen.findByText(
+      "Model provider selection cleared because it is incompatible with this external agent.",
+    ),
+  );
+  fireEvent.click(screen.getByRole("combobox", { name: "Agent Type" }));
+  fireEvent.click(await screen.findByRole("option", { name: "System" }));
+  assert.equal(
+    screen.getByRole("combobox", { name: "Model Provider" }).textContent,
+    "Select a model provider...",
+  );
+});
+
+test("creating an ACP agent requires settings and sends the selected registry entry", async () => {
+  await renderPage();
+  await openDialog("Create");
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText(/Display Name/), { target: { value: "ACP reviewer" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Agent Type" }));
+  });
+  fireEvent.click(await screen.findByRole("option", { name: "External" }));
+  fireEvent.click(screen.getByRole("combobox", { name: "External Agent" }));
+  fireEvent.click(await screen.findByRole("option", { name: "ACP" }));
+
+  const create = screen.getByRole("button", { name: "Create" });
+  assert.ok(create.hasAttribute("disabled"));
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "Extra Settings" }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  assert.ok(screen.getByText("Select an agent from the ACP registry or set command."));
+
+  const picker = screen.getByRole("combobox", { name: "ACP Registry" });
+  await waitFor(() => assert.equal(picker.hasAttribute("disabled"), false));
+  fireEvent.click(picker);
+  fireEvent.click(
+    await screen.findByRole("option", { name: /Goose.*1\.60\.2.*binary.*Reviews code/ }),
+  );
+  assert.equal(create.hasAttribute("disabled"), false);
+  fireEvent.click(create);
+
+  await waitFor(() => assert.equal(writes("POST", "/api/agents").length, 1));
+  const body = writes("POST", "/api/agents")[0].body as Record<string, unknown>;
+  assert.equal(body.externalAgentKind, 5);
+  assert.equal(body.modelProviderId, null);
+  assert.equal(body.responseSchema, null);
+  assert.deepEqual(JSON.parse(body.extra as string), { registry: { agentId: "goose" } });
+});
+
 test("editing an agent starts from its stored values and sends an update", async () => {
   await renderPage();
   const editAction = document.querySelectorAll("tbody button")[2];
@@ -154,6 +237,42 @@ test("editing an agent starts from its stored values and sends an update", async
   await waitFor(() => assert.equal(writes("PUT", `/api/agents/${agent.id}`).length, 1));
   const body = writes("PUT", `/api/agents/${agent.id}`)[0].body as Record<string, unknown>;
   assert.equal(body.displayName, "Reviewer 2");
+});
+
+test("editing an ACP agent validates Extra Settings and preserves its environment variables", async () => {
+  listedAgent = {
+    ...agent,
+    type: 1,
+    externalAgentKind: 5,
+    extra: '{"registry":{"agentId":"goose","version":"1.60.2"}}',
+    environmentVariables: { ACP_PROFILE: "review" },
+  };
+  await renderPage();
+  await act(async () => {
+    fireEvent.click(document.querySelectorAll("tbody button")[2]);
+  });
+  await screen.findByRole("dialog");
+
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "Extra Settings" }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  const picker = screen.getByRole("combobox", { name: "ACP Registry" });
+  await waitFor(() => assert.match(picker.textContent ?? "", /Goose 1\.60\.2/));
+
+  const editor = screen.getByLabelText("JSON object");
+  const update = screen.getByRole("button", { name: "Update" });
+  fireEvent.change(editor, { target: { value: "{}" } });
+  assert.ok(update.hasAttribute("disabled"));
+  fireEvent.change(editor, { target: { value: '{"command":"node","args":["agent.js"]}' } });
+  fireEvent.click(update);
+
+  await waitFor(() => assert.equal(writes("PUT", `/api/agents/${agent.id}`).length, 1));
+  const body = writes("PUT", `/api/agents/${agent.id}`)[0].body as Record<string, unknown>;
+  assert.equal(body.modelProviderId, null);
+  assert.equal(body.responseSchema, null);
+  assert.deepEqual(body.environmentVariables, { ACP_PROFILE: "review" });
+  assert.deepEqual(JSON.parse(body.extra as string), { command: "node", args: ["agent.js"] });
 });
 
 test("copying an agent asks for a unique name before creating it", async () => {
