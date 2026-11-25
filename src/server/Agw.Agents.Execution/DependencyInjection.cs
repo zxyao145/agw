@@ -30,6 +30,7 @@ using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
 namespace Agw.Agents.Execution;
@@ -72,7 +73,11 @@ public static class DependencyInjection
         var executionOptions =
             configuration.GetSection(ExecutionRuntimeOptions.SectionName).Get<ExecutionRuntimeOptions>()
             ?? new ExecutionRuntimeOptions();
-        services.Configure<ExecutionRuntimeOptions>(configuration.GetSection(ExecutionRuntimeOptions.SectionName));
+        // 模块注册和执行服务共享启动时的配置。
+        // Module registration and execution services share the startup settings.
+        var runtimeOptions = Options.Create(executionOptions);
+        services.AddSingleton(runtimeOptions);
+        services.AddSingleton<IOptions<ExecutionProviderOptions>>(runtimeOptions);
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddScoped<ICodexImagePathReader, CodexImagePathReader>();
         services.AddSingleton<IAgentExecutionContextAccessor, AgentExecutionContextAccessor>();

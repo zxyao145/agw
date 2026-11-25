@@ -254,7 +254,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
     {
         var modelProviderId = Guid.CreateVersion7();
         var service = CreateService(modelProviderIds: [modelProviderId]);
-        var controller = new AgentsController(service, null!);
+        var controller = new AgentsController(service, null!, null!);
 
         var result = await controller.CreateAsync(
             new AgentCreateRequest(

@@ -1,5 +1,4 @@
 import * as React from "react";
-import { toast } from "sonner";
 import { Button, Separator } from "@agw/components";
 import { getExternalModelProviderError } from "./external-model-provider";
 import { UseQueryResult } from "@agw/components/query";
@@ -25,6 +24,8 @@ import { ToolsPanel, type ToolLiteInfo, type ToolValueObject } from "@agw/tools"
 import { getAgentExtraSettingsError } from "./agent-extra-settings";
 import { isA2AAgent } from "./a2a-endpoint";
 import { A2AEndpointFields, type A2AEndpointFieldsProps } from "./a2a-endpoint-fields";
+import { AcpRegistryPicker } from "./acp-registry-picker";
+import { getAcpSettingsError, isAcpAgent } from "./acp-settings";
 import {
   AGENT_RESPONSE_SCHEMA_EXAMPLE,
   getAgentResponseSchemaError,
@@ -139,15 +140,20 @@ export function AgentFormFields({
 }: AgentFormFieldsProps) {
   const isExternalAgent = agentType === AgentType.External;
   const isA2A = isA2AAgent(agentType, externalAgentKind);
+  const isAcp = isAcpAgent(agentType, externalAgentKind);
   const showsLocalSettings = !isA2A;
   const effectiveSummaryModelProviderId = isExternalAgent
     ? summaryModelProviderId
     : summaryModelProviderId || modelProviderId;
   const canEditExtra = isExternalAgent && showsLocalSettings;
-  const extraError = canEditExtra ? getAgentExtraSettingsError(extra) : null;
+  const extraError = canEditExtra
+    ? (isAcp ? getAcpSettingsError : getAgentExtraSettingsError)(extra)
+    : null;
   const responseSchemaError = getAgentResponseSchemaError(responseSchema);
   const supportsResponseSchema =
-    showsLocalSettings && !(isExternalAgent && externalAgentKind === ExternalAgentKind.Pi);
+    showsLocalSettings &&
+    !isAcp &&
+    !(isExternalAgent && externalAgentKind === ExternalAgentKind.Pi);
   const usesStructuredResult = supportsResponseSchema && responseSchema.trim().length > 0;
   const modelProviderOptions = React.useMemo<SearchableSelectOption[]>(
     () =>
@@ -175,22 +181,6 @@ export function AgentFormFields({
         externalAgentOptionsQuery.data,
       ),
   );
-  const handleExternalAgentKindChange = (value: string) => {
-    const nextKind = Number(value) as ExternalAgentKindValue;
-    const selectionError = getExternalModelProviderError(
-      nextKind,
-      modelProviderId,
-      modelProvidersQuery.data,
-      externalAgentOptionsQuery.data,
-    );
-    if (modelProviderId && (nextKind === ExternalAgentKind.A2A || selectionError)) {
-      setModelProviderId("");
-      toast.info(
-        "Model provider selection cleared because it is incompatible with this external agent.",
-      );
-    }
-    setExternalAgentKind?.(nextKind);
-  };
   const externalAgentKindOptions = React.useMemo<SearchableSelectOption[]>(
     () =>
       (externalAgentOptionsQuery.data ?? []).map((option) => ({
@@ -289,7 +279,9 @@ export function AgentFormFields({
                   value={
                     externalAgentKind === ExternalAgentKind.None ? "" : externalAgentKind.toString()
                   }
-                  onValueChange={handleExternalAgentKindChange}
+                  onValueChange={(value) =>
+                    setExternalAgentKind?.(Number(value) as ExternalAgentKindValue)
+                  }
                   options={externalAgentKindOptions}
                   placeholder="Select an external agent..."
                   searchPlaceholder="Search external agents..."
@@ -311,7 +303,7 @@ export function AgentFormFields({
             </div>
           ) : null}
 
-          {showsLocalSettings && (
+          {showsLocalSettings && !isAcp && (
             <div className="grid gap-2">
               <div className="flex items-center justify-between gap-2">
                 <Label htmlFor={`${idPrefix}modelProviderId`}>
@@ -418,7 +410,7 @@ export function AgentFormFields({
 
       <div className="min-h-0 overflow-hidden bg-background">
         <Tabs
-          key={isA2A ? "a2a" : "agent"}
+          key={isA2A ? "a2a" : isAcp ? "acp" : "agent"}
           defaultValue={isA2A ? "a2a-endpoint" : "system-prompt"}
           className="flex h-full min-h-0 flex-col"
         >
@@ -433,9 +425,11 @@ export function AgentFormFields({
               {showsLocalSettings && (
                 <>
                   <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
-                  <TabsTrigger value="response-schema" disabled={!supportsResponseSchema}>
-                    Response Schema
-                  </TabsTrigger>
+                  {!isAcp && (
+                    <TabsTrigger value="response-schema" disabled={!supportsResponseSchema}>
+                      Response Schema
+                    </TabsTrigger>
+                  )}
                   <TabsTrigger value="extra-settings" disabled={!canEditExtra}>
                     Extra Settings
                   </TabsTrigger>
@@ -629,6 +623,9 @@ export function AgentFormFields({
                   </p>
                 </div>
                 <div className="flex min-h-0 flex-1 flex-col gap-2">
+                  {isAcp && (
+                    <AcpRegistryPicker extra={extra} setExtra={setExtra} idPrefix={idPrefix} />
+                  )}
                   <Label htmlFor={`${idPrefix}extra`}>JSON object</Label>
                   <Textarea
                     id={`${idPrefix}extra`}

@@ -253,7 +253,7 @@ public class ClaudeCodeAskUserQuestionBridgeTests
         var accessor = new HumanInteractionContextAccessor(executionContext);
         var channel = new ToolChannel(approve);
         var agentId = Guid.NewGuid();
-        var cache = new Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode.ClaudeToolApprovalCache();
+        var cache = new Agw.Agents.Execution.Agents.ExternalAgents.ExternalToolApprovalCache();
         var bridge = new ClaudeCodeAskUserQuestionBridge(
             accessor,
             true,
@@ -297,7 +297,7 @@ public class ClaudeCodeAskUserQuestionBridgeTests
     [Fact]
     public void ToolApprovalCache_ChangedArgumentsScopeOrVersion_RequiresApproval()
     {
-        var cache = new Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode.ClaudeToolApprovalCache();
+        var cache = new Agw.Agents.Execution.Agents.ExternalAgents.ExternalToolApprovalCache();
         var args = System.Text.Json.Nodes.JsonNode.Parse("{\"a\":1,\"b\":2}");
         cache.Add("user/project/conversation/agent/node/workdir", 0, "Bash", args);
         Assert.True(

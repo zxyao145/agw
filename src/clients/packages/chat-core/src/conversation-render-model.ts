@@ -338,6 +338,9 @@ function normalizeToolSummary(value: unknown): string | null {
 
 function getToolSummary(messages: readonly AiMessage[]): string | null {
   const call = getToolCallContent(messages);
+  const title = normalizeToolSummary(call?.additionalProperties?.toolTitle);
+  if (title) return title;
+
   const argumentsObject = parseToolArguments(call?.content);
   if (!argumentsObject) return null;
 

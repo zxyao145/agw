@@ -208,6 +208,11 @@ internal sealed class PiMessageAdapter : ModelMessageAdapter
     protected override bool IsExternalEngine => true;
 }
 
+internal sealed class AcpMessageAdapter : ModelMessageAdapter
+{
+    protected override bool IsExternalEngine => true;
+}
+
 internal sealed class A2AMessageAdapter : ModelMessageAdapter
 {
     protected override bool IsExternalEngine => true;

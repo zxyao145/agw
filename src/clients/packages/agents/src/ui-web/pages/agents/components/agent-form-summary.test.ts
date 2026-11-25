@@ -70,7 +70,12 @@ function renderForm(overrides: Partial<FormProps>): string {
   );
 }
 
-for (const kind of [ExternalAgentKind.ClaudeCode, ExternalAgentKind.Codex, ExternalAgentKind.Pi]) {
+for (const kind of [
+  ExternalAgentKind.ClaudeCode,
+  ExternalAgentKind.Codex,
+  ExternalAgentKind.Pi,
+  ExternalAgentKind.ACP,
+]) {
   test(`External Agent ${kind} hides all summary controls despite stale enabled state`, () => {
     const markup = renderForm({ agentType: AgentType.External, externalAgentKind: kind });
 

@@ -33,6 +33,10 @@
     />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Acp/TestAgent/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <Target Name="CopyAgentsTestExtension" AfterTargets="Build">
     <ItemGroup>
       <ExtensionFixtureFiles Include="../Agw.Extensions.Runtime.Tests/Fixture/bin/$(Configuration)/net10.0/*" />

@@ -38,6 +38,7 @@ public static class ExternalAgentDefaults
             EngineKind.Codex => "OpenAI Codex",
             EngineKind.Pi => "Pi",
             EngineKind.A2A => "A2A",
+            EngineKind.ACP => "ACP",
             _ => throw new AgwException(ErrorCodes.InvalidParam, $"External agent kind '{kind}' is not supported."),
         };
 
@@ -50,6 +51,7 @@ public static class ExternalAgentDefaults
             EngineKind.Codex => JsonUtil.Serialize(new CodexAgentSettings()),
             EngineKind.Pi => JsonUtil.Serialize(new PiAgentAIAgentOptions()),
             EngineKind.A2A => A2AEndpointRules.EmptyExtra,
+            EngineKind.ACP => "{}",
             _ => throw new AgwException(ErrorCodes.InvalidParam, $"External agent kind '{kind}' is not supported."),
         };
 }

@@ -15,6 +15,7 @@ export const ExternalAgentKind = {
   Codex: 2,
   Pi: 3,
   A2A: 4,
+  ACP: 5,
 } as const;
 
 export type ExternalAgentKind = (typeof ExternalAgentKind)[keyof typeof ExternalAgentKind];

@@ -4,6 +4,7 @@ using Agw.Agents.Execution.Agentflows.Turns;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.Agents.Turns;
+using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Runtimes;
@@ -28,6 +29,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Tests;
 
@@ -379,7 +381,8 @@ public sealed class RuntimeDefinitionRefreshTests
                 humanInteractionContextAccessor: null,
                 executionContext: null,
                 timeProvider: TimeProvider.System,
-                generatedToolCatalog: null
+                generatedToolCatalog: null,
+                executionOptions: Options.Create(new ExecutionRuntimeOptions())
             );
             Service = new RecordingRuntimeFactory(Db, checker, configuration);
             _turnExecutor = new AgentTurnExecutor(

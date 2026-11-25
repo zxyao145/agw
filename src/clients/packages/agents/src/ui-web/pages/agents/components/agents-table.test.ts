@@ -138,6 +138,12 @@ test("an A2A agent row names its kind", () => {
   assert.ok(screen.getByText("External · A2A"));
 });
 
+test("an ACP agent row names its kind", () => {
+  renderTable({ agentsQuery: queryOf({ items: [agent({ type: 1, externalAgentKind: 5 })] }) });
+
+  assert.ok(screen.getByText("External · ACP"));
+});
+
 test("instructions are truncated in the cell and shown in full on hover", async () => {
   renderTable({ agentsQuery: queryOf({ items: [agent({ systemPrompt: "Review every diff." })] }) });
   const trigger = screen.getByText("Review every diff.");

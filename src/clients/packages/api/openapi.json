@@ -2179,6 +2179,45 @@
         }
       }
     },
+    "/api/agents/acp-registry": {
+      "get": {
+        "tags": [
+          "Agents"
+        ],
+        "parameters": [
+          {
+            "name": "refresh",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAcpRegistryResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAcpRegistryResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAcpRegistryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/external-options": {
       "get": {
         "tags": [
@@ -9691,6 +9730,81 @@
           }
         }
       },
+      "AcpRegistryAgentResponse": {
+        "required": [
+          "id",
+          "name",
+          "version",
+          "description",
+          "repository",
+          "website",
+          "license",
+          "distributions"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "repository": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "website": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "license": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "distributions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AcpRegistryResponse": {
+        "required": [
+          "sourceUrl",
+          "fetchedAt",
+          "agents"
+        ],
+        "type": "object",
+        "properties": {
+          "sourceUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AcpRegistryAgentResponse"
+            }
+          }
+        }
+      },
       "Agent": {
         "required": [
           "id",
@@ -12246,6 +12360,38 @@
               },
               {
                 "$ref": "#/components/schemas/A2ACardPreviewResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfAcpRegistryResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AcpRegistryResponse"
               }
             ]
           },

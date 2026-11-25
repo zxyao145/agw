@@ -14,9 +14,9 @@ public sealed class A2ARemoteAgentDurableTests
     [Trait("Category", "Postgres")]
     public async Task RunAgentSegment_A2AAgent_CompletesInOneSegment()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         await using var server = await StartAsync(ScriptedAgentHandler.Echo());
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(
+        await using var harness = await ExternalAgentHarness.CreateAsync(
             server,
             postgres: DurableTestConnections.PostgresConnectionString
         );
@@ -43,9 +43,9 @@ public sealed class A2ARemoteAgentDurableTests
     [Trait("Category", "Postgres")]
     public async Task RunAgentSegment_CodexAgent_StillRejected()
     {
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         await using var server = await StartAsync(ScriptedAgentHandler.Echo());
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(
+        await using var harness = await ExternalAgentHarness.CreateAsync(
             server,
             postgres: DurableTestConnections.PostgresConnectionString
         );
@@ -74,7 +74,7 @@ public sealed class A2ARemoteAgentDurableTests
                 .OfType<AgwErrorContent>(),
             error =>
                 error.Content.Contains(
-                    "Distributed execution supports System Agents and A2A Agents.",
+                    "Distributed execution supports System Agents, A2A Agents and ACP Agents.",
                     StringComparison.Ordinal
                 )
         );

@@ -18,6 +18,7 @@ public sealed record ExecutionInputCapabilities(bool SupportsSteer, string? Reas
             EngineKind.Maf => new(true),
             EngineKind.ClaudeCode => new(false, "Claude Code does not accept input while a turn is running."),
             EngineKind.A2A => new(false, "A2A agents do not accept input while a turn is running."),
+            EngineKind.ACP => new(false, "ACP agents do not accept input while a turn is running."),
             _ when provider == ExecutionProvider.Distributed => new(
                 false,
                 "The distributed execution provider runs System Agents only."

@@ -1,6 +1,7 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Persistence;
+using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Turns;
@@ -24,6 +25,7 @@ public sealed class DurableExecutionPermissionTests
         var clock = new ManualTimeProvider();
         await using var persistence = await TurnPersistenceTestKit.CreateAsync(
             clock: clock,
+            executionOptions: new ExecutionRuntimeOptions { Provider = ExecutionProvider.Distributed },
             configure: services => services.AddScoped<ExecutionPermissionService>()
         );
         var token = TestContext.Current.CancellationToken;

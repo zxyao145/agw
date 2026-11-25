@@ -22,6 +22,7 @@ import {
   type A2AEndpointDraft,
 } from "./a2a-endpoint";
 import { getExternalModelProviderError } from "./external-model-provider";
+import { isAcpAgent } from "./acp-settings";
 import { normalizeAgentExtraSettings } from "./agent-extra-settings";
 import { normalizeAgentResponseSchema } from "./agent-response-schema";
 import { getAgentSettingsErrors } from "./agent-settings-errors";
@@ -138,18 +139,21 @@ export function CreateAgentDialog({
 }: CreateAgentDialogProps) {
   const isExternalAgent = agentType === AgentType.External;
   const isA2A = isA2AAgent(agentType, externalAgentKind);
+  const isAcp = isAcpAgent(agentType, externalAgentKind);
   const endpointError = isA2A ? getA2AEndpointError(a2aEndpoint) : null;
-  const modelProviderError = isExternalAgent
-    ? getExternalModelProviderError(
-        externalAgentKind,
-        modelProviderId,
-        modelProvidersQuery.data,
-        externalAgentOptionsQuery.data,
-      )
-    : null;
+  const modelProviderError =
+    isExternalAgent && !isAcp
+      ? getExternalModelProviderError(
+          externalAgentKind,
+          modelProviderId,
+          modelProvidersQuery.data,
+          externalAgentOptionsQuery.data,
+        )
+      : null;
   const { extraError, responseSchemaError, environmentVariablesError } = getAgentSettingsErrors({
     isExternalAgent,
     isA2A,
+    isAcp,
     extra,
     responseSchema,
     environmentVariables,
@@ -159,10 +163,10 @@ export function CreateAgentDialog({
     const settings = isA2A
       ? { ...getA2ACreateSettings(), a2aEndpoint: toA2AEndpointRequest(a2aEndpoint) }
       : {
-          modelProviderId: modelProviderId || null,
+          modelProviderId: isAcp ? null : modelProviderId || null,
           environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
           extra: isExternalAgent ? normalizeAgentExtraSettings(extra) : null,
-          responseSchema: normalizeAgentResponseSchema(responseSchema),
+          responseSchema: isAcp ? null : normalizeAgentResponseSchema(responseSchema),
         };
     const common = {
       displayName,

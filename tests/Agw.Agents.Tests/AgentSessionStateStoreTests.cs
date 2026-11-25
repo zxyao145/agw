@@ -176,9 +176,9 @@ public class AgentSessionStateStoreTests
     public async Task SaveAsync_CodexEngine_SkipsPersistence()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        using var user = A2ARemoteAgentHarness.EnterUser();
+        using var user = ExternalAgentHarness.EnterUser();
         await using var server = await A2ARemoteAgentStreamingTests.StartAsync(ScriptedAgentHandler.Echo());
-        await using var harness = await A2ARemoteAgentHarness.CreateAsync(server);
+        await using var harness = await ExternalAgentHarness.CreateAsync(server);
         var agentId = Guid.CreateVersion7();
         await harness.QueryAsync(db =>
         {
@@ -203,7 +203,7 @@ public class AgentSessionStateStoreTests
         var scope = new AgentSessionStateScope(
             harness.ConversationId,
             harness.ProjectId,
-            A2ARemoteAgentHarness.ContextId,
+            ExternalAgentHarness.ContextId,
             agentId
         );
 

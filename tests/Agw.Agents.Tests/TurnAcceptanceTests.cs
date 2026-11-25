@@ -7,6 +7,7 @@ using Agw.Agents.Definitions.Domain.Services;
 using Agw.Agents.Definitions.Facades;
 using Agw.Agents.Definitions.Persistence;
 using Agw.Agents.Execution.Agents.Composition;
+using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable;
@@ -50,6 +51,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.Internal;
+using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Tests;
 
@@ -903,7 +905,8 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
             new AgentExecutionFacadeTests.WorkspaceProjects(),
             permissions: new Agw.Agents.Definitions.Agents.ExecutionPermissionService(
                 dbContext,
-                new AgentflowRevisionSnapshotReader(dbContext)
+                new AgentflowRevisionSnapshotReader(dbContext),
+                _kit.ResolveScoped<IOptions<ExecutionRuntimeOptions>>()
             )
         );
     }

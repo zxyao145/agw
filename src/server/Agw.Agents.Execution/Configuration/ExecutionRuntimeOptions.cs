@@ -1,19 +1,15 @@
 namespace Agw.Agents.Execution.Configuration;
 
 /// <summary>
-/// 执行运行时及其共享基础设施配置。
+/// 执行模块运行时配置。
+/// The runtime configuration of the execution module.
 /// </summary>
-public sealed class ExecutionRuntimeOptions
+public sealed class ExecutionRuntimeOptions : ExecutionProviderOptions
 {
     /// <summary>
     /// 获取配置文件中的执行运行时节名称。
     /// </summary>
     public const string SectionName = ExecutionRuntimeConfiguration.SectionName;
-
-    /// <summary>
-    /// 获取或设置当前启用的执行实现。
-    /// </summary>
-    public ExecutionProvider Provider { get; set; } = ExecutionProvider.InProcess;
 
     /// <summary>
     /// Turn 结束后回放缓冲在实例内保留的秒数。

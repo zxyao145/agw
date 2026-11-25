@@ -882,6 +882,12 @@ public static class ErrorCodes
         HttpStatusCode.InternalServerError
     );
 
+    public static readonly ErrorCode AcpInstallFailed = new(
+        500_0034,
+        "The ACP agent installation failed.",
+        HttpStatusCode.InternalServerError
+    );
+
     public static readonly ErrorCode UnsupportedTransportType = new(
         501_0001,
         "Transport type is not supported.",
@@ -968,6 +974,41 @@ public static class ErrorCodes
         "The remote A2A task did not complete.",
         HttpStatusCode.BadGateway
     );
+    public static readonly ErrorCode AcpRegistryUnavailable = new(
+        502_0013,
+        "The ACP registry could not be read.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode AcpAgentNotInstalled = new(
+        502_0014,
+        "The ACP agent is not installed on this server.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode AcpAgentStartFailed = new(
+        502_0015,
+        "The ACP agent process could not be started.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode AcpAgentAuthenticationRequired = new(
+        502_0016,
+        "The ACP agent requires authentication.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode AcpAgentRequestFailed = new(
+        502_0017,
+        "The ACP agent request failed.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode AcpAgentTurnStopped = new(
+        502_0018,
+        "The ACP agent stopped the turn before completing it.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode AcpDownloadFailed = new(
+        502_0019,
+        "The ACP download failed.",
+        HttpStatusCode.BadGateway
+    );
 
     public static readonly ErrorCode DurableExecutionUnavailable = new(
         503_0001,
@@ -983,6 +1024,11 @@ public static class ErrorCodes
     public static readonly ErrorCode A2ARemoteAgentTimeout = new(
         504_0001,
         "The remote A2A agent did not respond in time.",
+        HttpStatusCode.GatewayTimeout
+    );
+    public static readonly ErrorCode AcpAgentTimeout = new(
+        504_0002,
+        "The ACP agent did not respond in time.",
         HttpStatusCode.GatewayTimeout
     );
 }
