@@ -1,8 +1,9 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
 import {
-  getScopePrefix,
+  keysToClear,
   getStorageKey,
+  type ComposerDraftKey,
   type ConversationComposerScope,
 } from "./conversation-composer-storage";
 import {
@@ -58,7 +59,7 @@ export class ConversationImageDraft {
 
   constructor(
     private readonly scope: ConversationComposerScope | null,
-    private conversationId: string | null,
+    private key: ComposerDraftKey,
   ) {
     this.loaded = scope === null;
     this.snapshot = { attachments: [], isBusy: !this.loaded, error: null };
@@ -73,7 +74,7 @@ export class ConversationImageDraft {
 
   load(): Promise<void> {
     if (this.loaded) return Promise.resolve();
-    const key = getStorageKey(this.scope!, this.conversationId);
+    const key = getStorageKey(this.scope!, this.key);
     this.loading ??= this.enqueue(async () => {
       this.attachments = (await (await getDatabase()).get("images", key)) ?? [];
       this.loaded = true;
@@ -132,10 +133,11 @@ export class ConversationImageDraft {
     return cleared;
   }
 
-  moveTo(conversationId: string): Promise<void> {
-    const sourceKey = getStorageKey(this.scope!, this.conversationId);
-    const destinationKey = getStorageKey(this.scope!, conversationId);
-    this.conversationId = conversationId;
+  moveTo(key: ComposerDraftKey): Promise<void> {
+    const sourceKey = getStorageKey(this.scope!, this.key);
+    const destinationKey = getStorageKey(this.scope!, key);
+    if (sourceKey === destinationKey) return this.pending;
+    this.key = key;
     return this.enqueue(async () => {
       const db = await getDatabase();
       const tx = db.transaction("images", "readwrite");
@@ -153,7 +155,7 @@ export class ConversationImageDraft {
   private update(
     change: (current: readonly ChatImageAttachment[]) => readonly ChatImageAttachment[],
   ): Promise<void> {
-    const key = this.scope ? getStorageKey(this.scope, this.conversationId) : null;
+    const key = this.scope ? getStorageKey(this.scope, this.key) : null;
     return this.enqueue(async () => {
       const images = change(this.attachments);
       if (key) {
@@ -196,31 +198,38 @@ export class ConversationImageDraft {
 const drafts = new Map<string, ConversationImageDraft>();
 
 export const conversationImageDrafts = {
-  get(scope: ConversationComposerScope, conversationId: string | null): ConversationImageDraft {
-    const key = getStorageKey(scope, conversationId);
+  get(scope: ConversationComposerScope, draftKey: ComposerDraftKey): ConversationImageDraft {
+    const key = getStorageKey(scope, draftKey);
     let draft = drafts.get(key);
     if (!draft) {
-      draft = new ConversationImageDraft(scope, conversationId);
+      draft = new ConversationImageDraft(scope, draftKey);
       drafts.set(key, draft);
     }
     return draft;
   },
-  accept(scope: ConversationComposerScope, conversationId: string): Promise<void> {
-    const draft = conversationImageDrafts.get(scope, null);
-    drafts.delete(getStorageKey(scope, null));
-    drafts.set(getStorageKey(scope, conversationId), draft);
-    return draft.moveTo(conversationId);
+  accept(
+    scope: ConversationComposerScope,
+    from: ComposerDraftKey,
+    to: ComposerDraftKey,
+  ): Promise<void> {
+    const draft = conversationImageDrafts.get(scope, from);
+    drafts.delete(getStorageKey(scope, from));
+    drafts.set(getStorageKey(scope, to), draft);
+    return draft.moveTo(to);
   },
-  remove(scope: ConversationComposerScope, conversationId: string): Promise<void> {
-    const draft = conversationImageDrafts.get(scope, conversationId);
-    drafts.delete(getStorageKey(scope, conversationId));
+  remove(scope: ConversationComposerScope, key: ComposerDraftKey): Promise<void> {
+    const draft = conversationImageDrafts.get(scope, key);
+    drafts.delete(getStorageKey(scope, key));
     return draft.discard();
   },
-  async removeConversations(scope: ConversationComposerScope): Promise<void> {
-    const prefix = `${getScopePrefix(scope)}conversation:`;
+  async removeConversations(
+    scope: ConversationComposerScope,
+    keepDraft?: { draftId: string },
+  ): Promise<void> {
+    const remove = keysToClear(scope, keepDraft);
     const removals: Promise<void>[] = [];
     for (const [key, draft] of drafts) {
-      if (key.startsWith(prefix)) {
+      if (remove(key)) {
         drafts.delete(key);
         removals.push(draft.discard());
       }
@@ -229,9 +238,6 @@ export const conversationImageDrafts = {
     const db = await getDatabase();
     const tx = db.transaction("images", "readwrite");
     const keys = await tx.store.getAllKeys();
-    await Promise.all([
-      ...keys.filter((key) => key.startsWith(prefix)).map((key) => tx.store.delete(key)),
-      tx.done,
-    ]);
+    await Promise.all([...keys.filter(remove).map((key) => tx.store.delete(key)), tx.done]);
   },
 };

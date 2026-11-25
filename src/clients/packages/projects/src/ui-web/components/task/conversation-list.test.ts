@@ -5,7 +5,7 @@ import { setupDomEnvironment, startApiServer } from "@agw/test-harness";
 import type { ConversationItemActionArgs, ExtensionMenuItem } from "../../../lib/extension-menu";
 import type { ConversationSummary } from "../../../services/task-client";
 
-const { React, act, fireEvent, render, screen, within } = await setupDomEnvironment();
+const { React, act, fireEvent, render, screen, waitFor, within } = await setupDomEnvironment();
 const { configureApiRuntime, resetApiRuntime } = await import("@agw/api");
 const { QueryClient, QueryClientProvider } = await import("@agw/components/query");
 const { TooltipProvider } = await import("@agw/components");
@@ -38,6 +38,7 @@ const api = await startApiServer({
     pageIndex: 1,
     pageSize: 20,
   },
+  [`DELETE /api/projects/${PROJECT_ID}/conversations/conversation-1`]: null,
 });
 configureApiRuntime({ baseUrl: api.baseUrl, token: null });
 test.after(() => resetApiRuntime());
@@ -50,6 +51,7 @@ afterEach(() => client.clear());
 function renderList(
   itemActions?: ExtensionMenuItem<ConversationItemActionArgs>[],
   selected: ConversationSummary[] = [],
+  props: Partial<Parameters<typeof ConversationList>[0]> = {},
 ) {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -62,15 +64,56 @@ function renderList(
         React.createElement(ConversationList, {
           projectId: PROJECT_ID,
           currentConversationId: null,
-          onConversationSelect: (conversation: ConversationSummary) => selected.push(conversation),
+          onConversationSelect: (conversation) => selected.push(conversation),
           onNewConversation() {},
           onAllConversationsDeleted() {},
           itemActions,
+          ...props,
         }),
       ),
     ),
   );
 }
+
+test("a click selects with pinned false and a double click with pinned true", async () => {
+  const options: Array<{ pinned: boolean }> = [];
+  renderList(undefined, [], { onConversationSelect: (_, selection) => options.push(selection) });
+
+  const row = await screen.findByText("First chat");
+  fireEvent.click(row);
+  fireEvent.click(row, { detail: 2 });
+  fireEvent.doubleClick(row);
+
+  assert.deepEqual(options, [{ pinned: false }, { pinned: false }, { pinned: true }]);
+});
+
+test("loaded items are reported", async () => {
+  const loaded: Array<readonly ConversationSummary[]> = [];
+  renderList(undefined, [], { onConversationsLoaded: (items) => loaded.push(items) });
+
+  await screen.findByText("First chat");
+
+  assert.deepEqual(
+    loaded.map((items) => items.map((item) => item.conversationId)),
+    [["conversation-1", "conversation-2", "conversation-3"]],
+  );
+});
+
+test("deleting the active conversation reports only that conversation", async () => {
+  const deletions: string[] = [];
+  renderList(undefined, [], {
+    currentConversationId: "conversation-1",
+    onConversationDeleted: (id) => deletions.push(id),
+    onAllConversationsDeleted: () => deletions.push("all"),
+  });
+  const row = (await screen.findByText("First chat")).closest<HTMLElement>(".group");
+  assert.ok(row);
+  fireEvent.click(within(row).getByRole("button", { name: "Delete conversation" }));
+  const dialog = await screen.findByRole("dialog", { name: "Delete conversation" });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+  await waitFor(() => assert.deepEqual(deletions, ["conversation-1"]));
+});
 
 /** 对话行内按钮的名称，按显示顺序。The names of a conversation row's buttons, in display order. */
 function rowButtonNames(title: string): (string | null)[] {

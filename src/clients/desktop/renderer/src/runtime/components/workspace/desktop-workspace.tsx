@@ -1,48 +1,71 @@
 "use client";
 
 import * as React from "react";
-import { useSearchParams } from "next/navigation";
-import { apiGet } from "@agw/api";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
+import { apiGet, getApiErrorMessage } from "@agw/api";
 import {
-  ChatWorkspaceProvider,
+  buildChatHref,
+  ChatProjectProvider,
   ColResizeSplit,
-  useChatWorkspace,
+  useChatProject,
+  useExecutionPlatform,
+  type ChatConversationSidebarProps,
+  type ChatFilesSidebarProps,
   type ChatMessageActionArgs,
   type ExtensionMenuItem,
 } from "@agw/chat";
 import { useQuery } from "@agw/components/query";
-import type { FileViewerFile } from "@agw/extension-sdk";
+import { NotificationsLiveSync, useNotificationsUnreadCount } from "@agw/notifications";
 import {
   fileViewerFileType,
   type ConversationItemActionArgs,
+  type ConversationSummary,
   type ExplorerContextMenuArgs,
 } from "@agw/projects";
+import type { AgwDesktopBridge } from "@desktop/shared/contracts";
+import {
+  sameWorkspaceTabScope,
+  type WorkspaceTabScope,
+} from "@desktop/shared/contracts/workspace-tabs";
 
 import { formatCloudUri } from "../../extensions/cloud-file-system";
-import { fileBaseName } from "../../extensions/file-viewer-patterns";
 import { toContextProject, toContextTarget } from "../../extensions/extension-bridge-broker";
 import type { ExtensionHost } from "../../extensions/extension-host";
 import { useExtensionRuntime } from "../../extensions/extension-host-provider";
 import type { ExtensionLayoutSampler } from "../../extensions/extension-layout-sampler";
 import type { HostOverlayTracker } from "../../extensions/host-overlay-tracker";
 import { BUILT_IN_VIEWS } from "../../extensions/workspace-ids";
-import { useEditableSource } from "../../source/use-editable-source";
-import {
-  fileViewerDefault,
-  type WorkspaceEntry,
-  type WorkspaceView,
+import type {
+  WorkspaceEntry,
+  WorkspaceRegistrySnapshot,
 } from "../../extensions/workspace-registry";
+import {
+  activeViewIdOf,
+  hasVisibleWorkspaceTabs,
+  type FileTab,
+  type TabGroup,
+} from "../../extensions/workspace-tab";
+import {
+  activeTabOf,
+  workspaceChatState,
+  type WorkspaceTabsSnapshot,
+} from "../../extensions/workspace-tabs-store";
+import type { ChatSelection, DesktopChatActions } from "./chat-tab-panel";
 import { LeftSidebar } from "./left-sidebar";
-import { MainWorkspace } from "./main-workspace";
+import { MainWorkspace, type MainWorkspaceProps } from "./main-workspace";
 import { Ribbon } from "./ribbon";
 import { WorkspaceIconView } from "./workspace-icon";
-import { NotificationsLiveSync, useNotificationsUnreadCount } from "@agw/notifications";
 
 type AgentflowDto = { id: string; name: string; description?: string | null };
+type ChatProjectModel = ReturnType<typeof useChatProject>;
+type WorkspaceRuntime = {
+  host: ExtensionHost;
+  tracker: HostOverlayTracker;
+  viewLayout: ExtensionLayoutSampler;
+};
 
-function menuTitle(entry: WorkspaceEntry): string {
-  return entry.extensionName ? `${entry.title} · ${entry.extensionName}` : entry.title;
-}
+const EMPTY_TABS: WorkspaceTabsSnapshot = { scope: null, group: null, error: null };
 
 function useStore<T>(
   subscribe: (listener: () => void) => () => void,
@@ -52,122 +75,196 @@ function useStore<T>(
   return React.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
 
-function DesktopWorkspaceLayout({
-  host,
-  tracker,
-  viewLayout,
-}: {
-  host: ExtensionHost;
-  tracker: HostOverlayTracker;
-  viewLayout: ExtensionLayoutSampler;
-}) {
-  const searchParams = useSearchParams();
-  const workspace = useChatWorkspace();
+function useWorkspaceHostState(host: ExtensionHost) {
   const layout = useStore(
     host.layout.subscribe,
     host.layout.getSnapshot,
     host.layout.getServerSnapshot,
   );
-  const registry = useStore(host.registry.subscribe, host.registry.getSnapshot);
   const snapshot = useStore(host.subscribe, host.getSnapshot);
-  const agentflows = useQuery({
-    queryKey: ["agentflows"],
-    queryFn: async () => (await apiGet("/api/agentflows")) as AgentflowDto[],
-  });
-  const unreadNotificationCount = useNotificationsUnreadCount();
+  const tabs = useStore(host.tabs.subscribe, host.tabs.getSnapshot);
+  return { layout, snapshot, tabs };
+}
 
+function useWorkspaceTabGroup(
+  host: ExtensionHost,
+  tabs: WorkspaceTabsSnapshot,
+  serverId: string,
+  projectId: string | null,
+) {
+  const scope = React.useMemo<WorkspaceTabScope | null>(
+    () => (projectId ? { serverId, projectId } : null),
+    [serverId, projectId],
+  );
   React.useEffect(() => host.attachWorkspace(), [host]);
+  React.useEffect(
+    () => () => {
+      void host.tabs.setScope(null);
+    },
+    [host],
+  );
+  React.useEffect(() => {
+    void host.tabs.setScope(scope);
+  }, [host, scope]);
+  const getGroup = React.useCallback(() => {
+    const current = host.tabs.getSnapshot();
+    return sameWorkspaceTabScope(current.scope, scope) ? current.group : null;
+  }, [host, scope]);
+  return { currentTabs: sameWorkspaceTabScope(tabs.scope, scope) ? tabs : EMPTY_TABS, getGroup };
+}
 
-  const {
-    selectedProject,
-    selectedProjectId,
-    conversationId,
-    selectedTarget,
-    composerRef,
-    refreshConversations,
-  } = workspace;
-  const serverId = host.context.snapshot().server.id;
+function usePruneWorkspaceTabs(
+  desktopBridge: AgwDesktopBridge | null,
+  serverId: string,
+  project: ChatProjectModel,
+) {
+  const { projectsLoaded, projects } = project;
+  React.useEffect(() => {
+    if (!desktopBridge || !projectsLoaded) return;
+    void desktopBridge
+      .pruneWorkspaceTabs(
+        serverId,
+        projects.map(({ id }) => id),
+      )
+      .catch((error: unknown) => {
+        console.error("Unable to prune open tabs.", error);
+      });
+  }, [desktopBridge, serverId, projectsLoaded, projects]);
+}
+
+function useWorkspaceLinks(
+  host: ExtensionHost,
+  serverId: string,
+  selectedProjectId: string | null,
+  groupReady: boolean,
+) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedProjectId = searchParams.get("projectId");
+  const requestedConversationId = searchParams.get("conversationId");
   const notificationId = searchParams.get("notificationId");
   const notificationServerId = searchParams.get("serverId");
+
+  React.useEffect(() => {
+    if (!groupReady || !selectedProjectId || !requestedConversationId) return;
+    if (requestedProjectId && requestedProjectId !== selectedProjectId) return;
+    host.tabs.openConversation(requestedConversationId, { preview: false });
+    router.replace(
+      buildChatHref("/desktop/chat", { projectId: selectedProjectId, conversationId: null }),
+      { scroll: false },
+    );
+  }, [host, router, groupReady, requestedProjectId, requestedConversationId, selectedProjectId]);
 
   React.useEffect(() => {
     if (notificationId && notificationServerId === serverId) {
       host.layout.openMainView(BUILT_IN_VIEWS.notifications, { notificationId });
     }
   }, [host, notificationId, notificationServerId, serverId]);
-  const sourceChatContext = React.useMemo(() => {
-    const filePath = workspace.selectedFile;
-    if (!selectedProjectId || !filePath) return null;
-    const normalizedPath = filePath.replace(/\\/gu, "/").replace(/^\.\//u, "");
-    const directory = workspace.selectedDirectory;
-    return {
-      projectId: selectedProjectId,
-      ...(directory?.id ? { directoryId: directory.id } : {}),
-      ...(directory?.name ? { directoryName: directory.name } : {}),
-      projectRelativePath: normalizedPath,
-    };
-  }, [selectedProjectId, workspace.selectedDirectory, workspace.selectedFile]);
+}
 
-  // 当前 Project、对话与 Agent 连同连接标识写入 context。Writes the current selection with the connection key.
+function useWorkspaceCommands(host: ExtensionHost, desktopBridge: AgwDesktopBridge | null) {
+  React.useEffect(
+    () =>
+      desktopBridge?.onWorkspaceCommand((command) => {
+        if (host.layout.getSnapshot().fullWorkspaceViewId !== null) return;
+        const current = host.tabs.getSnapshot().group;
+        if (!current || !hasVisibleWorkspaceTabs(current.tabs)) return;
+        if (command === "closeTab") {
+          if (current.activeTabId) void host.tabs.close([current.activeTabId]);
+        } else {
+          host.tabs.activateAdjacent(command === "nextTab" ? 1 : -1);
+        }
+      }),
+    [host, desktopBridge],
+  );
+}
+
+function useFollowActiveFile(project: ChatProjectModel, activeTab: ReturnType<typeof activeTabOf>) {
+  const activeFile = activeTab?.kind === "file" ? activeTab : null;
+  const followActiveFile = React.useEffectEvent(() => {
+    if (activeFile && activeFile.directoryId !== (project.selectedDirectory?.id ?? null)) {
+      project.selectDirectory(activeFile.directoryId);
+    }
+  });
   React.useEffect(() => {
-    const key = host.context.connectionKey;
-    if (!key) return;
-    const agent = workspace.agents?.find((item) => item.id === selectedTarget?.id);
-    const agentflow = agentflows.data?.find((item) => item.id === selectedTarget?.id);
-    host.context.setSelection(key, {
+    followActiveFile();
+  }, [activeFile?.id, project.selectedProjectId]);
+}
+
+function useWorkspaceSelection(
+  host: ExtensionHost,
+  project: ChatProjectModel,
+  serverId: string,
+  visibleSessionId: string | null,
+) {
+  const [chatSelection, setChatSelection] = React.useState<{
+    id: string;
+    selection: ChatSelection;
+  } | null>(null);
+  const visibleSelection =
+    chatSelection && chatSelection.id === visibleSessionId ? chatSelection.selection : null;
+  const connectionKey = useStore(
+    React.useCallback((listener) => host.context.onConnectionChanged(listener), [host]),
+    () => host.context.connectionKey,
+    () => null,
+  );
+  const agentflows = useQuery({
+    queryKey: ["agentflows"],
+    queryFn: async () => (await apiGet("/api/agentflows")) as AgentflowDto[],
+  });
+  const target = visibleSelection?.target;
+  const conversationId = visibleSelection?.conversationId ?? null;
+  const { selectedProject, agents } = project;
+  // 当前 Project 与可见会话共同提供 extension context。The current Project and visible session supply the extension context.
+  React.useEffect(() => {
+    if (!connectionKey) return;
+    const agent = agents?.find((item) => item.id === target?.id);
+    const agentflow = agentflows.data?.find((item) => item.id === target?.id);
+    host.context.setSelection(connectionKey, {
       project: selectedProject ? toContextProject(serverId, selectedProject) : null,
       conversation: conversationId ? { id: conversationId } : null,
       target:
-        selectedTarget?.type === "agent" && agent
+        target?.type === "agent" && agent
           ? toContextTarget("agent", agent)
-          : selectedTarget?.type === "agentflow" && agentflow
+          : target?.type === "agentflow" && agentflow
             ? toContextTarget("agentflow", agentflow)
             : null,
     });
   }, [
     host,
+    connectionKey,
     serverId,
     selectedProject,
     conversationId,
-    selectedTarget,
-    workspace.agents,
+    target,
+    agents,
     agentflows.data,
   ]);
+  return (id: string, selection: ChatSelection) => setChatSelection({ id, selection });
+}
 
+function useWorkspaceProjectBindings(
+  host: ExtensionHost,
+  tracker: HostOverlayTracker,
+  project: ChatProjectModel,
+) {
+  const { selectedProjectId, refreshConversations, notifyFileWritten, isReconnecting } = project;
   React.useEffect(() => {
-    host.setComposer({
-      insertText: (text) => {
-        const composer = composerRef.current;
-        if (!composer) throw new Error("The chat composer is not mounted.");
-        composer.insertText(text);
-      },
-    });
     host.setConversationRefresher((projectId) => {
       if (projectId === selectedProjectId) refreshConversations();
     });
-    return () => {
-      host.setComposer(null);
-      host.setConversationRefresher(null);
-    };
-  }, [host, composerRef, refreshConversations, selectedProjectId]);
-
-  // extension 写入当前 Project 的文件后刷新 Source 与文件树。An extension write to the current Project refreshes Source and the tree.
-  const { handleFileWritten } = workspace;
-  React.useEffect(() => {
     host.setFileWriteListener(({ projectId, directoryId, path }) => {
-      if (projectId === selectedProjectId) handleFileWritten(directoryId, path);
+      if (projectId === selectedProjectId) notifyFileWritten(directoryId, path);
     });
-    return () => host.setFileWriteListener(null);
-  }, [host, handleFileWritten, selectedProjectId]);
+    return () => {
+      host.setConversationRefresher(null);
+      host.setFileWriteListener(null);
+    };
+  }, [host, selectedProjectId, refreshConversations, notifyFileWritten]);
+  React.useEffect(() => tracker.setObscureAll(isReconnecting), [tracker, isReconnecting]);
+}
 
-  React.useEffect(
-    () => tracker.setObscureAll(workspace.isReconnecting),
-    [tracker, workspace.isReconnecting],
-  );
-
-  // 用户为每类文件选择的默认查看器，经 bridge 保存在 settings.json 中。
-  // The user's default viewer per file type, kept in settings.json through the bridge.
-  const desktopBridge = typeof window === "undefined" ? null : (window.agwDesktop ?? null);
+function useFileViewerDefaults(desktopBridge: AgwDesktopBridge | null) {
   const [fileViewerDefaults, setFileViewerDefaults] = React.useState<
     Readonly<Record<string, string>>
   >({});
@@ -181,202 +278,345 @@ function DesktopWorkspaceLayout({
       active = false;
     };
   }, [desktopBridge]);
-
-  // 文件查看器：按当前文件名匹配；不再匹配的查看器 frame 关闭。File viewers match the current file; others close.
-  const { selectedFile, selectedDirectory, openFile } = workspace;
-  const selectedDirectoryId = selectedDirectory?.id ?? null;
-  const selectedFileName = selectedFile ? fileBaseName(selectedFile) : null;
-  // 每次渲染按 registry 快照匹配。Matched against the registry snapshot on every render.
-  const fileViewers = selectedFileName
-    ? host.registry.fileViewersFor(selectedFileName, fileViewerDefaults)
-    : [];
-  const defaultFileViewerId = selectedFileName
-    ? fileViewerDefault(fileViewerDefaults, selectedFileName)
-    : null;
-  const setDefaultFileViewer =
-    desktopBridge && selectedFileName
-      ? (viewerId: string | null) =>
+  return {
+    fileViewerDefaults,
+    onSetDefaultFileViewer: desktopBridge
+      ? (name: string, id: string | null) => {
           void desktopBridge
-            .setFileViewerDefault(fileViewerFileType(selectedFileName), viewerId)
-            .then(setFileViewerDefaults)
-      : undefined;
-  const fileViewerFile = React.useMemo<FileViewerFile | null>(
-    () =>
-      selectedFile && selectedProjectId
-        ? {
-            uri: formatCloudUri({
-              serverId,
-              projectId: selectedProjectId,
-              directoryId: selectedDirectoryId,
-              path: selectedFile,
-            }),
-            name: fileBaseName(selectedFile),
-            projectId: selectedProjectId,
-          }
-        : null,
-    [serverId, selectedProjectId, selectedDirectoryId, selectedFile],
-  );
-  // Source 编辑当前文件，内容由它自己读取。Source edits the current file and reads it itself.
-  const editableSource = useEditableSource(host, fileViewerFile);
-  const fileViewerIds = fileViewers.map((view) => view.id).join("\n");
-  React.useEffect(() => {
-    host.retainFileViewers(fileViewerIds ? fileViewerIds.split("\n") : []);
-  }, [host, fileViewerIds]);
-  React.useEffect(() => {
-    host.setFileOpener(async ({ directoryId, path }) => {
-      const opened = await openFile(directoryId, path);
-      if (opened) host.layout.openMainView(BUILT_IN_VIEWS.file);
-      return opened;
-    });
-    return () => host.setFileOpener(null);
-  }, [host, openFile]);
+            .setFileViewerDefault(fileViewerFileType(name), id)
+            .then(setFileViewerDefaults);
+        }
+      : undefined,
+  };
+}
 
-  const toMenuItems = <T,>(
-    entries: readonly WorkspaceEntry[],
-    args: (input: T) => unknown,
-    onSelect?: (entry: WorkspaceEntry, input: T) => void,
-  ) =>
-    entries.map((entry): ExtensionMenuItem<T> => ({
-      id: entry.id,
-      title: menuTitle(entry),
-      icon: <WorkspaceIconView icon={entry.icon} />,
-      onSelect: (input) => {
-        onSelect?.(entry, input);
-        host.runAction(entry.extensionId, entry.action, args(input));
-      },
-    }));
+function runWorkspaceAction(host: ExtensionHost, entry: WorkspaceEntry, args: unknown): void {
+  void host.runAction(entry.extensionId, entry.action, args).catch((error: unknown) => {
+    console.error(`Unable to run workspace action ${entry.id}.`, error);
+    toast.error(`Unable to run action: ${getApiErrorMessage(error)}`);
+  });
+}
 
-  const composerActions = toMenuItems<Record<string, never>>(registry.composerActions, () => ({
-    projectId: selectedProjectId,
-    conversationId,
-  }));
-  const messageActions = toMenuItems<ChatMessageActionArgs>(registry.messageActions, (message) => ({
-    projectId: selectedProjectId,
-    conversationId,
-    message: {
-      id: message.messageId,
-      role: message.role,
-      text: message.text,
-      turnId: message.turnId,
+function toMenuItems<T>(
+  host: ExtensionHost,
+  entries: readonly WorkspaceEntry[],
+  args: (input: T) => unknown,
+  beforeAction?: (entry: WorkspaceEntry, input: T) => void,
+): ExtensionMenuItem<T>[] {
+  return entries.map((entry) => ({
+    id: entry.id,
+    title: entry.extensionName ? `${entry.title} · ${entry.extensionName}` : entry.title,
+    icon: <WorkspaceIconView icon={entry.icon} />,
+    onSelect: (input) => {
+      beforeAction?.(entry, input);
+      runWorkspaceAction(host, entry, args(input));
     },
   }));
-  const conversationActions = toMenuItems<ConversationItemActionArgs>(
-    registry.conversationActions,
-    (item) => ({
+}
+
+function createChatActions(
+  host: ExtensionHost,
+  registry: WorkspaceRegistrySnapshot,
+  selectedProjectId: string | null,
+) {
+  return (id: string | null): DesktopChatActions => ({
+    composerActions: toMenuItems<Record<string, never>>(host, registry.composerActions, () => ({
       projectId: selectedProjectId,
+      conversationId: id,
+    })),
+    messageActions: toMenuItems<ChatMessageActionArgs>(
+      host,
+      registry.messageActions,
+      (message) => ({
+        projectId: selectedProjectId,
+        conversationId: id,
+        message: {
+          id: message.messageId,
+          role: message.role,
+          text: message.text,
+          turnId: message.turnId,
+        },
+      }),
+    ),
+  });
+}
+
+type SidebarTabs = {
+  host: ExtensionHost;
+  entries: readonly WorkspaceEntry[];
+  getGroup(): TabGroup | null;
+};
+
+function useConversationSidebar({
+  host,
+  entries,
+  getGroup,
+  projectId,
+  currentConversationId,
+}: SidebarTabs & {
+  projectId: string | null;
+  currentConversationId: string | null;
+}): ChatConversationSidebarProps {
+  const onConversationsLoaded = React.useCallback(
+    (items: readonly ConversationSummary[]) => {
+      const current = getGroup();
+      if (!current) return;
+      const titles = new Map(items.map(({ conversationId: id, title }) => [id, title]));
+      for (const tab of current.tabs) {
+        if (tab.kind !== "chat" || !tab.conversationId) continue;
+        const title = titles.get(tab.conversationId);
+        if (title != null && tab.title !== title) host.tabs.setChatTitle(tab.id, title);
+      }
+    },
+    [getGroup, host],
+  );
+  return {
+    currentConversationId,
+    onConversationSelect: (item, { pinned }) => {
+      if (getGroup()) host.tabs.openConversation(item.conversationId, { preview: !pinned });
+    },
+    onNewConversation: () => {
+      if (getGroup()) host.tabs.openNewConversation();
+    },
+    onAllConversationsDeleted: () => {
+      if (getGroup()) host.tabs.removeConversations("all");
+    },
+    onConversationDeleted: (id) => {
+      if (getGroup()) host.tabs.removeConversations([id]);
+    },
+    onConversationsLoaded,
+    itemActions: toMenuItems<ConversationItemActionArgs>(host, entries, (item) => ({
+      projectId,
       conversationId: item.conversationId,
       title: item.title,
-    }),
-  );
-  const explorerUri = (item: ExplorerContextMenuArgs) =>
+    })),
+  };
+}
+
+function explorerMenuItems(
+  host: ExtensionHost,
+  entries: readonly WorkspaceEntry[],
+  serverId: string,
+  projectId: string | null,
+) {
+  const uri = (item: ExplorerContextMenuArgs) =>
     formatCloudUri({
       serverId,
-      projectId: selectedProjectId ?? "",
+      projectId: projectId ?? "",
       directoryId: item.directoryId,
       path: item.path,
     });
-  const explorerActions = toMenuItems<ExplorerContextMenuArgs>(
-    registry.explorerActions,
-    (item) => ({
-      projectId: selectedProjectId,
-      uri: explorerUri(item),
-      name: item.name,
-      type: item.type,
-    }),
+  return toMenuItems<ExplorerContextMenuArgs>(
+    host,
+    entries,
+    (item) => ({ projectId, uri: uri(item), name: item.name, type: item.type }),
     (entry, item) => {
       if (entry.extensionId)
-        host.grantCloudRead(entry.extensionId, explorerUri(item), item.type === "directory");
+        host.grantCloudRead(entry.extensionId, uri(item), item.type === "directory");
     },
   );
+}
 
+function filesSidebar({
+  host,
+  entries,
+  getGroup,
+  serverId,
+  project,
+  activeFile,
+}: SidebarTabs & {
+  serverId: string;
+  project: ChatProjectModel;
+  activeFile: FileTab | null;
+}): ChatFilesSidebarProps {
+  const { selectedDirectory, selectedProjectId, onlyDiff } = project;
+  const directoryId = selectedDirectory?.id ?? null;
+  return {
+    selectedFile: activeFile,
+    onFileSelected: (path, scope, { pinned }) => {
+      if (!getGroup()) return;
+      host.tabs.openFile(
+        { directoryId, path, diffScope: scope ?? null },
+        { preview: !pinned, replaceDiffView: onlyDiff },
+      );
+    },
+    onFileDeleted: (path) => {
+      if (getGroup()) host.tabs.removeFiles(directoryId, path);
+    },
+    onFileGitScopeChanged: (path, scope) => {
+      const group = getGroup();
+      if (!group) return;
+      const prefix = `${path.replace(/\/+$/u, "")}/`;
+      for (const tab of group.tabs) {
+        const matches =
+          tab.kind === "file" &&
+          tab.directoryId === directoryId &&
+          (tab.path === path || tab.path.startsWith(prefix));
+        if (matches)
+          host.tabs.setFileView(tab.id, { diffScope: scope, diffFileView: tab.diffFileView });
+      }
+    },
+    contextMenuItems: explorerMenuItems(host, entries, serverId, selectedProjectId),
+  };
+}
+
+type WorkspaceHostState = ReturnType<typeof useWorkspaceHostState>;
+
+function DesktopWorkspaceSidebar({
+  main,
+  getGroup,
+  serverId,
+  registry,
+}: {
+  main: MainWorkspaceProps;
+  getGroup(): TabGroup | null;
+  serverId: string;
+  registry: WorkspaceRegistrySnapshot;
+}) {
+  const { host, layout, snapshot, tabs, workspaceLayout } = main;
+  const project = useChatProject();
+  const activeTab = activeTabOf(tabs.group);
   const sidebarView =
-    registry.views.get(layout.activeSidebarViewId) ??
+    registry.views.get(workspaceLayout.activeSidebarViewId) ??
     registry.views.get(BUILT_IN_VIEWS.conversations)!;
-  const mainView =
-    registry.views.get(layout.activeMainViewId) ?? registry.views.get(BUILT_IN_VIEWS.chat)!;
-
-  // 打开过的 retainContextWhenHidden 视图切走后保持挂载。Opened retained views stay mounted after switching away.
-  const [openedRetained, setOpenedRetained] = React.useState<readonly string[]>([]);
-  React.useEffect(() => {
-    if (mainView.retainContextWhenHidden && !openedRetained.includes(mainView.id)) {
-      setOpenedRetained((current) => [...current, mainView.id]);
-    }
-  }, [mainView, openedRetained]);
-  const retainedViews = openedRetained
-    .map((id) => registry.views.get(id))
-    .filter((view): view is WorkspaceView => view !== undefined && view.retainContextWhenHidden);
-
+  const conversation = useConversationSidebar({
+    host,
+    getGroup,
+    entries: registry.conversationActions,
+    projectId: project.selectedProjectId,
+    currentConversationId: activeTab?.kind === "chat" ? activeTab.conversationId : null,
+  });
+  const files = filesSidebar({
+    host,
+    getGroup,
+    entries: registry.explorerActions,
+    serverId,
+    project,
+    activeFile: activeTab?.kind === "file" ? activeTab : null,
+  });
   return (
-    <div
-      className="flex h-full min-h-0 w-full"
-      inert={workspace.isReconnecting}
-      aria-hidden={workspace.isReconnecting}
-    >
+    <LeftSidebar
+      host={host}
+      layout={layout}
+      snapshot={snapshot}
+      view={sidebarView}
+      openRequest={workspaceLayout.openRequests[sidebarView.id]}
+      conversation={conversation}
+      files={files}
+    />
+  );
+}
+
+function useWorkspaceLayout({
+  host,
+  tracker,
+  viewLayout,
+  state,
+}: WorkspaceRuntime & { state: WorkspaceHostState }) {
+  const { layout, snapshot, tabs } = state;
+  const project = useChatProject();
+  const { selectedProjectId, isReconnecting } = project;
+  const { serverId } = useExecutionPlatform();
+  const desktopBridge = typeof window === "undefined" ? null : (window.agwDesktop ?? null);
+  const { currentTabs, getGroup } = useWorkspaceTabGroup(host, tabs, serverId, selectedProjectId);
+  const { group } = currentTabs;
+  const activeTab = activeTabOf(group);
+  const { session } = workspaceChatState(
+    group,
+    layout.fullWorkspaceViewId,
+    snapshot.floatingChat?.open === true,
+  );
+  const onChatSelection = useWorkspaceSelection(host, project, serverId, session?.id ?? null);
+  useWorkspaceLinks(host, serverId, selectedProjectId, group !== null);
+  useWorkspaceCommands(host, desktopBridge);
+  usePruneWorkspaceTabs(desktopBridge, serverId, project);
+  useFollowActiveFile(project, activeTab);
+  useWorkspaceProjectBindings(host, tracker, project);
+  const fileViewerDefaults = useFileViewerDefaults(desktopBridge);
+  const registry = useStore(host.registry.subscribe, host.registry.getSnapshot);
+  const main: MainWorkspaceProps = {
+    host,
+    layout: viewLayout,
+    snapshot,
+    workspaceLayout: layout,
+    tabs: currentTabs,
+    ...fileViewerDefaults,
+    getChatActions: createChatActions(host, registry, selectedProjectId),
+    onChatSelection,
+  };
+  const activeMainViewId =
+    layout.fullWorkspaceViewId ?? (activeTab ? activeViewIdOf(activeTab) : null);
+  return { main, getGroup, registry, serverId, desktopBridge, isReconnecting, activeMainViewId };
+}
+
+function DesktopWorkspaceLayout(props: WorkspaceRuntime & { state: WorkspaceHostState }) {
+  const { main, getGroup, registry, serverId, desktopBridge, isReconnecting, activeMainViewId } =
+    useWorkspaceLayout(props);
+  const { sidebarVisible, activeSidebarViewId } = props.state.layout;
+  const unreadNotificationCount = useNotificationsUnreadCount();
+  return (
+    <div className="flex h-full min-h-0 w-full" inert={isReconnecting} aria-hidden={isReconnecting}>
       <NotificationsLiveSync desktopBridge={desktopBridge} serverId={serverId} />
       <Ribbon
         entries={registry.ribbon}
-        sidebarVisible={layout.sidebarVisible}
-        activeSidebarViewId={layout.activeSidebarViewId}
-        activeMainViewId={layout.activeMainViewId}
+        sidebarVisible={sidebarVisible}
+        activeSidebarViewId={activeSidebarViewId}
+        activeMainViewId={activeMainViewId}
         unreadNotificationCount={unreadNotificationCount}
-        onSelect={(entry) => host.runAction(entry.extensionId, entry.action, {})}
+        onSelect={(entry) => runWorkspaceAction(props.host, entry, {})}
       />
       <ColResizeSplit>
-        {layout.sidebarVisible ? (
+        {sidebarVisible ? (
           <ColResizeSplit.Left defaultPanelWidth={320} minWidth={268} maxWidth={420}>
-            <LeftSidebar
-              host={host}
-              layout={viewLayout}
-              snapshot={snapshot}
-              view={sidebarView}
-              openRequest={layout.openRequests[sidebarView.id]}
-              conversationActions={conversationActions}
-              explorerActions={explorerActions}
-              onConversationOpened={() => host.layout.openMainView(BUILT_IN_VIEWS.chat)}
-              onFileOpened={() => host.layout.openMainView(BUILT_IN_VIEWS.file)}
+            <DesktopWorkspaceSidebar
+              main={main}
+              getGroup={getGroup}
+              serverId={serverId}
+              registry={registry}
             />
           </ColResizeSplit.Left>
         ) : null}
         <ColResizeSplit.Right>
-          <MainWorkspace
-            host={host}
-            layout={viewLayout}
-            snapshot={snapshot}
-            activeView={mainView}
-            retainedViews={retainedViews}
-            openRequests={layout.openRequests}
-            composerActions={composerActions}
-            messageActions={messageActions}
-            fileViewers={fileViewers}
-            fileViewerFile={fileViewerFile}
-            editableSource={editableSource}
-            defaultFileViewerId={defaultFileViewerId}
-            onSetDefaultFileViewer={setDefaultFileViewer}
-            sourceChatContext={sourceChatContext}
-          />
+          <MainWorkspace {...main} />
         </ColResizeSplit.Right>
       </ColResizeSplit>
     </div>
   );
 }
 
-/** Desktop 的三区布局：Ribbon、Left Sidebar、Main Workspace。The Desktop three-region layout. */
+function DesktopWorkspaceProvider(props: WorkspaceRuntime) {
+  const state = useWorkspaceHostState(props.host);
+  const { tabs, layout, snapshot } = state;
+  const { serverId } = useExecutionPlatform();
+  const projectId = useSearchParams().get("projectId") ?? tabs.scope?.projectId;
+  const group =
+    projectId && sameWorkspaceTabScope(tabs.scope, { serverId, projectId }) ? tabs.group : null;
+  const { session } = workspaceChatState(
+    group,
+    layout.fullWorkspaceViewId,
+    snapshot.floatingChat?.open === true,
+  );
+  return (
+    <ChatProjectProvider
+      routeBasePath="/desktop/chat"
+      activeConversationId={session?.conversationId ?? null}
+    >
+      <DesktopWorkspaceLayout {...props} state={state} />
+    </ChatProjectProvider>
+  );
+}
+
+/** Desktop 的三区布局。The Desktop three-region workspace. */
 export function DesktopWorkspace() {
   const runtime = useExtensionRuntime();
   if (!runtime) throw new Error("DesktopWorkspace requires the extension host.");
   return (
     <div className="relative flex h-full min-h-0 w-full">
-      <ChatWorkspaceProvider
-        routeBasePath="/desktop/chat"
-        confirmFileChange={() => runtime.host.confirmDiscardUnsaved()}
-        readSourceContent={false}
-      >
-        <DesktopWorkspaceLayout
-          host={runtime.host}
-          tracker={runtime.tracker}
-          viewLayout={runtime.layout}
-        />
-      </ChatWorkspaceProvider>
+      <DesktopWorkspaceProvider
+        host={runtime.host}
+        tracker={runtime.tracker}
+        viewLayout={runtime.layout}
+      />
     </div>
   );
 }

@@ -614,6 +614,9 @@ async function prepareServerData(baseUrl, echoPort) {
   await writeFile(join(projectDirectory, "images", "broken.png"), "not an image\n");
   await writeFile(join(projectDirectory, "images", "shape.svg"), shapeSvg(200, 100));
   await writeFile(join(projectDirectory, "guide.md"), GUIDE_MARKDOWN);
+  for (const name of ["alpha", "beta", "gamma"]) {
+    await writeFile(join(projectDirectory, `tabs-${name}.md`), `# Tabs ${name}\n\nBody ${name}.\n`);
+  }
   await writeFile(
     join(projectDirectory, "diagram.excalidraw"),
     `${JSON.stringify(DIAGRAM, null, 2)}\n`,

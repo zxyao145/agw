@@ -154,6 +154,13 @@ export class ContextService {
   }
 
   public setWorkspace(workspace: WorkspaceState): void {
+    const previous = this.context.workspace;
+    if (
+      previous.activeMainViewId === workspace.activeMainViewId &&
+      previous.activeSidebarViewId === workspace.activeSidebarViewId &&
+      previous.sidebarVisible === workspace.sidebarVisible
+    )
+      return;
     this.replace({ workspace });
   }
 

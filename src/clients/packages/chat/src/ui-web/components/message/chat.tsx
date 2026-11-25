@@ -24,7 +24,6 @@ import {
   getExecutionReconnectProgress,
   getAgentMode,
   getAgentflowCheckpointMessage,
-  getMessageStreamingScopeId,
   getPendingInteraction,
   getTurnFinishedStatus,
   getLatestAgentMode,
@@ -75,6 +74,7 @@ import { useExecutionPlatform } from "../../execution-platform";
 import type { AiMessage, ConversationHistoryTurn } from "@agw/api";
 import type { ChatTargetOption } from "@agw/api";
 import { conversationComposerStorage } from "../../../lib/chat/conversation-composer-storage";
+import { liveMessageScope, mergeRecoveredHistory } from "../../../lib/chat/recovered-history";
 import { notifyImageDraftError, useConversationImageDraft } from "./use-conversation-image-draft";
 import { createChatContextPromptBuilder } from "../../../lib/chat/chat-context-prompt";
 import type { ChatImageAttachment } from "../../../lib/chat/image-attachments";
@@ -106,6 +106,8 @@ export interface ChatProps {
   conversationId: string | null;
   sessionSeed: ChatSessionSeed;
   isLoadingConversation?: boolean;
+  isOpeningConversation?: boolean;
+  keepLiveDuringRecovery?: boolean;
   environmentVariables?: Record<string, string>;
   /** 只接收 result 消息，并拒绝本轮的人机交互。 */
   resultOnly?: boolean;
@@ -118,6 +120,9 @@ export interface ChatProps {
    * Keeps the input draft locally per conversation and restores it when the conversation returns.
    */
   persistInputDraft?: boolean;
+  draftId?: string;
+  newConversationId?: string | null;
+  onSubmitted?: () => void;
   /**
    * 新对话的首轮被服务端受理时通知；这时对话才保存到服务端。
    * Reports when the first turn of a new conversation is accepted by the server; only then is the conversation saved.
@@ -211,12 +216,17 @@ export function Chat({
   conversationId,
   sessionSeed,
   isLoadingConversation = false,
+  isOpeningConversation = false,
+  keepLiveDuringRecovery = false,
   environmentVariables,
   resultOnly = false,
   placeholder = "Type your message...",
   className,
   inputTopLeft,
   persistInputDraft = false,
+  draftId,
+  newConversationId = null,
+  onSubmitted,
   onConversationAccepted,
   onConversationChange,
   onExecutionError,
@@ -232,6 +242,7 @@ export function Chat({
   composerRef,
   messageActions,
 }: ChatProps) {
+  if (persistInputDraft && !draftId) throw new Error("persistInputDraft requires draftId.");
   const executionServerId = useExecutionPlatform().serverId;
   const queryClient = useQueryClient();
   const initialHistory = React.useMemo(
@@ -246,7 +257,22 @@ export function Chat({
   const [claudeCommands, setClaudeCommands] = React.useState<string[]>(initialHistory.commands);
   // 新对话在首次配置或发送前分配的草稿 ID；它不代表对话已经保存到服务端。
   // The draft ID a new conversation gets before its first configuration or send; it does not mean the conversation is saved.
-  const [draftConversationId, setDraftConversationId] = React.useState<string | null>(null);
+  const recoverDraftId = () =>
+    !conversationId &&
+    newConversationId &&
+    projectId &&
+    executionSessionManager.has({
+      serverId: executionServerId,
+      projectId,
+      conversationId: newConversationId,
+    })
+      ? newConversationId
+      : null;
+  const [draftConversationId, setDraftConversationId] = React.useState(recoverDraftId);
+  const recoveringTurns = React.useRef<Set<string> | null>(null);
+  if (keepLiveDuringRecovery && sessionSeed.revision === 0 && !recoveringTurns.current) {
+    recoveringTurns.current = new Set();
+  }
   const [hydratedSessionRevision, setHydratedSessionRevision] = React.useState(
     sessionSeed.revision,
   );
@@ -360,6 +386,12 @@ export function Chat({
     scrollTop: number;
   } | null>(null);
   const confirmedAgentModeRef = React.useRef<AgentMode>(agentMode);
+  const observedLiveMode = React.useRef<AgentMode | null>(null);
+  const confirmLiveMode = React.useCallback((mode: AgentMode) => {
+    observedLiveMode.current = mode;
+    confirmedAgentModeRef.current = mode;
+    setAgentMode(mode);
+  }, []);
   const autoScrollStateRef = React.useRef<AutoScrollState>({
     shouldAutoScroll: true,
     scrollHeight: 0,
@@ -371,11 +403,11 @@ export function Chat({
     () => (persistInputDraft && projectId ? { serverId: executionServerId, projectId } : null),
     [executionServerId, persistInputDraft, projectId],
   );
-  const imageDraft = useConversationImageDraft(
-    inputDraftScope,
-    conversationId,
-    sessionSeed.revision,
+  const draftKey = React.useMemo(
+    () => (conversationId === null ? { draftId: draftId ?? "" } : { conversationId }),
+    [conversationId, draftId],
   );
+  const imageDraft = useConversationImageDraft(inputDraftScope, draftKey, sessionSeed.revision);
   const { draft: currentImageDraft } = imageDraft;
 
   if (streamingMessageBatcherRef.current === null) {
@@ -408,7 +440,8 @@ export function Chat({
   const persistedConversationId =
     executionConversationId !== null &&
     (executionConversationId === sessionSeed.conversationId ||
-      executionConversationId === acceptedConversationId)
+      executionConversationId === acceptedConversationId ||
+      (conversationId !== null && conversationId === draftConversationId))
       ? executionConversationId
       : null;
 
@@ -428,7 +461,7 @@ export function Chat({
   }, [onReconnectStateChange, reconnectState, retryReconnect]);
 
   React.useEffect(() => {
-    conversationIdRef.current = conversationId;
+    conversationIdRef.current = conversationId ?? draftConversationId;
     announcedConversationIdRef.current = conversationId;
   }, [conversationId]);
 
@@ -461,10 +494,11 @@ export function Chat({
     [agentSuggestionsQuery.data, claudeCommands],
   );
   // 选中的对话还没有载入它的历史时仍在加载。A selected conversation whose history has not loaded yet is still loading.
-  const isHydratingSession =
+  const needsSessionHistory =
     isLoadingConversation ||
     hydratedSessionRevision !== sessionSeed.revision ||
     (conversationId !== null && persistedConversationId !== conversationId);
+  const isHydratingSession = isOpeningConversation || needsSessionHistory;
   const executionRestoreKey =
     restoreExecution && projectId && persistedConversationId
       ? JSON.stringify([
@@ -632,6 +666,29 @@ export function Chat({
 
   React.useEffect(() => {
     const preparedHistory = prepareChatHistory(sessionSeed.messages);
+    if (!keepLiveDuringRecovery) observedLiveMode.current = null;
+    const restoredMode =
+      observedLiveMode.current ?? sessionSeed.agentMode ?? getLatestAgentMode(sessionSeed.messages);
+    confirmedAgentModeRef.current = restoredMode;
+    setAgentMode(restoredMode);
+    if (keepLiveDuringRecovery && sessionSeed.conversationId) {
+      streamingMessageBatcherRef.current?.flush(executionGenerationRef.current);
+      const complete = recoveringTurns.current ?? new Set<string>();
+      recoveringTurns.current = null;
+      setMessages((live) => {
+        const merged = mergeRecoveredHistory(preparedHistory.messages, live, complete);
+        messagesRef.current = merged;
+        return merged;
+      });
+      setHistoryTurns(sessionSeed.historyTurns);
+      setHasOlderMessages(sessionSeed.hasOlderMessages);
+      hasOlderMessagesRef.current = sessionSeed.hasOlderMessages;
+      olderMessagesCursorRef.current = sessionSeed.olderMessagesCursor;
+      if (preparedHistory.commands.length)
+        setClaudeCommands((current) => (current.length ? current : preparedHistory.commands));
+      setHydratedSessionRevision(sessionSeed.revision);
+      return;
+    }
     olderMessagesAbortRef.current?.abort();
     olderMessagesAbortRef.current = null;
     detachExecution();
@@ -647,8 +704,9 @@ export function Chat({
     setHistoryTurns(sessionSeed.historyTurns);
     setExpandedWorkSummaryKeys(new Set());
     setClaudeCommands(preparedHistory.commands);
-    conversationIdRef.current = conversationId;
-    setDraftConversationId(null);
+    const recoveredDraftId = recoverDraftId();
+    conversationIdRef.current = conversationId ?? recoveredDraftId;
+    setDraftConversationId(recoveredDraftId);
     setAcceptedConversationId(null);
     announcedConversationIdRef.current = conversationId;
     setHasOlderMessages(sessionSeed.hasOlderMessages);
@@ -658,9 +716,6 @@ export function Chat({
     hasOlderMessagesRef.current = sessionSeed.hasOlderMessages;
     isLoadingOlderMessagesRef.current = false;
     pendingPrependAnchorRef.current = null;
-    const nextAgentMode = sessionSeed.agentMode ?? getLatestAgentMode(sessionSeed.messages);
-    confirmedAgentModeRef.current = nextAgentMode;
-    setAgentMode(nextAgentMode);
     setHydratedSessionRevision(sessionSeed.revision);
   }, [detachExecution, sessionSeed.revision]);
 
@@ -669,18 +724,18 @@ export function Chat({
   React.useEffect(() => {
     userInputRef.current?.setInput(
       inputDraftScope
-        ? (conversationComposerStorage.get(inputDraftScope, conversationId).input ?? "")
+        ? (conversationComposerStorage.get(inputDraftScope, draftKey).input ?? "")
         : "",
     );
-  }, [conversationId, inputDraftScope, sessionSeed.revision]);
+  }, [draftKey, inputDraftScope, sessionSeed.revision]);
 
   const handleInputDraftChange = React.useCallback(
     (value: string) => {
       if (inputDraftScope) {
-        conversationComposerStorage.set(inputDraftScope, conversationId, { input: value });
+        conversationComposerStorage.set(inputDraftScope, draftKey, { input: value });
       }
     },
-    [conversationId, inputDraftScope],
+    [draftKey, inputDraftScope],
   );
 
   React.useEffect(() => {
@@ -765,11 +820,10 @@ export function Chat({
         toast.error(status.message ?? "Failed to change agent mode");
       } else if (status.type === "mode-status") {
         streamingMessageBatcherRef.current?.flush(generation);
-        confirmedAgentModeRef.current = status.mode;
-        setAgentMode(status.mode);
+        confirmLiveMode(status.mode);
       }
     },
-    [onExecutionStatus],
+    [confirmLiveMode, onExecutionStatus],
   );
 
   const applyExecutionMessage = React.useCallback(
@@ -780,8 +834,7 @@ export function Chat({
       const nextAgentMode = getAgentMode(message);
       if (nextAgentMode) {
         streamingMessageBatcherRef.current?.flush(generation);
-        confirmedAgentModeRef.current = nextAgentMode;
-        setAgentMode(nextAgentMode);
+        confirmLiveMode(nextAgentMode);
       }
 
       const initCommands = getClaudeInitCommands(message);
@@ -795,9 +848,7 @@ export function Chat({
         streamingMessageBatcherRef.current?.flush(generation);
         const scopedMessage = scopeStreamingMessage(
           message,
-          getMessageStreamingScopeId(message) ??
-            activeStreamingScopeRef.current ??
-            message.messageId,
+          liveMessageScope(message, activeStreamingScopeRef.current),
         );
         streamingMessageBatcherRef.current?.enqueue(scopedMessage, generation);
         const client = executionClientRef.current;
@@ -824,10 +875,10 @@ export function Chat({
 
       if (isTurnStartMessage(message)) {
         streamingMessageBatcherRef.current?.flush(generation);
-        activeStreamingScopeRef.current =
-          getMessageStreamingScopeId(message) ??
-          activeStreamingScopeRef.current ??
-          message.messageId;
+        activeStreamingScopeRef.current = liveMessageScope(
+          message,
+          activeStreamingScopeRef.current,
+        );
         setIsExecuting(true);
         const acceptedId = conversationIdRef.current;
         setAcceptedConversationId(acceptedId);
@@ -863,14 +914,13 @@ export function Chat({
       if (!isUserTurnMessage(message) || isSteerUserMessage(message)) {
         const scopedMessage = scopeStreamingMessage(
           message,
-          getMessageStreamingScopeId(message) ??
-            activeStreamingScopeRef.current ??
-            message.messageId,
+          liveMessageScope(message, activeStreamingScopeRef.current),
         );
         streamingMessageBatcherRef.current?.enqueue(scopedMessage, generation);
       }
     },
     [
+      confirmLiveMode,
       notifyExecutionError,
       onConversationAccepted,
       onConversationChange,
@@ -890,6 +940,7 @@ export function Chat({
       // 条目的 turnId 就是服务端的 turnId，与按 turnId 划分 scope 的历史记录一致。
       // The entry's turnId is the server's turnId, matching history scoped by turnId.
       activeStreamingScopeRef.current = item.turnId;
+      recoveringTurns.current?.add(item.turnId);
       const scopedUserMessage = scopeStreamingMessage(message, item.turnId);
       setMessages((current) => {
         const nextMessages = mergeStreamingMessages(current, [scopedUserMessage]);
@@ -1005,6 +1056,7 @@ export function Chat({
       }
 
       const prepared = prepareChatHistory(snapshot.messages);
+      recoveringTurns.current?.add(snapshot.streamingScopeId);
       const nextMessages = replaceStreamingScope(
         messagesRef.current,
         prepared.messages,
@@ -1031,16 +1083,17 @@ export function Chat({
         setClaudeCommands(nextCommands);
       }
       if (nextMode) {
-        confirmedAgentModeRef.current = nextMode;
-        setAgentMode(nextMode);
+        confirmLiveMode(nextMode);
       }
       for (const status of snapshot.statuses) applyExecutionStatus(status, generation);
     },
-    [applyExecutionStatus],
+    [applyExecutionStatus, confirmLiveMode],
   );
 
+  const waitForHistory = needsSessionHistory && !keepLiveDuringRecovery;
+  const attachmentRevision = keepLiveDuringRecovery ? 0 : sessionSeed.revision;
   React.useEffect(() => {
-    if (isHydratingSession) {
+    if (waitForHistory) {
       return;
     }
     if (!projectId || !executionConversationId) {
@@ -1059,6 +1112,7 @@ export function Chat({
     client = executionSessionManager.attach(
       key,
       createExecutionHandlers(generation, () => client),
+      { replayPendingMessages: !keepLiveDuringRecovery || Number(sessionSeed.revision) > 0 },
     );
     executionClientRef.current = client;
     setReconnectState(client.getReconnectState());
@@ -1073,10 +1127,10 @@ export function Chat({
     createExecutionHandlers,
     executionConversationId,
     executionServerId,
-    isHydratingSession,
+    waitForHistory,
     projectId,
     restoreActiveTurnSnapshot,
-    sessionSeed.revision,
+    attachmentRevision,
     targetKey,
   ]);
 
@@ -1226,11 +1280,11 @@ export function Chat({
   const ensureConversationId = React.useCallback(() => {
     const existingConversationId = conversationIdRef.current;
     if (existingConversationId) return existingConversationId;
-    const nextConversationId = createUuidV7();
+    const nextConversationId = newConversationId ?? createUuidV7();
     conversationIdRef.current = nextConversationId;
     setDraftConversationId(nextConversationId);
     return nextConversationId;
-  }, []);
+  }, [newConversationId]);
 
   /**
    * 点击发送与 Ctrl/Shift+Enter 的共同入口：内容进入对话的队列，空闲时立即开始发送。返回 false 时保留草稿。
@@ -1311,6 +1365,7 @@ export function Chat({
         return false;
       }
       setSubmitError(null);
+      onSubmitted?.();
       if (submittedFileComments.length > 0) {
         onPendingFileCommentsRemove?.(submittedFileComments.map((comment) => comment.id));
       }
@@ -1326,6 +1381,7 @@ export function Chat({
       isTransitioning,
       notifyExecutionError,
       onPendingFileCommentsRemove,
+      onSubmitted,
       pendingFileComments,
       permissionUnavailable,
       projectId,

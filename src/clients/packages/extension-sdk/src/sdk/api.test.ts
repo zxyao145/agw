@@ -38,6 +38,49 @@ const welcome = {
   themeStyleId: null,
 } satisfies ExtensionWelcome;
 
+test("workspace calls send tab options and default file options", async (t) => {
+  const channel = new MessageChannel();
+  const requests: unknown[] = [];
+  const host = new RpcEndpoint(channel.port1 as never, {
+    request: (method, params) => {
+      requests.push({ method, params });
+      return null;
+    },
+  });
+  const client = new RpcEndpoint(channel.port2 as never, { request: () => null });
+  t.after(() => {
+    client.close();
+    host.close();
+  });
+  const api = createExtensionApi(client, welcome, new Map(), "");
+  for (const params of [() => "value", Symbol("value"), { [Symbol()]: 1 }]) {
+    await assert.rejects(api.workspace.openMainView("file", params), {
+      code: "ERR_INVALID_ARGUMENT",
+    });
+  }
+  await assert.rejects(
+    api.workspace.openFile("agw-cloud://local/a", { preview: (() => true) as never }),
+    { code: "ERR_INVALID_ARGUMENT" },
+  );
+  await api.workspace.openMainView("file", { a: 1 }, { key: "k", preview: true });
+  await api.workspace.openFile("agw-cloud://local/a");
+  await api.workspace.openMainView("agw.jobs", null, {
+    key: undefined,
+    title: undefined,
+    preview: undefined,
+  });
+  await api.workspace.openFile("agw-cloud://local/b", { preview: undefined });
+  assert.deepEqual(requests, [
+    {
+      method: "workspace.openMainView",
+      params: { id: "file", params: { a: 1 }, options: { key: "k", preview: true } },
+    },
+    { method: "workspace.openFile", params: { uri: "agw-cloud://local/a", options: {} } },
+    { method: "workspace.openMainView", params: { id: "agw.jobs", params: null, options: {} } },
+    { method: "workspace.openFile", params: { uri: "agw-cloud://local/b", options: {} } },
+  ]);
+});
+
 test("server.request reaches the Desktop host with method, query, body and abort signal", async () => {
   const channel = new MessageChannel();
   let request: { method: string; params: unknown } | null = null;

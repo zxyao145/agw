@@ -12,6 +12,7 @@ import {
 } from "@agw/extension-sdk";
 import { ConfirmationService } from "@desktop/main/confirmation/confirmation-service";
 import { canceledAnswer, hostConfirmationView } from "@desktop/main/confirmation/host-confirmation";
+import { WorkspaceTabsFile } from "@desktop/main/settings/workspace-tabs-file";
 import type {
   AgwDesktopBridge,
   ConfirmationView,
@@ -20,6 +21,7 @@ import type {
   ExtensionEvent,
   ExtensionPortMessage,
   InstalledExtension,
+  WorkspaceCommand,
 } from "@desktop/shared/contracts";
 import type { DOMWindow } from "jsdom";
 import type { ExtensionHost } from "./extension-host";
@@ -146,6 +148,7 @@ export function createMainProcess(
   options: {
     installed: InstalledExtension;
     storageDirectory: string;
+    workspaceTabsDirectory: string;
     channels?: Partial<AgwDesktopBridge>;
   },
 ) {
@@ -155,6 +158,8 @@ export function createMainProcess(
   const pageIds = new Map<string, string>();
   const destroyed: string[] = [];
   let eventListener: ((event: ExtensionEvent) => void) | null = null;
+  const workspaceTabs = new WorkspaceTabsFile(options.workspaceTabsDirectory);
+  const workspaceCommandListeners = new Set<(command: WorkspaceCommand) => void>();
   const confirmations = createConfirmations();
   // 宿主页面的 WebContents 身份，用于撤回它发起的确认。The host page's WebContents identity, for withdrawing its requests.
   const hostContents = {};
@@ -182,6 +187,14 @@ export function createMainProcess(
   };
   const bridge: Partial<AgwDesktopBridge> = {
     getRuntimeState: async () => state,
+    getWorkspaceTabs: (serverId, projectId) => workspaceTabs.read(serverId, projectId),
+    saveWorkspaceTabs: (serverId, projectId, group) =>
+      workspaceTabs.save(serverId, projectId, group),
+    pruneWorkspaceTabs: (serverId, projectIds) => workspaceTabs.pruneProjects(serverId, projectIds),
+    onWorkspaceCommand: (listener) => {
+      workspaceCommandListeners.add(listener);
+      return () => workspaceCommandListeners.delete(listener);
+    },
     attachExtensionHost: async () => undefined,
     onExtensionEvent: (listener) => {
       eventListener = listener;
@@ -247,6 +260,9 @@ export function createMainProcess(
     destroyed,
     /** 像主进程一样推送事件。Pushes an event the way the main process does. */
     emit: (event: ExtensionEvent) => eventListener!(event),
+    emitWorkspaceCommand: (command: WorkspaceCommand) => {
+      for (const listener of workspaceCommandListeners) listener(command);
+    },
   };
 }
 

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import test, { afterEach, before } from "node:test";
+import test, { after, afterEach, before } from "node:test";
 
+import { createScratchDirectory } from "@desktop/main/scratch-directory.test-helper";
 import type {
   AppearanceSettings,
   ExtensionTheme,
@@ -25,8 +26,12 @@ let hosts: typeof import("../extensions/extension-host");
 let helper: typeof import("../extensions/extension-host.test-helper");
 let nextThemes: typeof import("next-themes");
 let sonner: typeof import("sonner");
+let scratch: Awaited<ReturnType<typeof createScratchDirectory>>;
+
+after(() => scratch?.dispose());
 
 before(async () => {
+  scratch = await createScratchDirectory("theme-provider-tabs");
   environment = await environmentReady;
   themes = await import("./theme-provider");
   hosts = await import("../extensions/extension-host");
@@ -141,6 +146,7 @@ function createHost(
   const main = helper.createMainProcess(environment.window, {
     installed: themeExtension(),
     storageDirectory: "/data/soft-theme",
+    workspaceTabsDirectory: scratch.path,
     channels: {
       listExtensions: async () => {
         rescans.count += 1;

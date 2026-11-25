@@ -84,3 +84,15 @@ export type {
   TextEol,
 } from "./text";
 export type { DesktopUpdateCheckResult, DesktopUpdateStatus } from "./update";
+export type {
+  JsonValue,
+  PersistedChatTab,
+  PersistedExtensionTab,
+  PersistedFileTab,
+  PersistedFloatingChat,
+  PersistedJobsTab,
+  PersistedTab,
+  PersistedTabGroup,
+  WorkspaceCommand,
+  WorkspaceTabsFileContent,
+} from "./workspace-tabs";

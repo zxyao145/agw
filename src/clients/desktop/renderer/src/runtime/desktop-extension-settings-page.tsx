@@ -9,14 +9,15 @@ import { Button } from "@agw/components";
 import { extensionDisplayName } from "@desktop/shared/extension-manifest";
 import { buildSettingsHref, getDesktopChatReturnHref } from "./components/app-shell-routing";
 import { ExtensionView } from "./components/workspace/extension-view";
-import { settingsViewId } from "./extensions/extension-host";
 import { useExtensionRuntime } from "./extensions/extension-host-provider";
+import { settingsInstanceKey } from "./extensions/workspace-ids";
 
 /** 用 view frame 显示 extension 的设置页。Shows an extension's settings page in a view frame. */
 export function DesktopExtensionSettingsPage() {
   const runtime = useExtensionRuntime();
   const searchParams = useSearchParams();
   const extensionId = searchParams.get("id") ?? "";
+  const viewId = settingsInstanceKey(extensionId);
   const returnTo = searchParams.get("returnTo");
   const snapshot = React.useSyncExternalStore(
     runtime?.host.subscribe ?? (() => () => undefined),
@@ -53,8 +54,9 @@ export function DesktopExtensionSettingsPage() {
             host={runtime.host}
             layout={runtime.layout}
             snapshot={snapshot}
+            instanceKey={viewId}
             view={{
-              id: settingsViewId(extension.id),
+              id: viewId,
               location: "main",
               title: "Settings",
               icon: { kind: "lucide", name: "Settings" },

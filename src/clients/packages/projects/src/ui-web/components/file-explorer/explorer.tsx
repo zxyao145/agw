@@ -9,7 +9,7 @@ import ExplorerFileEmpty from "./explorer-file-empty";
 import { ExplorerFileTree, ExplorerGitChangeTree } from "./explorer-file-tree";
 import React from "react";
 import { buildGitChangeGroups } from "./git-change-tree";
-import type { GitChangeGroup } from "./types";
+import type { FileTreeSelectionHandler, GitChangeGroup } from "./types";
 import type { ExplorerContextMenuArgs, ExtensionMenuItem } from "../../../lib/extension-menu";
 
 const ROOT_RELOAD_DEBOUNCE_MS = 150;
@@ -25,6 +25,7 @@ export default function Explorer({
   onOnlyDiffChange,
   onFileDeleted,
   onFileSelected,
+  selectedFilePath,
   onFileReseted,
   onFileGitScopeChanged,
   contextMenuItems,
@@ -40,7 +41,8 @@ export default function Explorer({
   onOnlyDiffChange?: (value: boolean) => void;
 
   onFileDeleted: (filePath: string) => void;
-  onFileSelected: (filePath: string | null, scope?: GitDiffScope) => void;
+  onFileSelected: FileTreeSelectionHandler;
+  selectedFilePath?: string | null;
   onFileReseted: (filePath: string | null) => void;
   onFileGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
   /** 右键菜单的扩展菜单项，非空时列在内置项之后。Extension context menu items listed after the built-in ones when non-empty. */
@@ -149,13 +151,6 @@ export default function Explorer({
     [onFileReseted, loadRootDirectory],
   );
 
-  const handleFileSelect = React.useCallback(
-    (path: string, scope?: GitDiffScope) => {
-      onFileSelected(path, scope);
-    },
-    [onFileSelected],
-  );
-
   const handleGitScopeChanged = React.useCallback(
     (path: string, targetScope: GitDiffScope) => {
       if (!mountedRef.current) return;
@@ -233,7 +228,8 @@ export default function Explorer({
               <ExplorerGitChangeTree
                 projectId={projectId}
                 groups={changeGroups}
-                onFileSelect={handleFileSelect}
+                onFileSelect={onFileSelected}
+                selectedPath={selectedFilePath}
                 onFileDeleted={handleFileDeleted}
                 onFileReset={handleFileReset}
                 onGitScopeChanged={handleGitScopeChanged}
@@ -247,7 +243,8 @@ export default function Explorer({
                 rootItems={rootItems}
                 onlyDiff={onlyDiff}
                 recursiveMode={recursiveMode}
-                onFileSelect={handleFileSelect}
+                onFileSelect={onFileSelected}
+                selectedPath={selectedFilePath}
                 onFileDeleted={handleFileDeleted}
                 onFileReset={handleFileReset}
                 contextMenuItems={contextMenuItems}

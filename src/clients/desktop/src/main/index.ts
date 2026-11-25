@@ -30,9 +30,11 @@ import type {
   DesktopSettingsUpdate,
   ExtensionSafeModeState,
   ImageContextMenuRequest,
+  PersistedTabGroup,
   UninstallRequest,
   UninstallResult,
 } from "../shared/contracts";
+import { buildApplicationMenuTemplate, workspaceMenuAction } from "./app-menu";
 import { CONFIRMATION_SCHEME_PRIVILEGES } from "./confirmation/confirmation-protocol";
 import { FLOATING_CHAT_SCHEME_PRIVILEGES } from "./floating-chat/floating-chat-protocol";
 import {
@@ -70,6 +72,7 @@ import { resolveServerExecutablePath } from "./runtime/server-executable-path";
 import { DesktopNotificationStream, type DesktopNotificationProfile } from "./notification-stream";
 import { getTurnNotificationText, normalizeTurnNotificationRequest } from "./turn-notification";
 import { DesktopSettingsStore, type SecretCodec } from "./settings/settings-store";
+import { WorkspaceTabsFile } from "./settings/workspace-tabs-file";
 import { trayIconFileName } from "./tray-icon";
 import { checkForDesktopUpdate } from "./update/github-release-updater";
 
@@ -97,6 +100,7 @@ let isQuitting = false;
 let activeTaskCount = 0;
 let currentSettings: DesktopSettings;
 let settingsStore: DesktopSettingsStore;
+let workspaceTabsFile: WorkspaceTabsFile;
 let daemonManager: DaemonManager;
 let packageMetadata: DesktopPackageMetadata;
 let pendingOAuthRoute: string | null = null;
@@ -470,8 +474,8 @@ function createMainWindow(): BrowserWindow {
     titleBarOverlay:
       process.platform === "darwin"
         ? false
-        : { color: "#00000000", symbolColor: "#8f96a3", height: 48 },
-    trafficLightPosition: process.platform === "darwin" ? { x: 18, y: 18 } : undefined,
+        : { color: "#00000000", symbolColor: "#8f96a3", height: 38 },
+    trafficLightPosition: process.platform === "darwin" ? { x: 18, y: 12 } : undefined,
     backgroundColor: "#0b0c0f",
     webPreferences: {
       preload: resolve(__dirname, "..", "preload", "index.js"),
@@ -700,6 +704,23 @@ function registerOAuthProtocolClient(): void {
   if (!registered) console.warn(`Unable to register ${DESKTOP_OAUTH_PROTOCOL} as a URL handler.`);
 }
 
+function registerApplicationMenu(): void {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate(
+      buildApplicationMenuTemplate(process.platform, (command, focusedWindow) => {
+        const action = workspaceMenuAction(command, focusedWindow, mainWindow);
+        if (action?.kind === "workspace") {
+          if (!action.contents.isDestroyed()) {
+            action.contents.send("agw:workspace-command", action.command);
+          }
+        } else if (action?.kind === "closeWindow" && action.window.isClosable()) {
+          action.window.close();
+        }
+      }),
+    ),
+  );
+}
+
 async function openSetup(baseUrl: string): Promise<void> {
   if (!mainWindow) return;
   const origin = new URL(baseUrl).origin;
@@ -829,7 +850,30 @@ function registerIpc(): void {
     await settingsStore.save(settings);
     currentSettings = await settingsStore.load();
     await syncDesktopNotificationStream();
+    if (settings.profiles) {
+      const profileIds = currentSettings.profiles.map((profile) => profile.id);
+      await workspaceTabsFile.pruneServers(profileIds).catch((error: unknown) => {
+        // 设置已经保存，标签清理的错误单独记录。
+        // Settings are committed. Log tab cleanup failures separately.
+        console.error("Unable to prune workspace tabs for removed Server Profiles", error);
+      });
+    }
     return runtimeState();
+  });
+  ipcMain.handle("agw:get-workspace-tabs", (event, serverId: string, projectId: string) => {
+    assertTrustedSender(senderUrl(event));
+    return workspaceTabsFile.read(serverId, projectId);
+  });
+  ipcMain.handle(
+    "agw:save-workspace-tabs",
+    (event, serverId: string, projectId: string, group: PersistedTabGroup) => {
+      assertTrustedSender(senderUrl(event));
+      return workspaceTabsFile.save(serverId, projectId, group);
+    },
+  );
+  ipcMain.handle("agw:prune-workspace-tabs", (event, serverId: string, projectIds: string[]) => {
+    assertTrustedSender(senderUrl(event));
+    return workspaceTabsFile.pruneProjects(serverId, projectIds);
   });
   ipcMain.handle("agw:get-file-viewer-defaults", async (event) => {
     assertTrustedSender(senderUrl(event));
@@ -966,10 +1010,13 @@ void app
     if (!hasSingleInstanceLock) return;
     app.dock?.setIcon(appIconPath());
     registerOAuthProtocolClient();
+    registerApplicationMenu();
 
     packageMetadata = readPackageMetadata();
     const flavor = packageMetadata.packageFlavor;
-    settingsStore = new DesktopSettingsStore(app.getPath("userData"), flavor, createSecretCodec());
+    const settingsDirectory = app.getPath("userData");
+    settingsStore = new DesktopSettingsStore(settingsDirectory, flavor, createSecretCodec());
+    workspaceTabsFile = new WorkspaceTabsFile(settingsDirectory);
     currentSettings = await settingsStore.load();
     notificationStream = new DesktopNotificationStream({
       fetch: (input, init) => net.fetch(input instanceof Request ? input : input.toString(), init),

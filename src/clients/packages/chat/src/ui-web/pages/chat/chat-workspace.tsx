@@ -1,56 +1,26 @@
 "use client";
 
 import * as React from "react";
-import {
-  FileText,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Plus,
-  Settings,
-  Trash2,
-  Info,
-} from "lucide-react";
-import { useQuery } from "@agw/components/query";
+import { FileText, PanelLeftClose, PanelLeftOpen, Plus, Trash2, Info } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
-import {
-  getProjectDirectories,
-  getFileDiff,
-  readFile,
-  shouldShowFileDiff,
-  type GitDiffResponse,
-  type GitDiffScope,
-  type ProjectDirectory,
-} from "@agw/projects";
-import { apiGet } from "@agw/api";
-import { type ConversationResumeState, type ConversationSummary } from "@agw/projects";
-import { AgentSelector, type AgentSelection } from "../../components/agent-selector";
+import { type GitDiffScope, type ConversationSummary } from "@agw/projects";
+import { AgentSelector } from "../../components/agent-selector";
 import { type EditableSource, Explorer, FileContent, type FileViewerOption } from "@agw/projects";
 import type {
   ConversationItemActionArgs,
   ExplorerContextMenuArgs,
   ExtensionMenuItem,
-  LineComment,
-  ProjectDirectoryOption,
 } from "@agw/projects";
-import {
-  Chat,
-  type ChatSessionSeed,
-  type ConversationChangeOptions,
-} from "../../components/message/chat";
-import type {
-  ChatComposerHandle,
-  ChatMessageActionArgs,
-} from "../../components/message/chat-extension-types";
-import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
+import { Chat } from "../../components/message/chat";
+import type { ChatMessageActionArgs } from "../../components/message/chat-extension-types";
 import { ConversationList } from "@agw/projects";
 import { Button, formatFriendlyLocalDateTime2 } from "@agw/components";
 import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -63,196 +33,31 @@ import { SearchableSelect, type SearchableSelectOption } from "@agw/components";
 import { Switch } from "@agw/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { buildChatHref } from "../../../lib/chat-route";
-import { conversationComposerStorage } from "../../../lib/chat/conversation-composer-storage";
-import { conversationImageDrafts } from "../../../lib/chat/conversation-image-drafts";
-import { notifyImageDraftError } from "../../components/message/use-conversation-image-draft";
 import { cn } from "@agw/components";
-import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
 import { ProviderSessionsSection } from "./components/provider-sessions-section";
 import {
   CHAT_SETTINGS_DIALOG_BODY_CLASS_NAME,
   CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME,
 } from "./lib/chat-settings";
-import {
-  getChatRouteSessionAction,
-  getConversationHydrationKey,
-  getRouteHydrationKey,
-} from "./lib/session-routing";
-import {
-  buildChatTargetOptions,
-  getTargetValue,
-  getTargetValueFromMetadata,
-} from "./lib/target-options";
-import type { ChatProjectSettingsStorageValues, ChatTargetOption, EnvVar } from "./types";
+import { getChatRouteSessionAction, getConversationHydrationKey } from "./lib/session-routing";
+import type { EnvVar } from "./types";
+import { executionSessionManager } from "@agw/chat-runtime";
 import { getApiErrorMessage } from "@agw/api";
-import {
-  chatHttpClient,
-  executionSessionManager,
-  getExecutionReconnectProgress,
-  migrateDurableExecutionAttachment,
-  type ConversationStatus,
-  type ExecutionReconnectState,
-} from "@agw/chat-runtime";
 import { useExecutionPlatform } from "../../execution-platform";
-import { useConversationStatuses } from "../../conversation-statuses";
-
-export type ChatWorkspaceProject = {
-  id: string;
-  name: string;
-  workspace?: string | null;
-  additionalDirectories?: ProjectDirectory[] | null;
-};
-
-type AgentDto = {
-  id: string;
-  displayName: string;
-  name: string;
-  enable: boolean;
-  resultFormat?: import("@agw/api").components["schemas"]["ResultFormat"];
-};
-
-type AgentflowDto = {
-  id: string;
-  name: string;
-  enable: boolean;
-};
-
-const DEFAULT_PROJECT_VALUE = "default-built-in";
-const DEFAULT_AGENT_LABEL = "Hello";
+import {
+  ChatProjectProvider,
+  useChatProject,
+  type ChatSettingsDraft,
+} from "./chat-project-provider";
+import { ChatSessionProvider, readSessionHistory, useChatSession } from "./chat-session-provider";
+import { FileDocumentProvider, useFileDocument } from "./file-document-provider";
 
 export type ChatWorkspaceProps = {
   routeBasePath: string;
   showProjectSelect: boolean;
   compactToolbar?: boolean;
   showUserInputNavigation?: boolean;
-};
-
-export type ChatWorkspaceProviderProps = {
-  routeBasePath: string;
-  /**
-   * 当前文件改变前的确认（选择其他文件、切换目录或 Project）；返回 false 时保留当前文件。
-   * Confirmation before the current file changes (another file, directory or Project); false keeps the current file.
-   */
-  confirmFileChange?: () => Promise<boolean>;
-  /**
-   * 控制工作区是否为 Source 读取文字，缺省为 true。
-   * Desktop 通过 SourceDocument 读取 Source 的文字。
-   * Controls whether the workspace reads Source text and defaults to true.
-   * Desktop reads Source text through SourceDocument.
-   */
-  readSourceContent?: boolean;
-  children?: React.ReactNode;
-};
-
-/** ChatWorkspaceProvider 提供的状态与回调。State and callbacks provided by ChatWorkspaceProvider. */
-export type ChatWorkspaceContextValue = {
-  /** 执行连接正在可见重连，此时工作区应设置 inert。The execution connection is visibly reconnecting, so the workspace should be inert. */
-  isReconnecting: boolean;
-  /** 项目、Agent、Agentflow 列表的加载错误；没有错误时为 null。The error loading projects, Agents or Agentflows; null without one. */
-  dependencyErrorMessage: string | null;
-  projects: readonly ChatWorkspaceProject[];
-  selectedProjectId: string | null;
-  selectedProject: ChatWorkspaceProject | null;
-  /** 切换项目并开始新对话。Switches the project and starts a new conversation. */
-  selectProject: (projectId: string) => void;
-  conversationId: string | null;
-  selectedTarget: ChatTargetOption | null;
-  targetOptions: readonly ChatTargetOption[];
-  /** 触发对话列表刷新。Triggers a conversation list refresh. */
-  refreshConversations: () => void;
-  /** 由 ChatConversationPane 传给 Chat 的输入框句柄。The composer handle ChatConversationPane passes to Chat. */
-  composerRef: React.RefObject<ChatComposerHandle | null>;
-
-  projectDirectories: readonly ProjectDirectoryOption[];
-  /** 文件浏览的当前目录。The directory the file explorer browses. */
-  selectedDirectory: ProjectDirectoryOption | undefined;
-  selectDirectory: (directoryId: string | null) => void;
-  resolvedWorkspace: string;
-
-  conversationListRefreshSignal: number;
-  conversationStatuses: ReadonlyMap<string, ConversationStatus>;
-  currentConversationTurnId: string | null;
-  /** 加载并打开对话；成功时返回 true。Loads and opens a conversation; resolves true on success. */
-  openConversation: (conversation: ConversationSummary) => Promise<boolean>;
-  startNewConversation: () => void;
-  resetSession: () => void;
-  handleConversationDeleted: (conversationId: string) => void;
-  handleProjectConversationsCleared: () => void;
-  getSettingsDraft: (projectId: string | null) => ChatSettingsDraft;
-  saveSettings: (draft: ChatSettingsDraft) => boolean;
-
-  onlyDiff: boolean;
-  setOnlyDiff: (onlyDiff: boolean) => void;
-  /** Diff 模式下主区显示文件本身。In Diff mode the main area shows the file itself. */
-  diffFileView: boolean;
-  /** 在 diff 与文件查看之间切换。Switches between the diff and the file view. */
-  setDiffFileView: (diffFileView: boolean) => void;
-  recursiveMode: boolean;
-  /** 选中文件；文件与 diff scope 都未变化时不重新加载。Selects a file; nothing reloads when neither the file nor the diff scope changes. */
-  selectFile: (filePath: string | null, scope?: GitDiffScope) => void;
-  /**
-   * 确认后选中目录中的文件；用户取消时返回 false。
-   * Selects a file in a directory after confirmation; resolves false when the user cancels.
-   */
-  openFile: (directoryId: string | null, filePath: string) => Promise<boolean>;
-  handleFileDeleted: (filePath: string) => void;
-  handleFileReset: (filePath: string | null) => void;
-  handleFileGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
-  /**
-   * 文件写入后刷新文件树，并在文件查看中更新当前文件的预览状态。
-   * Refreshes the file tree after a write and updates the current file's preview state in file view.
-   */
-  handleFileWritten: (directoryId: string | null, path: string) => void;
-  /** 每次文件被写入加 1，传给 Explorer。Increments on every file write; passed to Explorer. */
-  fileTreeRefreshSignal: number;
-  selectedFile: string | null;
-  selectedDiffScope: GitDiffScope | undefined;
-  fileContent: string;
-  isLoadingContent: boolean;
-  contentError: string | null;
-  diffContentData: GitDiffResponse | null;
-  /** 文件行评论，发送时进入 Chat 的 pendingFileComments。File line comments that become Chat's pendingFileComments. */
-  comments: LineComment[];
-  setComments: React.Dispatch<React.SetStateAction<LineComment[]>>;
-
-  agents: readonly AgentDto[] | undefined;
-  selectAgent: (selection: AgentSelection) => void;
-  chatSessionSeed: ChatSessionSeed;
-  isLoadingConversation: boolean;
-  restoreExecution: boolean;
-  environmentVariables: Record<string, string>;
-  resultOnly: boolean;
-  searchDirectoryIds: readonly (string | null)[];
-  handleConversationAccepted: (conversationId: string) => void;
-  handleConversationChange: (options?: ConversationChangeOptions) => void;
-  removePendingFileComments: (commentIds: readonly string[]) => void;
-  handleReconnectStateChange: (
-    state: ExecutionReconnectState | null,
-    retry: () => Promise<void>,
-  ) => void;
-};
-
-const ChatWorkspaceContext = React.createContext<ChatWorkspaceContextValue | null>(null);
-
-/** 读取 ChatWorkspaceProvider 的状态。Reads the state of ChatWorkspaceProvider. */
-export function useChatWorkspace(): ChatWorkspaceContextValue {
-  const value = React.useContext(ChatWorkspaceContext);
-  if (!value) throw new Error("useChatWorkspace must be used inside ChatWorkspaceProvider.");
-  return value;
-}
-
-function getResumeTargetValue(resumeState: ConversationResumeState | null): string | null {
-  return getTargetValueFromMetadata(resumeState?.targetType, resumeState?.targetId);
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
-type ChatSettingsDraft = {
-  envVars: EnvVar[];
-  resultOnly: boolean;
 };
 
 function normalizeEnvVars(envVars: EnvVar[]): EnvVar[] {
@@ -262,17 +67,6 @@ function normalizeEnvVars(envVars: EnvVar[]): EnvVar[] {
       value: envVar.value,
     }))
     .filter((envVar) => envVar.key.length > 0 || envVar.value.trim().length > 0);
-}
-
-function areEnvVarsEqual(left: EnvVar[], right: EnvVar[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((envVar, index) => {
-    const rightEnvVar = right[index];
-    return envVar.key === rightEnvVar.key && envVar.value === rightEnvVar.value;
-  });
 }
 
 type ChatSettingsDialogProps = {
@@ -504,1037 +298,31 @@ function ProjectRequiredState() {
   );
 }
 
-type WorkspaceFileLocation = {
-  projectId: string | null;
-  directoryId: string | null;
-  path: string;
-};
-
-type FilePreviewSelection = WorkspaceFileLocation & {
-  diffScope?: GitDiffScope;
-  workspace: string;
-};
-
-/**
- * 对话工作区中与布局无关的状态、effect 与回调，并渲染重连对话框。对话框按绝对定位覆盖最近的定位祖先，
- * 因此 Provider 应放在定位容器中。
- * Layout-independent state, effects and callbacks of the chat workspace; also renders the reconnect
- * dialog. The dialog is absolutely positioned over the nearest positioned ancestor, so place the
- * Provider inside a positioned container.
- */
-export function ChatWorkspaceProvider({
-  routeBasePath,
-  confirmFileChange,
-  readSourceContent = true,
-  children,
-}: ChatWorkspaceProviderProps) {
-  const router = useRouter();
-  const confirmFileChangeRef = React.useRef(confirmFileChange);
-  confirmFileChangeRef.current = confirmFileChange;
-  const guardFileChange = React.useCallback(
-    async () => (confirmFileChangeRef.current ? confirmFileChangeRef.current() : true),
-    [],
-  );
-  // 没有确认函数时同步执行，Web 的行为不变。Without a confirmation the action runs synchronously, as before on Web.
-  const afterFileChangeConfirmed = React.useCallback((action: () => void) => {
-    const confirm = confirmFileChangeRef.current;
-    if (!confirm) {
-      action();
-      return;
-    }
-    void confirm().then((confirmed) => {
-      if (confirmed) action();
-    });
-  }, []);
-  const searchParams = useSearchParams();
-  const executionServerId = useExecutionPlatform().serverId;
-  const queryProjectId = searchParams.get("projectId");
-  const queryConversationId = searchParams.get("conversationId");
-
-  const [executionReconnectState, setExecutionReconnectState] =
-    React.useState<ExecutionReconnectState | null>(null);
-  const reconnectRetryRef = React.useRef<(() => Promise<void>) | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(queryProjectId);
-  const [selectedTargetValue, setSelectedTargetValue] = React.useState<string | null>(null);
-  // 清空目标后要求重新确定目标；同一批更新中先选中再清空时目标值不变，靠它让选择默认目标的 effect 再次运行。
-  // Requests target resolution after a clear; when a selection and a clear land in one batch the value is unchanged,
-  // so this makes the default-target effect run again.
-  const [targetResolution, setTargetResolution] = React.useState(0);
-  const [conversationId, setConversationId] = React.useState<string | null>(queryConversationId);
-  const [chatSessionSeed, setChatSessionSeed] = React.useState<ChatSessionSeed>({
-    revision: 0,
-    conversationId: null,
-    messages: [],
-    historyTurns: [],
-    olderMessagesCursor: null,
-    hasOlderMessages: false,
-    agentMode: null,
-  });
-  const [isLoadingConversation, setIsLoadingConversation] = React.useState(false);
-  const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
-  const [selectedDirectoryId, setSelectedDirectoryId] = React.useState<string | null>(null);
-  const [fileSelection, setFileSelection] = React.useState<FilePreviewSelection | null>(null);
-  const [fileContent, setFileContent] = React.useState("");
-  const [isLoadingContent, setIsLoadingContent] = React.useState(false);
-  const [contentError, setContentError] = React.useState<string | null>(null);
-  const [onlyDiff, setOnlyDiffState] = React.useState(false);
-  const [diffFileView, setDiffFileView] = React.useState(false);
-  const showDiff = shouldShowFileDiff(onlyDiff, diffFileView);
-  const setOnlyDiff = React.useCallback((value: boolean) => {
-    setOnlyDiffState(value);
-    setDiffFileView(false);
-  }, []);
-  const [recursiveMode] = React.useState(true);
-  const [diffContentData, setDiffContentData] = React.useState<GitDiffResponse | null>(null);
-  const [comments, setComments] = React.useState<LineComment[]>([]);
-  const [fileTreeRefreshSignal, setFileTreeRefreshSignal] = React.useState(0);
-  const [envVars, setEnvVars] = React.useState<EnvVar[]>([]);
-  const [resultOnly, setResultOnly] = React.useState(false);
-  const composerRef = React.useRef<ChatComposerHandle | null>(null);
-
-  const hydratedConversationKeyRef = React.useRef<string | null>(null);
-  const conversationLoadAbortRef = React.useRef<AbortController | null>(null);
-  const fileLoadGenerationRef = React.useRef(0);
-
-  React.useEffect(
-    () => () => {
-      conversationLoadAbortRef.current?.abort();
-    },
-    [],
-  );
-
-  const projectsQuery = useQuery({
-    queryKey: ["projects"],
-    queryFn: async () => (await apiGet("/api/projects")) as ChatWorkspaceProject[],
-  });
-
-  const agentsQuery = useQuery({
-    queryKey: ["agents"],
-    queryFn: async () => (await apiGet("/api/agents")) as Array<AgentDto>,
-  });
-
-  const agentflowsQuery = useQuery({
-    queryKey: ["agentflows"],
-    queryFn: async () => (await apiGet("/api/agentflows")) as Array<AgentflowDto>,
-  });
-
-  const projects = projectsQuery.data ?? [];
-
-  const targetOptions = React.useMemo<ChatTargetOption[]>(
-    () =>
-      buildChatTargetOptions({
-        projectId: selectedProjectId,
-        agents: agentsQuery.data ?? [],
-        agentflows: agentflowsQuery.data ?? [],
-      }),
-    [agentflowsQuery.data, agentsQuery.data, selectedProjectId],
-  );
-
-  const selectedTarget = React.useMemo(
-    () => targetOptions.find((option) => getTargetValue(option) === selectedTargetValue) ?? null,
-    [selectedTargetValue, targetOptions],
-  );
-
-  const selectedProject = React.useMemo(
-    () => projects.find((project) => project.id === selectedProjectId) ?? null,
-    [projects, selectedProjectId],
-  );
-
-  const projectDirectories = React.useMemo(
-    () => (selectedProject ? getProjectDirectories(selectedProject) : []),
-    [selectedProject],
-  );
-  const searchDirectoryIds = React.useMemo(
-    () => projectDirectories.map((directory) => directory.id),
-    [projectDirectories],
-  );
-  const selectedDirectory =
-    projectDirectories.find((directory) => directory.id === selectedDirectoryId) ??
-    projectDirectories[0];
-  const resolvedWorkspace = selectedDirectory?.path ?? "";
-  const resolvedDirectoryId = selectedDirectory?.id ?? null;
-  const selectionInDirectory = fileInDirectory(
-    fileSelection,
-    selectedProjectId,
-    resolvedDirectoryId,
-  );
-  const currentFileSelection =
-    selectionInDirectory?.workspace === resolvedWorkspace ? selectionInDirectory : null;
-  const selectedFile = currentFileSelection?.path ?? null;
-  const selectedDiffScope = currentFileSelection?.diffScope;
-  React.useEffect(() => {
-    setSelectedDirectoryId(null);
-  }, [selectedProjectId]);
-  React.useEffect(() => {
-    if (
-      selectedDirectoryId &&
-      !projectDirectories.some((directory) => directory.id === selectedDirectoryId)
-    ) {
-      setSelectedDirectoryId(null);
-    }
-  }, [projectDirectories, selectedDirectoryId]);
-
-  const syncRoute = React.useCallback(
-    (projectId: string | null, conversationIdValue: string | null = null) => {
-      const nextHref = buildChatHref(routeBasePath, {
-        projectId,
-        conversationId: conversationIdValue,
-      });
-
-      if (
-        typeof window === "undefined" ||
-        `${window.location.pathname}${window.location.search}${window.location.hash}` !== nextHref
-      ) {
-        router.replace(nextHref, { scroll: false });
-      }
-    },
-    [routeBasePath, router],
-  );
-
-  const refreshConversationList = React.useCallback((options?: ConversationChangeOptions) => {
-    if (options?.cancelConversationLoad) {
-      conversationLoadAbortRef.current?.abort();
-      conversationLoadAbortRef.current = null;
-      setIsLoadingConversation(false);
-    }
-    setConversationListRefreshSignal((signal) => signal + 1);
-  }, []);
-
-  const replaceChatSession = React.useCallback((nextSession: Omit<ChatSessionSeed, "revision">) => {
-    setChatSessionSeed((current) => ({
-      ...nextSession,
-      revision: Number(current.revision) + 1,
-    }));
-  }, []);
-
-  const clearFilePreview = React.useCallback((clearComments = true) => {
-    fileLoadGenerationRef.current += 1;
-    setIsLoadingContent(false);
-    setFileSelection(null);
-    setDiffFileView(false);
-    setFileContent("");
-    setContentError(null);
-    setDiffContentData(null);
-    if (clearComments) setComments([]);
-  }, []);
-
-  const selectFileForPreview = React.useCallback(
-    (path: string, diffScope?: GitDiffScope) => {
-      fileLoadGenerationRef.current += 1;
-      setIsLoadingContent(true);
-      setFileSelection({
-        path,
-        diffScope,
-        projectId: selectedProjectId,
-        directoryId: resolvedDirectoryId,
-        workspace: resolvedWorkspace,
-      });
-      setDiffFileView(false);
-    },
-    [resolvedDirectoryId, resolvedWorkspace, selectedProjectId],
-  );
-
-  const handlePendingFileCommentsRemove = React.useCallback((commentIds: readonly string[]) => {
-    if (commentIds.length === 0) return;
-
-    const commentIdSet = new Set(commentIds);
-    setComments((current) => current.filter((comment) => !commentIdSet.has(comment.id)));
-  }, []);
-
-  const getProjectSettingsDraft = React.useCallback(
-    (projectId: string | null): ChatSettingsDraft => {
-      const storedSettings = projectId ? chatSettingsStorage.get(projectId) : {};
-
-      return {
-        envVars: storedSettings.envVars ?? [],
-        resultOnly: storedSettings.resultOnly ?? false,
-      };
-    },
-    [],
-  );
-
-  const getActiveSettingsDraft = React.useCallback(
-    (projectId: string | null): ChatSettingsDraft => {
-      if (projectId && projectId === selectedProjectId) {
-        return {
-          envVars,
-          resultOnly,
-        };
-      }
-
-      return getProjectSettingsDraft(projectId);
-    },
-    [envVars, getProjectSettingsDraft, resultOnly, selectedProjectId],
-  );
-
-  const environmentVariables = React.useMemo(() => {
-    const environmentVariables: Record<string, string> = {};
-
-    normalizeEnvVars(envVars).forEach((envVar) => {
-      if (envVar.key) {
-        environmentVariables[envVar.key] = envVar.value;
-      }
-    });
-
-    return environmentVariables;
-  }, [envVars]);
-
-  const loadFileContent = React.useCallback(
-    async (filePath: string, diffScope: GitDiffScope | undefined, readDiff: boolean) => {
-      const generation = ++fileLoadGenerationRef.current;
-      setIsLoadingContent(true);
-      setContentError(null);
-      setFileContent("");
-      setDiffContentData(null);
-
-      try {
-        if (!selectedProjectId) throw new Error("Select a project before loading files");
-        if (readDiff) {
-          const diff = await getFileDiff(
-            selectedProjectId,
-            filePath,
-            diffScope,
-            undefined,
-            resolvedDirectoryId,
-          );
-          if (generation === fileLoadGenerationRef.current) setDiffContentData(diff);
-        } else if (readSourceContent) {
-          const content = await readFile(
-            selectedProjectId,
-            filePath,
-            undefined,
-            resolvedDirectoryId,
-          );
-          if (generation === fileLoadGenerationRef.current) setFileContent(content);
-        }
-      } catch (error) {
-        if (generation !== fileLoadGenerationRef.current) {
-          return;
-        }
-        console.error("Error loading file:", error);
-        setContentError((error as Error).message);
-      } finally {
-        if (generation === fileLoadGenerationRef.current) {
-          setIsLoadingContent(false);
-        }
-      }
-    },
-    [readSourceContent, resolvedDirectoryId, selectedProjectId],
-  );
-
-  const handleOnFileDeleted = React.useCallback(
-    (filePath: string) => {
-      if (filePath === selectedFile) {
-        clearFilePreview();
-      }
-    },
-    [clearFilePreview, selectedFile],
-  );
-
-  const handleOnFileReseted = React.useCallback(
-    (filePath: string | null) => {
-      if (selectedFile && selectedFile === filePath) {
-        void loadFileContent(selectedFile, selectedDiffScope, showDiff);
-      }
-    },
-    [loadFileContent, selectedDiffScope, selectedFile, showDiff],
-  );
-
-  const handleFileWritten = React.useCallback(
-    (directoryId: string | null, path: string) => {
-      if (directoryId === resolvedDirectoryId && path === selectedFile && !showDiff) {
-        void loadFileContent(path, selectedDiffScope, false);
-      }
-      setFileTreeRefreshSignal((signal) => signal + 1);
-    },
-    [loadFileContent, resolvedDirectoryId, selectedDiffScope, selectedFile, showDiff],
-  );
-
-  const handleOnFileGitScopeChanged = React.useCallback(
-    (path: string, targetScope: GitDiffScope) => {
-      const directoryPrefix = `${path.replace(/\/+$/u, "")}/`;
-      setFileSelection((selection) => {
-        if (!selection || selection.diffScope === targetScope) return selection;
-        const affectsSelection =
-          selection.path === path || selection.path.startsWith(directoryPrefix);
-        return affectsSelection ? { ...selection, diffScope: targetScope } : selection;
-      });
-    },
-    [],
-  );
-
-  const handleOnFileSelected = React.useCallback(
-    (filePath: string | null, scope?: GitDiffScope) => {
-      if (!filePath) return;
-      if (filePath === selectedFile) {
-        if (scope !== selectedDiffScope) selectFileForPreview(filePath, scope);
-        return;
-      }
-      afterFileChangeConfirmed(() => selectFileForPreview(filePath, scope));
-    },
-    [afterFileChangeConfirmed, selectFileForPreview, selectedDiffScope, selectedFile],
-  );
-
-  // 其他目录中的文件在目录切换并清空预览之后加载。A file in another directory loads after the switch clears the preview.
-  const pendingFileRef = React.useRef<WorkspaceFileLocation | null>(null);
-  const openFile = React.useCallback(
-    async (directoryId: string | null, filePath: string) => {
-      if (directoryId === resolvedDirectoryId && filePath === selectedFile) return true;
-      if (!(await guardFileChange())) return false;
-      if (directoryId === resolvedDirectoryId) {
-        selectFileForPreview(filePath);
-      } else {
-        pendingFileRef.current = { projectId: selectedProjectId, directoryId, path: filePath };
-        setSelectedDirectoryId(directoryId);
-      }
-      return true;
-    },
-    [guardFileChange, resolvedDirectoryId, selectFileForPreview, selectedFile, selectedProjectId],
-  );
-
-  const selectDirectory = React.useCallback(
-    (directoryId: string | null) => {
-      if (directoryId === selectedDirectoryId) return;
-      afterFileChangeConfirmed(() => setSelectedDirectoryId(directoryId));
-    },
-    [afterFileChangeConfirmed, selectedDirectoryId],
-  );
-
-  const clearLocalSessionState = React.useCallback(() => {
-    conversationLoadAbortRef.current?.abort();
-    conversationLoadAbortRef.current = null;
-    hydratedConversationKeyRef.current = null;
-    setIsLoadingConversation(false);
-    setConversationId(null);
-    // 新对话重新确定执行目标，不沿用上一个对话的选择。
-    // A new conversation resolves its own target instead of keeping the previous conversation's one.
-    setSelectedTargetValue(null);
-    setTargetResolution((value) => value + 1);
-    replaceChatSession({
-      conversationId: null,
-      messages: [],
-      historyTurns: [],
-      olderMessagesCursor: null,
-      hasOlderMessages: false,
-      agentMode: null,
-    });
-  }, [replaceChatSession]);
-
-  const resetSession = React.useCallback(() => {
-    clearLocalSessionState();
-    syncRoute(selectedProjectId, null);
-  }, [clearLocalSessionState, selectedProjectId, syncRoute]);
-
-  const startNewConversation = React.useCallback(() => {
-    clearLocalSessionState();
-    syncRoute(selectedProjectId, null);
-  }, [clearLocalSessionState, selectedProjectId, syncRoute]);
-
-  const loadConversationHistory = React.useCallback(
-    async (projectId: string, nextConversationId: string, signal?: AbortSignal) => {
-      conversationLoadAbortRef.current?.abort();
-      const abortController = new AbortController();
-      conversationLoadAbortRef.current = abortController;
-      setIsLoadingConversation(true);
-      const abortFromCaller = () => abortController.abort();
-      signal?.addEventListener("abort", abortFromCaller, { once: true });
-
-      try {
-        const scope = {
-          serverId: executionServerId,
-          projectId,
-          conversationId: nextConversationId,
-        };
-        const [details, messagePage] = await Promise.all([
-          chatHttpClient.getConversation(scope, abortController.signal),
-          chatHttpClient.getConversationMessages(scope, {
-            direction: "older",
-            pageSize: 50,
-            signal: abortController.signal,
-          }),
-        ]);
-        abortController.signal.throwIfAborted();
-        // 本地为该对话选择过的目标优先，其次是服务端记录的最近目标。
-        // The target chosen locally for this conversation wins over the server's latest target.
-        const restoredTargetValue =
-          conversationComposerStorage.get(
-            { serverId: executionServerId, projectId },
-            details.conversationId,
-          ).targetValue ?? getResumeTargetValue(details.resumeState);
-
-        // 按执行上下文保存的旧 durable attachment 必须在 Chat 恢复配置之前移到对话键下。
-        // An old durable attachment saved by execution context must move to the conversation key before Chat restores its configuration.
-        migrateDurableExecutionAttachment({
-          projectId,
-          conversationId: details.conversationId,
-          contextId: details.contextId,
-        });
-        hydratedConversationKeyRef.current = getConversationHydrationKey(
-          projectId,
-          details.conversationId,
-        );
-        setSelectedProjectId(projectId);
-        setConversationId(details.conversationId);
-        replaceChatSession({
-          conversationId: details.conversationId,
-          messages: messagePage.items,
-          historyTurns: messagePage.turns,
-          olderMessagesCursor: messagePage.nextCursor,
-          hasOlderMessages: messagePage.hasMore,
-          agentMode:
-            details.resumeState?.agentMode === "plan" ||
-            details.resumeState?.agentMode === "execute"
-              ? details.resumeState.agentMode
-              : null,
-        });
-        setSelectedTargetValue(restoredTargetValue);
-        syncRoute(projectId, details.conversationId);
-        return details;
-      } finally {
-        signal?.removeEventListener("abort", abortFromCaller);
-        if (conversationLoadAbortRef.current === abortController) {
-          conversationLoadAbortRef.current = null;
-          setIsLoadingConversation(false);
-        }
-      }
-    },
-    [executionServerId, replaceChatSession, syncRoute],
-  );
-
-  React.useEffect(() => {
-    if (!selectedProjectId) {
-      setEnvVars((current) => (current.length === 0 ? current : []));
-      setResultOnly(false);
-      return;
-    }
-
-    const draft = getProjectSettingsDraft(selectedProjectId);
-    setEnvVars((current) => (areEnvVarsEqual(current, draft.envVars) ? current : draft.envVars));
-    setResultOnly(draft.resultOnly);
-  }, [getProjectSettingsDraft, selectedProjectId]);
-
-  React.useEffect(() => {
-    if (currentFileSelection) {
-      void loadFileContent(currentFileSelection.path, currentFileSelection.diffScope, showDiff);
-    }
-  }, [currentFileSelection, loadFileContent, showDiff]);
-
-  React.useEffect(() => {
-    clearFilePreview(false);
-    const pending = fileInDirectory(pendingFileRef.current, selectedProjectId, resolvedDirectoryId);
-    pendingFileRef.current = null;
-    if (pending) selectFileForPreview(pending.path);
-  }, [clearFilePreview, resolvedDirectoryId, selectFileForPreview, selectedProjectId]);
-  React.useEffect(() => {
-    setComments([]);
-  }, [selectedProjectId]);
-
-  React.useEffect(() => {
-    if (projects.length === 0) {
-      setSelectedProjectId(null);
-      return;
-    }
-
-    setSelectedProjectId((current) => {
-      if (current && projects.some((project) => project.id === current)) {
-        return current;
-      }
-
-      if (queryProjectId && projects.some((project) => project.id === queryProjectId)) {
-        return queryProjectId;
-      }
-
-      const defaultProject = projects.find(
-        (project) => project.id === DEFAULT_PROJECT_VALUE || project.name === DEFAULT_PROJECT_VALUE,
-      );
-      if (defaultProject) {
-        return defaultProject.id;
-      }
-
-      return projects[0].id;
-    });
-  }, [projects, queryProjectId]);
-
-  // 当前目标为空或不可用时，依次采用对话的本地选择、项目最近的选择、默认 Agent、第一个目标。
-  // 目标列表加载前保留当前值，避免清掉对话恢复出的目标。
-  // When the current target is empty or unavailable, use the conversation's local choice, the project's
-  // latest choice, the default Agent, then the first target. Keep the value until the target list loads.
-  React.useEffect(() => {
-    if (targetOptions.length === 0) {
-      return;
-    }
-
-    const isAvailable = (value: string | null | undefined): value is string =>
-      Boolean(value) && targetOptions.some((option) => getTargetValue(option) === value);
-    if (isAvailable(selectedTargetValue)) {
-      return;
-    }
-
-    if (!selectedProjectId) {
-      setSelectedTargetValue(null);
-      return;
-    }
-
-    const storedTargetValue = [
-      conversationComposerStorage.get(
-        { serverId: executionServerId, projectId: selectedProjectId },
-        conversationId,
-      ).targetValue,
-      chatSettingsStorage.get(selectedProjectId).targetValue,
-    ].find(isAvailable);
-    if (storedTargetValue) {
-      setSelectedTargetValue(storedTargetValue);
-      return;
-    }
-
-    const defaultAgent = targetOptions.find(
-      (option) => option.type === "agent" && option.label === DEFAULT_AGENT_LABEL,
-    );
-    setSelectedTargetValue(getTargetValue(defaultAgent ?? targetOptions[0]));
-  }, [
-    conversationId,
-    executionServerId,
-    selectedProjectId,
-    selectedTargetValue,
-    targetOptions,
-    targetResolution,
-  ]);
-
-  React.useEffect(() => {
-    const routeAction = getChatRouteSessionAction({
-      queryProjectId,
-      queryConversationId,
-      hydratedRouteKey: hydratedConversationKeyRef.current,
-    });
-
-    if (routeAction.type === "clearLocal") {
-      clearLocalSessionState();
-      return;
-    }
-
-    if (routeAction.type === "selectProject") {
-      clearLocalSessionState();
-      setSelectedProjectId(routeAction.projectId);
-      syncRoute(routeAction.projectId, null);
-      return;
-    }
-
-    if (routeAction.type === "ignore") {
-      return;
-    }
-
-    const hydrationKey = getRouteHydrationKey(routeAction);
-
-    let cancelled = false;
-    const abortController = new AbortController();
-
-    void (async () => {
-      try {
-        if (routeAction.type === "hydrateConversation") {
-          const details = await loadConversationHistory(
-            routeAction.projectId,
-            routeAction.conversationId,
-            abortController.signal,
-          );
-          if (cancelled) {
-            return;
-          }
-
-          hydratedConversationKeyRef.current = routeAction.hydrateKey;
-          syncRoute(routeAction.projectId, details.conversationId);
-          return;
-        }
-      } catch (error) {
-        if (!cancelled && !isAbortError(error)) {
-          if (hydrationKey && hydratedConversationKeyRef.current === hydrationKey) {
-            hydratedConversationKeyRef.current = null;
-          }
-          toast.error(`Failed to load chat history: ${getApiErrorMessage(error)}`);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      abortController.abort();
-    };
-  }, [
-    clearLocalSessionState,
-    loadConversationHistory,
-    queryConversationId,
-    queryProjectId,
-    syncRoute,
-  ]);
-
-  const handleProjectChange = React.useCallback(
-    (nextProjectId: string) => {
-      if (nextProjectId === selectedProjectId) {
-        return;
-      }
-
-      conversationLoadAbortRef.current?.abort();
-      conversationLoadAbortRef.current = null;
-      hydratedConversationKeyRef.current = null;
-      setSelectedProjectId(nextProjectId);
-      setSelectedTargetValue(null);
-      setConversationId(null);
-      replaceChatSession({
-        conversationId: null,
-        messages: [],
-        historyTurns: [],
-        olderMessagesCursor: null,
-        hasOlderMessages: false,
-        agentMode: null,
-      });
-      syncRoute(nextProjectId, null);
-    },
-    [replaceChatSession, selectedProjectId, syncRoute],
-  );
-
-  const selectProject = React.useCallback(
-    (nextProjectId: string) => {
-      if (nextProjectId === selectedProjectId) return;
-      afterFileChangeConfirmed(() => handleProjectChange(nextProjectId));
-    },
-    [afterFileChangeConfirmed, handleProjectChange, selectedProjectId],
-  );
-
-  const handleTargetChange = React.useCallback(
-    (nextTargetValue: string) => {
-      if (nextTargetValue === selectedTargetValue) {
-        return;
-      }
-
-      setSelectedTargetValue(nextTargetValue);
-      if (selectedProjectId) {
-        chatSettingsStorage.set(selectedProjectId, { targetValue: nextTargetValue });
-        conversationComposerStorage.set(
-          { serverId: executionServerId, projectId: selectedProjectId },
-          conversationId,
-          { targetValue: nextTargetValue },
-        );
-      }
-    },
-    [conversationId, executionServerId, selectedProjectId, selectedTargetValue],
-  );
-
-  const handleAgentSelect = React.useCallback(
-    ({ agentType, agentId }: AgentSelection) => {
-      handleTargetChange(
-        getTargetValue({
-          id: agentId,
-          type: agentType === 0 ? "agent" : "agentflow",
-        }),
-      );
-    },
-    [handleTargetChange],
-  );
-
-  const handleConversationAccepted = React.useCallback(
-    (acceptedConversationId: string) => {
-      if (!selectedProjectId) {
-        return;
-      }
-
-      // 新对话被受理后才有服务端记录：新对话记录中的目标与之后输入的草稿都交给这个 ID。
-      // A new conversation has a server record only once accepted: the target and any draft typed since then move to this ID.
-      if (conversationId === null) {
-        const scope = { serverId: executionServerId, projectId: selectedProjectId };
-        const values = conversationComposerStorage.get(scope, null);
-        conversationComposerStorage.remove(scope, null);
-        conversationComposerStorage.set(scope, acceptedConversationId, values);
-        void conversationImageDrafts
-          .accept(scope, acceptedConversationId)
-          .catch(notifyImageDraftError);
-      }
-      hydratedConversationKeyRef.current = getConversationHydrationKey(
-        selectedProjectId,
-        acceptedConversationId,
-      );
-      setConversationId(acceptedConversationId);
-      syncRoute(selectedProjectId, acceptedConversationId);
-    },
-    [conversationId, executionServerId, selectedProjectId, syncRoute],
-  );
-
-  const openConversation = React.useCallback(
-    async (conversation: ConversationSummary): Promise<boolean> => {
-      if (!selectedProjectId) {
-        toast.error("Please select a project");
-        return false;
-      }
-
-      try {
-        await loadConversationHistory(selectedProjectId, conversation.conversationId);
-        return true;
-      } catch (error) {
-        if (isAbortError(error)) {
-          return false;
-        }
-        toast.error(`Failed to load conversation: ${getApiErrorMessage(error)}`);
-        return false;
-      }
-    },
-    [loadConversationHistory, selectedProjectId],
-  );
-
-  const handleSaveChatSettings = React.useCallback(
-    (draft: ChatSettingsDraft) => {
-      if (!selectedProjectId) {
-        toast.error("Please select a project.");
-        return false;
-      }
-
-      const normalizedSettings: ChatProjectSettingsStorageValues = {
-        envVars: normalizeEnvVars(draft.envVars),
-        resultOnly: draft.resultOnly,
-      };
-
-      chatSettingsStorage.set(selectedProjectId, normalizedSettings);
-      const nextDraft = getProjectSettingsDraft(selectedProjectId);
-      setEnvVars(nextDraft.envVars);
-      setResultOnly(nextDraft.resultOnly);
-
-      toast.success("Chat settings saved");
-      return true;
-    },
-    [getProjectSettingsDraft, selectedProjectId],
-  );
-
-  const conversationStatuses = useConversationStatuses({
-    serverId: executionServerId,
-    projectId: selectedProjectId,
-    conversationId,
-  });
-  // 状态映射在范围内每次写入后更换实例，这里读取的 turnId 与它同步。
-  // The status map changes instance on every write in the scope, so this turnId stays in step with it.
-  const currentConversationTurnId =
-    selectedProjectId && conversationId
-      ? (executionSessionManager.conversationStatuses.get(
-          { serverId: executionServerId, projectId: selectedProjectId },
-          conversationId,
-        )?.turnId ?? null)
-      : null;
-
-  const handleConversationDeleted = React.useCallback(
-    (deletedConversationId: string) => {
-      if (!selectedProjectId) return;
-      const scope = { serverId: executionServerId, projectId: selectedProjectId };
-      executionSessionManager.conversationStatuses.remove(scope, deletedConversationId);
-      conversationComposerStorage.remove(scope, deletedConversationId);
-      void conversationImageDrafts
-        .remove(scope, deletedConversationId)
-        .catch(notifyImageDraftError);
-      // 删除对话时释放它的执行连接与队列。Deleting a conversation releases its execution connection and queue.
-      void executionSessionManager.discard({ ...scope, conversationId: deletedConversationId });
-    },
-    [executionServerId, selectedProjectId],
-  );
-
-  const handleProjectConversationsCleared = React.useCallback(() => {
-    if (!selectedProjectId) return;
-    const scope = { serverId: executionServerId, projectId: selectedProjectId };
-    executionSessionManager.conversationStatuses.removeScope(scope);
-    conversationComposerStorage.removeConversations(scope);
-    void conversationImageDrafts.removeConversations(scope).catch(notifyImageDraftError);
-    void executionSessionManager.discardProject(scope);
-  }, [executionServerId, selectedProjectId]);
-
-  const isReconnecting = getExecutionReconnectProgress(executionReconnectState) !== null;
-
-  /** 立即执行当前 Server 的本次重连，并继续恢复对应的 execution 会话。 */
-  const handleReconnectRetry = React.useCallback(() => {
-    const retry = reconnectRetryRef.current;
-    if (!retry) return;
-    void retry().catch((error: unknown) => {
-      toast.error(error instanceof Error ? error.message : "Failed to retry connection");
-    });
-  }, []);
-
-  // Chat 给出当前对话（含草稿对话）的重连状态与重试入口。
-  // Chat reports the reconnect state and retry action of the current conversation, draft conversations included.
-  const handleReconnectStateChange = React.useCallback(
-    (state: ExecutionReconnectState | null, retry: () => Promise<void>) => {
-      reconnectRetryRef.current = retry;
-      setExecutionReconnectState(state);
-    },
-    [],
-  );
-
-  const refreshConversations = React.useCallback(
-    () => refreshConversationList(),
-    [refreshConversationList],
-  );
-
-  const dependencyErrorMessage =
-    projectsQuery.isError || agentsQuery.isError || agentflowsQuery.isError
-      ? getApiErrorMessage(projectsQuery.error ?? agentsQuery.error ?? agentflowsQuery.error)
-      : null;
-  const isChatLoadingConversation =
-    isLoadingConversation ||
-    Boolean(
-      queryConversationId &&
-      (queryProjectId !== selectedProjectId || queryConversationId !== conversationId),
-    );
-  const restoreExecution =
-    Number(chatSessionSeed.revision) > 0 &&
-    queryProjectId === selectedProjectId &&
-    queryConversationId === conversationId &&
-    chatSessionSeed.conversationId === conversationId;
-
-  const value = React.useMemo<ChatWorkspaceContextValue>(
-    () => ({
-      isReconnecting,
-      dependencyErrorMessage,
-      projects,
-      selectedProjectId,
-      selectedProject,
-      selectProject,
-      conversationId,
-      selectedTarget,
-      targetOptions,
-      refreshConversations,
-      composerRef,
-      projectDirectories,
-      selectedDirectory,
-      selectDirectory,
-      resolvedWorkspace,
-      conversationListRefreshSignal,
-      conversationStatuses,
-      currentConversationTurnId,
-      openConversation,
-      startNewConversation,
-      resetSession,
-      handleConversationDeleted,
-      handleProjectConversationsCleared,
-      getSettingsDraft: getActiveSettingsDraft,
-      saveSettings: handleSaveChatSettings,
-      onlyDiff,
-      setOnlyDiff,
-      diffFileView,
-      setDiffFileView,
-      recursiveMode,
-      selectFile: handleOnFileSelected,
-      openFile,
-      handleFileDeleted: handleOnFileDeleted,
-      handleFileReset: handleOnFileReseted,
-      handleFileGitScopeChanged: handleOnFileGitScopeChanged,
-      handleFileWritten,
-      fileTreeRefreshSignal,
-      selectedFile,
-      selectedDiffScope,
-      fileContent,
-      isLoadingContent,
-      contentError,
-      diffContentData,
-      comments,
-      setComments,
-      agents: agentsQuery.data,
-      selectAgent: handleAgentSelect,
-      chatSessionSeed,
-      isLoadingConversation: isChatLoadingConversation,
-      restoreExecution,
-      environmentVariables,
-      resultOnly,
-      searchDirectoryIds,
-      handleConversationAccepted,
-      handleConversationChange: refreshConversationList,
-      removePendingFileComments: handlePendingFileCommentsRemove,
-      handleReconnectStateChange,
-    }),
-    [
-      agentsQuery.data,
-      chatSessionSeed,
-      comments,
-      contentError,
-      conversationId,
-      conversationListRefreshSignal,
-      conversationStatuses,
-      currentConversationTurnId,
-      dependencyErrorMessage,
-      diffContentData,
-      diffFileView,
-      environmentVariables,
-      fileContent,
-      fileTreeRefreshSignal,
-      getActiveSettingsDraft,
-      handleAgentSelect,
-      handleConversationAccepted,
-      handleConversationDeleted,
-      handleFileWritten,
-      handleOnFileDeleted,
-      handleOnFileGitScopeChanged,
-      handleOnFileReseted,
-      handleOnFileSelected,
-      handlePendingFileCommentsRemove,
-      handleProjectConversationsCleared,
-      handleReconnectStateChange,
-      handleSaveChatSettings,
-      isChatLoadingConversation,
-      isLoadingContent,
-      isReconnecting,
-      onlyDiff,
-      openConversation,
-      openFile,
-      projectDirectories,
-      projects,
-      recursiveMode,
-      refreshConversationList,
-      refreshConversations,
-      resetSession,
-      resolvedWorkspace,
-      restoreExecution,
-      resultOnly,
-      searchDirectoryIds,
-      selectDirectory,
-      selectProject,
-      selectedDiffScope,
-      selectedDirectory,
-      selectedFile,
-      selectedProject,
-      selectedProjectId,
-      selectedTarget,
-      setOnlyDiff,
-      startNewConversation,
-      targetOptions,
-    ],
-  );
-
-  return (
-    <ChatWorkspaceContext value={value}>
-      {children}
-      {isReconnecting && executionReconnectState ? (
-        <ExecutionReconnectingDialog
-          state={executionReconnectState}
-          onRetry={handleReconnectRetry}
-        />
-      ) : null}
-    </ChatWorkspaceContext>
-  );
-}
-
-function fileInDirectory<T extends WorkspaceFileLocation>(
-  file: T | null,
-  projectId: string | null,
-  directoryId: string | null,
-): T | null {
-  return file && file.projectId === projectId && file.directoryId === directoryId ? file : null;
-}
-
 export type ChatConversationSidebarProps = {
-  /** 选中对话、新建对话、删除全部对话后调用。Called after selecting a conversation, starting a new one or deleting them all. */
-  onConversationOpened?: () => void;
+  keepDraftOnClear?: { draftId: string };
+  currentConversationId: string | null;
+  onConversationSelect(conversation: ConversationSummary, options: { pinned: boolean }): void;
+  onNewConversation(): void;
+  onAllConversationsDeleted(): void;
+  onConversationDeleted?(conversationId: string): void;
+  onConversationsLoaded?(items: readonly ConversationSummary[]): void;
   itemActions?: readonly ExtensionMenuItem<ConversationItemActionArgs>[];
 };
 
 /** 对话列表与对话设置。The conversation list with conversation settings. */
 export function ChatConversationSidebar({
-  onConversationOpened,
+  keepDraftOnClear,
+  currentConversationId: conversationId,
+  onConversationSelect,
+  onNewConversation,
+  onAllConversationsDeleted,
+  onConversationDeleted,
+  onConversationsLoaded,
   itemActions,
 }: ChatConversationSidebarProps) {
-  const workspace = useChatWorkspace();
+  const workspace = useChatProject();
   const executionServerId = useExecutionPlatform().serverId;
-  const { conversationId, conversationStatuses, selectedProjectId } = workspace;
+  const { conversationStatuses, selectedProjectId } = workspace;
 
   return (
     <ConversationList
@@ -1542,22 +330,25 @@ export function ChatConversationSidebar({
       currentConversationId={conversationId}
       refreshSignal={workspace.conversationListRefreshSignal}
       conversationStatuses={conversationStatuses}
-      currentConversationTurnId={workspace.currentConversationTurnId}
-      onConversationSelect={(nextConversation) => {
-        void workspace.openConversation(nextConversation).then((opened) => {
-          if (opened) onConversationOpened?.();
-        });
+      currentConversationTurnId={
+        selectedProjectId && conversationId
+          ? (executionSessionManager.conversationStatuses.get(
+              { serverId: executionServerId, projectId: selectedProjectId },
+              conversationId,
+            )?.turnId ?? null)
+          : null
+      }
+      onConversationSelect={onConversationSelect}
+      onNewConversation={onNewConversation}
+      onAllConversationsDeleted={onAllConversationsDeleted}
+      onConversationsLoaded={onConversationsLoaded}
+      onConversationDeleted={(id) => {
+        workspace.handleConversationDeleted(id);
+        onConversationDeleted?.(id);
       }}
-      onNewConversation={() => {
-        workspace.startNewConversation();
-        onConversationOpened?.();
-      }}
-      onAllConversationsDeleted={() => {
-        workspace.resetSession();
-        onConversationOpened?.();
-      }}
-      onConversationDeleted={workspace.handleConversationDeleted}
-      onProjectConversationsCleared={workspace.handleProjectConversationsCleared}
+      onProjectConversationsCleared={() =>
+        workspace.handleProjectConversationsCleared(keepDraftOnClear)
+      }
       headerActions={(currentConversation) => (
         <ChatSettingsDialog
           serverId={executionServerId}
@@ -1577,22 +368,23 @@ export function ChatConversationSidebar({
 }
 
 export type ChatFilesSidebarProps = {
-  /** 每次选中非空文件后调用，包括再次选中当前文件。Called whenever a file is selected, the current file included. */
-  onFileOpened?: () => void;
+  selectedFile?: { directoryId: string | null; path: string } | null;
+  onFileSelected(path: string, scope: GitDiffScope | undefined, options: { pinned: boolean }): void;
+  onFileDeleted?(path: string): void;
+  onFileGitScopeChanged?(path: string, scope: GitDiffScope): void;
   contextMenuItems?: readonly ExtensionMenuItem<ExplorerContextMenuArgs>[];
 };
 
 /** 当前项目的文件浏览器；未选择项目时显示提示。The project's file explorer, or a prompt without a project. */
-export function ChatFilesSidebar({ onFileOpened, contextMenuItems }: ChatFilesSidebarProps) {
-  const workspace = useChatWorkspace();
-  const { selectFile, selectedDirectory, selectedProjectId, resolvedWorkspace } = workspace;
-  const handleFileSelected = React.useCallback(
-    (filePath: string | null, scope?: GitDiffScope) => {
-      selectFile(filePath, scope);
-      if (filePath) onFileOpened?.();
-    },
-    [onFileOpened, selectFile],
-  );
+export function ChatFilesSidebar({
+  selectedFile,
+  onFileSelected,
+  onFileDeleted,
+  onFileGitScopeChanged,
+  contextMenuItems,
+}: ChatFilesSidebarProps) {
+  const workspace = useChatProject();
+  const { selectedDirectory, selectedProjectId, resolvedWorkspace } = workspace;
 
   if (selectedProjectId === null) {
     return <ProjectRequiredState />;
@@ -1609,10 +401,19 @@ export function ChatFilesSidebar({ onFileOpened, contextMenuItems }: ChatFilesSi
       onlyDiff={workspace.onlyDiff}
       recursiveMode={workspace.recursiveMode}
       onOnlyDiffChange={workspace.setOnlyDiff}
-      onFileDeleted={workspace.handleFileDeleted}
-      onFileSelected={handleFileSelected}
-      onFileReseted={workspace.handleFileReset}
-      onFileGitScopeChanged={workspace.handleFileGitScopeChanged}
+      selectedFilePath={
+        selectedFile && selectedFile.directoryId === (selectedDirectory?.id ?? null)
+          ? selectedFile.path
+          : selectedFile === undefined
+            ? undefined
+            : null
+      }
+      onFileDeleted={(path) => onFileDeleted?.(path)}
+      onFileSelected={onFileSelected}
+      onFileReseted={(path) => {
+        if (path) workspace.notifyFileReset(path);
+      }}
+      onFileGitScopeChanged={(path, scope) => onFileGitScopeChanged?.(path, scope)}
       contextMenuItems={contextMenuItems}
       refreshSignal={workspace.fileTreeRefreshSignal}
     />
@@ -1635,9 +436,13 @@ export function ChatConversationPane({
   composerActions,
   messageActions,
   context,
-}: ChatConversationPaneProps) {
-  const workspace = useChatWorkspace();
-  const { selectedProjectId, selectedTarget } = workspace;
+  loadingSelection = false,
+}: ChatConversationPaneProps & { loadingSelection?: boolean }) {
+  const workspace = useChatProject();
+  const { selectedProjectId } = workspace;
+  const session = useChatSession();
+  const { selectedTarget } = session;
+  const targetSelectorId = React.useId();
 
   return (
     <Chat
@@ -1647,7 +452,7 @@ export function ChatConversationPane({
       inputTopLeft={
         <div className="w-44">
           <AgentSelector
-            id="chat-target-select"
+            id={`chat-target-select-${targetSelectorId}`}
             size={compact ? "sm" : "default"}
             height={34}
             projectId={selectedProjectId}
@@ -1659,28 +464,33 @@ export function ChatConversationPane({
                   }
                 : null
             }
-            onSelect={workspace.selectAgent}
+            onSelect={session.selectAgent}
           />
         </div>
       }
       persistInputDraft
-      conversationId={workspace.conversationId}
-      sessionSeed={workspace.chatSessionSeed}
-      isLoadingConversation={workspace.isLoadingConversation}
+      conversationId={session.conversationId}
+      draftId={session.draftId}
+      newConversationId={session.newConversationId}
+      onSubmitted={session.onSubmitted}
+      sessionSeed={session.chatSessionSeed}
+      isLoadingConversation={session.isLoadingConversation}
+      isOpeningConversation={loadingSelection}
+      keepLiveDuringRecovery={session.keepLive}
       showUserInputNavigation={showUserInputNavigation}
-      restoreExecution={workspace.restoreExecution}
+      restoreExecution={session.restoreExecution}
       environmentVariables={workspace.environmentVariables}
       resultOnly={workspace.resultOnly}
-      onConversationAccepted={workspace.handleConversationAccepted}
-      onConversationChange={workspace.handleConversationChange}
+      onConversationAccepted={session.handleConversationAccepted}
+      onConversationChange={session.handleConversationChange}
       directoryId={workspace.selectedDirectory?.id}
       searchDirectoryIds={workspace.searchDirectoryIds}
       directories={workspace.projectDirectories}
       pendingFileComments={workspace.comments}
       onPendingFileCommentsRemove={workspace.removePendingFileComments}
       context={context}
-      onReconnectStateChange={workspace.handleReconnectStateChange}
-      composerRef={workspace.composerRef}
+      onReconnectStateChange={session.handleReconnectStateChange}
+      composerRef={session.composerRef}
       composerActions={composerActions}
       messageActions={messageActions}
     />
@@ -1723,8 +533,10 @@ export function ChatFilePane({
   onSetDefaultFileViewer,
   editableSource,
 }: ChatFilePaneProps = {}) {
-  const workspace = useChatWorkspace();
-  const { projectDirectories, selectedDirectory, selectedProjectId } = workspace;
+  const workspace = useChatProject();
+  const { projectDirectories, selectedProjectId } = workspace;
+  const document = useFileDocument();
+  const selectedDirectory = document.directory;
 
   if (selectedProjectId === null) {
     return <ProjectRequiredState />;
@@ -1735,22 +547,22 @@ export function ChatFilePane({
       projectId={selectedProjectId}
       directoryId={selectedDirectory?.id}
       directoryName={projectDirectories.length > 1 ? selectedDirectory?.path : undefined}
-      selectedFile={workspace.selectedFile}
-      isLoadingContent={workspace.isLoadingContent}
-      contentError={workspace.contentError}
+      selectedFile={document.path}
+      isLoadingContent={document.isLoadingContent}
+      contentError={document.contentError}
       onlyDiff={workspace.onlyDiff}
-      diffFileView={workspace.diffFileView}
-      onDiffFileViewChange={workspace.setDiffFileView}
-      diffContentData={workspace.diffContentData}
+      diffFileView={document.diffFileView}
+      onDiffFileViewChange={document.setDiffFileView}
+      diffContentData={document.diffContentData}
       comments={workspace.comments}
       setComments={workspace.setComments}
-      fileContent={workspace.fileContent}
-      diffScope={workspace.selectedDiffScope}
+      fileContent={document.fileContent}
+      diffScope={document.diffScope ?? undefined}
       fileViewers={fileViewers}
       renderFileViewer={renderFileViewer}
       onReloadFileViewer={onReloadFileViewer}
       onReloadFileViewerDocument={onReloadFileViewerDocument}
-      onReloadSource={() => workspace.handleFileReset(workspace.selectedFile)}
+      onReloadSource={document.reload}
       editableSource={editableSource}
       renderFileViewerInfo={renderFileViewerInfo}
       renderSourceAccessory={renderSourceAccessory}
@@ -1761,16 +573,162 @@ export function ChatFilePane({
   );
 }
 
-type ChatWorkspaceLayoutProps = Omit<ChatWorkspaceProps, "routeBasePath">;
+function WebConversationPane({
+  onLoaded,
+  ...props
+}: ChatConversationPaneProps & { onLoaded(id: string): void; loadingSelection: boolean }) {
+  const { chatSessionSeed, conversationId, loadError } = useChatSession();
+  React.useEffect(() => {
+    if (conversationId && chatSessionSeed.conversationId === conversationId)
+      onLoaded(conversationId);
+  }, [conversationId, chatSessionSeed, onLoaded]);
+  React.useEffect(() => {
+    if (loadError && conversationId) {
+      toast.error(`Failed to load chat history: ${loadError}`);
+    }
+  }, [conversationId, loadError]);
+  return <ChatConversationPane {...props} />;
+}
 
-/** Web 与 Desktop 现有的 Chat/Files 标签布局。The existing Chat/Files tab layout of Web and Desktop. */
+type WebSession = {
+  conversationId: string | null;
+  instance: number;
+  initialHistory?: Awaited<ReturnType<typeof readSessionHistory>>;
+};
+
+function useSidebarNavigation(
+  projectId: string | null,
+  instance: number,
+  setSession: React.Dispatch<React.SetStateAction<WebSession>>,
+) {
+  const { serverId } = useExecutionPlatform();
+  const request = React.useRef<AbortController | null>(null);
+  const [pending, setPending] = React.useState(false);
+  const cancel = React.useCallback(() => {
+    request.current?.abort();
+    request.current = null;
+    setPending(false);
+  }, []);
+  React.useEffect(() => {
+    setPending(false);
+    return () => request.current?.abort();
+  }, [serverId, projectId, instance]);
+  async function open(conversation: ConversationSummary, options?: { pinned: boolean }) {
+    if (!projectId || options?.pinned) return;
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    setPending(true);
+    const { conversationId } = conversation;
+    try {
+      const initialHistory = await readSessionHistory(
+        { serverId, projectId, conversationId },
+        controller.signal,
+      );
+      if (!controller.signal.aborted)
+        setSession((current) => ({
+          conversationId,
+          instance: current.instance + 1,
+          initialHistory,
+        }));
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.error("Failed to open conversation.", error);
+      toast.error(`Failed to load conversation: ${getApiErrorMessage(error)}`);
+    } finally {
+      if (!controller.signal.aborted) {
+        request.current = null;
+        setPending(false);
+      }
+    }
+  }
+  return { pending, open, cancel };
+}
+
+/** Web 的 Chat/Files 标签布局。The Chat/Files layout on Web. */
 function ChatWorkspaceLayout({
+  routeBasePath,
   showProjectSelect,
   compactToolbar = false,
   showUserInputNavigation = false,
-}: ChatWorkspaceLayoutProps) {
+}: ChatWorkspaceProps) {
+  const project = useChatProject();
   const { dependencyErrorMessage, isReconnecting, projects, selectedProjectId, selectProject } =
-    useChatWorkspace();
+    project;
+  const router = useRouter();
+  const search = useSearchParams();
+  const queryProjectId = search.get("projectId");
+  const queryConversationId = search.get("conversationId");
+  const routeKey = getConversationHydrationKey(queryProjectId, queryConversationId);
+  const initialId = queryProjectId === selectedProjectId ? queryConversationId : null;
+  const [session, setSession] = React.useState<WebSession>({
+    conversationId: initialId,
+    instance: 0,
+  });
+  const sidebarNavigation = useSidebarNavigation(selectedProjectId, session.instance, setSession);
+  const { conversationId } = session;
+  const [previousRoute, setPreviousRoute] = React.useState({
+    projectId: selectedProjectId,
+    routeKey,
+  });
+  if (previousRoute.projectId !== selectedProjectId || previousRoute.routeKey !== routeKey) {
+    setPreviousRoute({ projectId: selectedProjectId, routeKey });
+    const action = getChatRouteSessionAction({
+      queryProjectId,
+      queryConversationId,
+      hydratedRouteKey: getConversationHydrationKey(selectedProjectId, conversationId),
+    });
+    if (
+      previousRoute.projectId !== selectedProjectId ||
+      (action.type !== "ignore" && initialId !== conversationId)
+    ) {
+      setSession({ conversationId: initialId, instance: session.instance + 1 });
+    }
+  }
+  const syncRoute = React.useCallback(
+    (id: string | null) => {
+      const href = buildChatHref(routeBasePath, {
+        projectId: selectedProjectId,
+        conversationId: id,
+      });
+      if (window.location.pathname + window.location.search + window.location.hash !== href)
+        router.replace(href, { scroll: false });
+    },
+    [routeBasePath, router, selectedProjectId],
+  );
+  const accept = React.useCallback(
+    (id: string) => {
+      setSession((current) => ({ ...current, conversationId: id }));
+      syncRoute(id);
+    },
+    [syncRoute],
+  );
+  const directoryId = project.selectedDirectory?.id ?? null;
+  const [file, setFile] = React.useState<{
+    path: string;
+    diffScope: GitDiffScope | null;
+    directoryId: string | null;
+    diffFileView: boolean;
+  } | null>(null);
+  const [fileLocation, setFileLocation] = React.useState({
+    projectId: selectedProjectId,
+    directoryId,
+    onlyDiff: project.onlyDiff,
+  });
+  if (
+    fileLocation.projectId !== selectedProjectId ||
+    fileLocation.directoryId !== directoryId ||
+    fileLocation.onlyDiff !== project.onlyDiff
+  ) {
+    setFileLocation({ projectId: selectedProjectId, directoryId, onlyDiff: project.onlyDiff });
+    setFile(
+      fileLocation.projectId === selectedProjectId &&
+        fileLocation.directoryId === directoryId &&
+        file
+        ? { ...file, diffFileView: false }
+        : null,
+    );
+  }
   const [currentTab, setCurrentTab] = React.useState("chat");
   const [isNarrowViewport, setIsNarrowViewport] = React.useState(false);
   const isMobile = isNarrowViewport;
@@ -1791,15 +749,60 @@ function ChatWorkspaceLayout({
     return () => mediaQuery.removeEventListener("change", handleMediaChange);
   }, []);
 
-  const handleConversationOpened = React.useCallback(() => {
-    setIsDrawerOpen(false);
-  }, []);
-
-  const handleFileOpened = React.useCallback(() => {
-    if (isMobile) {
+  const handleConversationOpened = React.useCallback(
+    (id: string) => {
+      syncRoute(id);
       setIsDrawerOpen(false);
-    }
-  }, [isMobile]);
+    },
+    [syncRoute],
+  );
+
+  function newConversation() {
+    sidebarNavigation.cancel();
+    setSession((current) => ({ conversationId: null, instance: current.instance + 1 }));
+    syncRoute(null);
+    setIsDrawerOpen(false);
+  }
+  const conversationSidebar = (
+    <ChatConversationSidebar
+      keepDraftOnClear={{ draftId: "web" }}
+      currentConversationId={conversationId}
+      onConversationSelect={(next, options) => {
+        void sidebarNavigation.open(next, options);
+      }}
+      onNewConversation={newConversation}
+      onConversationDeleted={(id) => {
+        if (id === conversationId) newConversation();
+      }}
+      onAllConversationsDeleted={newConversation}
+    />
+  );
+  const filesSidebar = (
+    <ChatFilesSidebar
+      onFileSelected={(path, scope) => {
+        const diffScope = scope ?? null;
+        setFile((current) =>
+          current?.path === path && current.diffScope === diffScope
+            ? current
+            : { path, directoryId, diffScope, diffFileView: false },
+        );
+        if (isMobile) setIsDrawerOpen(false);
+      }}
+      onFileDeleted={(path) => {
+        if (file?.path === path) {
+          setFile(null);
+          project.setComments([]);
+        }
+      }}
+      onFileGitScopeChanged={(path, scope) => {
+        setFile((current) =>
+          current && (current.path === path || current.path.startsWith(path + "/"))
+            ? { ...current, diffScope: scope }
+            : current,
+        );
+      }}
+    />
+  );
 
   const openDrawer = React.useCallback((type: "chat" | "files") => {
     setDrawerContent(type);
@@ -1950,12 +953,8 @@ function ChatWorkspaceLayout({
 
                 {activeSidebarVisible ? (
                   <div className="min-h-0 flex-1 overflow-hidden">
-                    {isChatTab ? (
-                      <ChatConversationSidebar onConversationOpened={handleConversationOpened} />
-                    ) : null}
-                    {isFilesTab && hasProjectFileSystem ? (
-                      <ChatFilesSidebar onFileOpened={handleFileOpened} />
-                    ) : null}
+                    {isChatTab ? conversationSidebar : null}
+                    {isFilesTab && hasProjectFileSystem ? filesSidebar : null}
                   </div>
                 ) : null}
               </div>
@@ -1973,17 +972,55 @@ function ChatWorkspaceLayout({
               >
                 <div className="relative flex flex-col min-h-105 flex-1 overflow-hidden">
                   <div className="relative flex min-h-0 flex-1 flex-col">
-                    <ChatConversationPane
-                      compact={compactToolbar}
-                      showUserInputNavigation={showUserInputNavigation}
-                    />
+                    <ChatSessionProvider
+                      key={session.instance}
+                      conversationId={conversationId}
+                      initialHistory={session.initialHistory}
+                      draftId="web"
+                      newConversationId={null}
+                      draftSubmitted={false}
+                      visible
+                      onConversationAccepted={accept}
+                    >
+                      <WebConversationPane
+                        onLoaded={handleConversationOpened}
+                        loadingSelection={sidebarNavigation.pending}
+                        compact={compactToolbar}
+                        showUserInputNavigation={showUserInputNavigation}
+                      />
+                    </ChatSessionProvider>
                   </div>
                 </div>
               </TabsContent>
 
               <TabsContent value="files" className="flex min-h-0 flex-1">
                 <div className="flex justify-center flex-1 overflow-hidden px-2">
-                  <ChatFilePane />
+                  {file ? (
+                    <FileDocumentProvider
+                      path={file.path}
+                      directoryId={file.directoryId}
+                      diffScope={file.diffScope}
+                      diffFileView={file.diffFileView}
+                      onDiffFileViewChange={(diffFileView) => setFile({ ...file, diffFileView })}
+                      readSourceContent
+                    >
+                      <ChatFilePane />
+                    </FileDocumentProvider>
+                  ) : selectedProjectId ? (
+                    <FileContent
+                      projectId={selectedProjectId}
+                      selectedFile={null}
+                      fileContent=""
+                      isLoadingContent={false}
+                      contentError={null}
+                      diffContentData={null}
+                      onlyDiff={project.onlyDiff}
+                      comments={project.comments}
+                      setComments={project.setComments}
+                    />
+                  ) : (
+                    <ProjectRequiredState />
+                  )}
                 </div>
               </TabsContent>
             </div>
@@ -1999,11 +1036,7 @@ function ChatWorkspaceLayout({
             </DrawerTitle>
           </DrawerHeader>
           <div className="h-full min-h-0 overflow-hidden px-4 pb-6">
-            {drawerContent === "files" ? (
-              <ChatFilesSidebar onFileOpened={handleFileOpened} />
-            ) : (
-              <ChatConversationSidebar onConversationOpened={handleConversationOpened} />
-            )}
+            {drawerContent === "files" ? filesSidebar : conversationSidebar}
           </div>
         </DrawerContent>
       </Drawer>
@@ -2019,13 +1052,14 @@ export function ChatWorkspace({
 }: ChatWorkspaceProps) {
   return (
     <div className="relative flex h-full w-full min-w-0 flex-col gap-3">
-      <ChatWorkspaceProvider routeBasePath={routeBasePath}>
+      <ChatProjectProvider routeBasePath={routeBasePath}>
         <ChatWorkspaceLayout
+          routeBasePath={routeBasePath}
           showProjectSelect={showProjectSelect}
           compactToolbar={compactToolbar}
           showUserInputNavigation={showUserInputNavigation}
         />
-      </ChatWorkspaceProvider>
+      </ChatProjectProvider>
     </div>
   );
 }

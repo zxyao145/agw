@@ -7,6 +7,8 @@ import { extensionRegistration, extensionViews } from "./extension-contributions
 import { BUILT_IN_VIEWS } from "./workspace-ids";
 import { WorkspaceLayoutStore } from "./workspace-layout-store";
 import { type WorkspaceView, WorkspaceRegistry } from "./workspace-registry";
+import { activeTabOf } from "./workspace-tabs-store";
+import { createTestTabs } from "./workspace-tabs-store.test-helper";
 
 function builtIn(id: string, location: "sidebar" | "main"): WorkspaceView {
   return {
@@ -405,13 +407,15 @@ test("duplicate view ids and repeated registrations throw", () => {
   );
 });
 
-test("unregistering removes entries and views at once and the layout falls back to the defaults", () => {
+test("unregistering removes entries and views, restores the sidebar, and keeps the tab", async (t) => {
   const registry = createRegistry();
-  const layout = new WorkspaceLayoutStore(registry);
+  const tabs = await createTestTabs(t);
+  const layout = new WorkspaceLayoutStore(registry, tabs);
   registry.registerExtension("sample", extensionRegistration(sample));
   layout.openMainView("sample:app");
   layout.showSidebarView("sample:list");
-  assert.equal(layout.getSnapshot().activeMainViewId, "sample:app");
+  const openTab = activeTabOf(tabs.getSnapshot().group);
+  assert.ok(openTab?.kind === "extension" && openTab.viewId === "sample:app");
 
   registry.unregisterExtension("sample");
 
@@ -422,13 +426,14 @@ test("unregistering removes entries and views at once and the layout falls back 
     ["agw.ribbon.files"],
   );
   assert.equal(snapshot.composerActions.length, 0);
-  assert.equal(layout.getSnapshot().activeMainViewId, BUILT_IN_VIEWS.chat);
+  assert.equal(activeTabOf(tabs.getSnapshot().group), openTab);
   assert.equal(layout.getSnapshot().activeSidebarViewId, BUILT_IN_VIEWS.conversations);
 });
 
-test("a failed extension loses its entries but keeps its views marked as failed until unregistered", () => {
+test("a failed extension loses its entries but keeps its views marked as failed until unregistered", async (t) => {
   const registry = createRegistry();
-  const layout = new WorkspaceLayoutStore(registry);
+  const tabs = await createTestTabs(t);
+  const layout = new WorkspaceLayoutStore(registry, tabs);
   registry.registerExtension("sample", extensionRegistration(sample));
   layout.openMainView("sample:app");
 
@@ -442,9 +447,10 @@ test("a failed extension loses its entries but keeps its views marked as failed 
   );
   assert.equal(snapshot.composerActions.length, 0);
   assert.deepEqual(snapshot.views.get("sample:app")?.failure, failure);
-  assert.equal(layout.getSnapshot().activeMainViewId, "sample:app");
+  const openTab = activeTabOf(tabs.getSnapshot().group);
+  assert.ok(openTab?.kind === "extension" && openTab.viewId === "sample:app");
 
   registry.unregisterExtension("sample");
   assert.equal(registry.getSnapshot().views.has("sample:app"), false);
-  assert.equal(layout.getSnapshot().activeMainViewId, BUILT_IN_VIEWS.chat);
+  assert.equal(activeTabOf(tabs.getSnapshot().group), openTab);
 });

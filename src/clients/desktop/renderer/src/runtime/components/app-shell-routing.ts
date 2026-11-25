@@ -11,7 +11,8 @@ export function getDesktopChatReturnHref(returnTo: string | null): string {
       return DEFAULT_DESKTOP_CHAT_HREF;
     }
 
-    return `${url.pathname}${url.search}`;
+    const projectId = url.searchParams.get("projectId");
+    return projectId ? `${url.pathname}?${new URLSearchParams({ projectId })}` : url.pathname;
   } catch {
     return DEFAULT_DESKTOP_CHAT_HREF;
   }

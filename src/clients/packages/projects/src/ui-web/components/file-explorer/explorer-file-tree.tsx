@@ -54,6 +54,7 @@ import {
   GitStatus,
   GitStatusBadgeLabel,
   type FileTreeItem,
+  type FileTreeSelectionHandler,
   type GitChangeGroup,
 } from "./types";
 
@@ -97,10 +98,41 @@ const formatFileSize = (bytes: number): string => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+function useFileTreeSelection(
+  selectedPath: string | null | undefined,
+  onFileSelect: FileTreeSelectionHandler,
+) {
+  const [revealPath, setRevealPath] = React.useState(selectedPath);
+  const [clickedPath, setClickedPath] = React.useState<string | null>(null);
+  const previousPathRef = React.useRef(selectedPath);
+
+  React.useEffect(() => {
+    if (previousPathRef.current !== selectedPath) {
+      previousPathRef.current = selectedPath;
+      setRevealPath(selectedPath === clickedPath ? null : selectedPath);
+    }
+    if (clickedPath !== null) setClickedPath(null);
+  }, [selectedPath, clickedPath]);
+
+  const handleFileSelect: FileTreeSelectionHandler = (path, scope, options) => {
+    if (selectedPath !== undefined) setClickedPath(path);
+    onFileSelect(path, scope, options);
+  };
+
+  return {
+    revealPath: revealPath === selectedPath ? revealPath : null,
+    onFileSelect: handleFileSelect,
+    onFileRevealed: () => setRevealPath(null),
+  };
+}
+
 function FileTreeNode({
   projectId,
   item,
   onFileSelect,
+  selectedPath,
+  revealPath,
+  onFileRevealed,
   level,
   diffMode,
   recursiveMode,
@@ -123,7 +155,9 @@ function FileTreeNode({
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [isUpdatingGitScope, setIsUpdatingGitScope] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const rowRef = React.useRef<HTMLDivElement>(null);
   const childrenLoadGenerationRef = React.useRef(0);
+  const childrenLoadedRef = React.useRef(false);
   // Update children when item.children change (for pre-built trees)
   React.useEffect(() => {
     if (item.children) {
@@ -151,6 +185,7 @@ function FileTreeNode({
         return;
       }
       setChildren(data.items || []);
+      childrenLoadedRef.current = true;
     } catch (err) {
       if (generation !== childrenLoadGenerationRef.current) {
         return;
@@ -164,6 +199,19 @@ function FileTreeNode({
     }
   };
 
+  const reveal = React.useEffectEvent(() => {
+    if (item.type === FileItemType.Directory && revealPath?.startsWith(`${item.path}/`)) {
+      setIsExpanded(true);
+      if (!item.children && !isLoading && !childrenLoadedRef.current) void loadChildren();
+    } else if (item.type === FileItemType.File && item.path === revealPath) {
+      rowRef.current?.scrollIntoView?.({ block: "nearest" });
+      onFileRevealed();
+    }
+  });
+  React.useEffect(() => {
+    if (revealPath) reveal();
+  }, [revealPath, item.path, item.type]);
+
   // 跳过第一次的值；已展开的目录重新读取子项，未展开的目录丢弃旧子项，下次展开时读取。
   // Skip the first value; an expanded directory rereads its children, a collapsed one drops them and reads on the next expand.
   const observedRefreshSignalRef = React.useRef(refreshSignal);
@@ -175,6 +223,7 @@ function FileTreeNode({
       void loadChildren(true);
     } else {
       childrenLoadGenerationRef.current += 1;
+      childrenLoadedRef.current = false;
       setIsLoading(false);
       setChildren([]);
     }
@@ -190,8 +239,8 @@ function FileTreeNode({
   };
 
   const handleClick = () => {
-    if (item.type === FileItemType.File && onFileSelect) {
-      onFileSelect(item.path, item.gitScope);
+    if (item.type === FileItemType.File) {
+      onFileSelect(item.path, item.gitScope, { pinned: false });
     } else {
       handleToggle();
     }
@@ -280,9 +329,18 @@ function FileTreeNode({
   const ChevronIcon = isExpanded ? ChevronDown : ChevronRight;
 
   const hasChildren = item.type === FileItemType.Directory && children.length > 0;
+  const isSelectable = selectedPath !== undefined;
+  const isFile = item.type === FileItemType.File;
+  const isSelected = isFile && item.path === selectedPath;
 
   return (
-    <div>
+    <div
+      ref={rowRef}
+      role={isSelectable ? "treeitem" : undefined}
+      aria-label={isSelectable ? item.name : undefined}
+      aria-selected={isSelectable && isFile ? isSelected : undefined}
+      aria-expanded={isSelectable && !isFile ? isExpanded : undefined}
+    >
       {/* Avoid stacking Radix pointer locks with the delete dialog when this node unmounts. */}
       <ContextMenu modal={false}>
         <ContextMenuTrigger asChild>
@@ -290,9 +348,13 @@ function FileTreeNode({
             className={cn(
               "flex items-center gap-1 py-1 px-2 hover:bg-accent hover:text-accent-foreground cursor-pointer rounded-sm group",
               "transition-colors",
+              isSelected && "bg-accent text-accent-foreground",
             )}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
             onClick={handleClick}
+            onDoubleClick={
+              isFile ? () => onFileSelect(item.path, item.gitScope, { pinned: true }) : undefined
+            }
           >
             {item.type === FileItemType.Directory && (
               <ChevronIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -361,6 +423,7 @@ function FileTreeNode({
                 title={item.gitScope === "staged" ? "Unstage changes" : "Stage changes"}
                 disabled={isUpdatingGitScope}
                 onClick={handleGitScopeChange}
+                onDoubleClick={(event) => event.stopPropagation()}
               >
                 {isUpdatingGitScope ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -442,13 +505,16 @@ function FileTreeNode({
       )}
 
       {hasChildren && isExpanded && (
-        <div>
+        <div role={isSelectable ? "group" : undefined}>
           {children.map((child) => (
             <FileTreeNode
               projectId={projectId}
               key={child.path}
               item={child}
               onFileSelect={onFileSelect}
+              selectedPath={selectedPath}
+              revealPath={revealPath}
+              onFileRevealed={onFileRevealed}
               level={level + 1}
               diffMode={diffMode}
               recursiveMode={recursiveMode}
@@ -470,6 +536,7 @@ export function ExplorerFileTree({
   projectId,
   rootItems,
   onFileSelect,
+  selectedPath,
   onlyDiff,
   recursiveMode,
   onFileDeleted,
@@ -481,7 +548,8 @@ export function ExplorerFileTree({
   rootItems: FileItem[];
   onlyDiff: boolean;
   recursiveMode: boolean;
-  onFileSelect: (filePath: string, scope?: GitDiffScope) => void;
+  onFileSelect: FileTreeSelectionHandler;
+  selectedPath?: string | null;
   onFileDeleted: (filePath: string) => void;
   onFileReset: (filePath: string) => void;
   /** 右键菜单的扩展菜单项，非空时列在内置项之后。Extension context menu items listed after the built-in ones when non-empty. */
@@ -489,14 +557,16 @@ export function ExplorerFileTree({
   /** 变化时已展开的目录重新读取子项。Expanded directories reread their children when it changes. */
   refreshSignal?: number;
 }) {
+  const selection = useFileTreeSelection(selectedPath, onFileSelect);
   return (
-    <div className="file-tree">
+    <div className="file-tree" role={selectedPath === undefined ? undefined : "tree"}>
       {rootItems.map((item: FileItem) => (
         <FileTreeNode
           projectId={projectId}
           key={item.path}
           item={item}
-          onFileSelect={onFileSelect}
+          {...selection}
+          selectedPath={selectedPath}
           level={0}
           diffMode={onlyDiff}
           recursiveMode={recursiveMode}
@@ -515,6 +585,9 @@ function GitChangeGroupSection({
   projectId,
   group,
   onFileSelect,
+  selectedPath,
+  revealPath,
+  onFileRevealed,
   onFileDeleted,
   onFileReset,
   onGitScopeChanged,
@@ -522,13 +595,19 @@ function GitChangeGroupSection({
 }: {
   projectId: string;
   group: GitChangeGroup;
-  onFileSelect: (filePath: string, scope?: GitDiffScope) => void;
+  onFileSelect: FileTreeSelectionHandler;
+  selectedPath?: string | null;
+  revealPath?: string | null;
+  onFileRevealed: () => void;
   onFileDeleted: (filePath: string) => void;
   onFileReset: (filePath: string) => void;
   onGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
   contextMenuItems?: readonly ExtensionMenuItem<ExplorerContextMenuArgs>[];
 }) {
   const [isExpanded, setIsExpanded] = React.useState(true);
+  React.useEffect(() => {
+    if (revealPath) setIsExpanded(true);
+  }, [revealPath]);
 
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
@@ -546,13 +625,20 @@ function GitChangeGroupSection({
           <span className="text-sm text-muted-foreground">{formatFileCount(group.fileCount)}</span>
         </button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="ml-4">
+      <CollapsibleContent
+        className="ml-4"
+        role={selectedPath === undefined ? undefined : "tree"}
+        aria-label={selectedPath === undefined ? undefined : group.label}
+      >
         {group.items.map((item) => (
           <FileTreeNode
             projectId={projectId}
             key={`${group.scope}:${item.path}`}
             item={item}
             onFileSelect={onFileSelect}
+            selectedPath={selectedPath}
+            revealPath={isExpanded ? revealPath : null}
+            onFileRevealed={onFileRevealed}
             level={0}
             diffMode={true}
             recursiveMode={true}
@@ -568,10 +654,18 @@ function GitChangeGroupSection({
   );
 }
 
+function containsFile(items: readonly FileTreeItem[], path: string): boolean {
+  return items.some((item) => {
+    if (item.type === FileItemType.File) return item.path === path;
+    return path.startsWith(`${item.path}/`) && containsFile(item.children ?? [], path);
+  });
+}
+
 export function ExplorerGitChangeTree({
   projectId,
   groups,
   onFileSelect,
+  selectedPath,
   onFileDeleted,
   onFileReset,
   onGitScopeChanged,
@@ -579,12 +673,28 @@ export function ExplorerGitChangeTree({
 }: {
   projectId: string;
   groups: GitChangeGroup[];
-  onFileSelect: (filePath: string, scope?: GitDiffScope) => void;
+  onFileSelect: FileTreeSelectionHandler;
+  selectedPath?: string | null;
   onFileDeleted: (filePath: string) => void;
   onFileReset: (filePath: string) => void;
   onGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
   contextMenuItems?: readonly ExtensionMenuItem<ExplorerContextMenuArgs>[];
 }) {
+  const [lastClicked, setLastClicked] = React.useState<{ path: string; scope: GitDiffScope }>();
+  const selection = useFileTreeSelection(selectedPath, (path, scope, options) => {
+    if (selectedPath !== undefined && scope) setLastClicked({ path, scope });
+    onFileSelect(path, scope, options);
+  });
+  const selectedGroup = React.useMemo(() => {
+    if (!selectedPath) return undefined;
+    const matching = groups.filter((group) => containsFile(group.items, selectedPath));
+    return (
+      matching.find(
+        (group) => lastClicked?.path === selectedPath && group.scope === lastClicked.scope,
+      ) ?? matching[0]
+    );
+  }, [groups, lastClicked, selectedPath]);
+
   return (
     <div className="file-tree space-y-1">
       {groups.map((group) => (
@@ -592,7 +702,10 @@ export function ExplorerGitChangeTree({
           projectId={projectId}
           key={group.scope}
           group={group}
-          onFileSelect={onFileSelect}
+          onFileSelect={selection.onFileSelect}
+          onFileRevealed={selection.onFileRevealed}
+          selectedPath={selectedPath === undefined || group === selectedGroup ? selectedPath : null}
+          revealPath={group === selectedGroup ? selection.revealPath : null}
           onFileDeleted={onFileDeleted}
           onFileReset={onFileReset}
           onGitScopeChanged={onGitScopeChanged}

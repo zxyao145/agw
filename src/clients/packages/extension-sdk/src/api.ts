@@ -319,6 +319,7 @@ export interface ExtensionApi {
   readonly server: ServerApi;
   readonly http: HttpApi;
   readonly chat: {
+    /** 向可见的对话输入框插入文字；没有输入框时返回 ERR_UNAVAILABLE。Inserts text into the visible composer; fails with ERR_UNAVAILABLE when none is visible. */
     composer: { insertText(text: string): Promise<void> };
     createFloatingChat(options?: FloatingChatOptions): Promise<FloatingChatHandle>;
     /**
@@ -504,19 +505,29 @@ export interface ContextApi {
 export interface WorkspaceState {
   sidebarVisible: boolean;
   activeSidebarViewId: string;
-  activeMainViewId: string;
+  activeMainViewId: string | null;
+}
+
+export interface OpenFileOptions {
+  /** 以预览标签打开，缺省为 false。Opens a preview tab; false by default. */
+  preview?: boolean;
+}
+
+export interface OpenMainViewOptions extends OpenFileOptions {
+  /** 区分同一视图的多个标签，长度为 1 至 256。Distinguishes tabs of one view, 1 to 256 characters. */
+  key?: string;
+  /** 标签标题，长度为 1 至 100。The tab title, 1 to 100 characters. */
+  title?: string;
 }
 
 export interface WorkspaceApi {
   showSidebarView(id: string): Promise<void>;
   toggleSidebarView(id: string): Promise<void>;
   setSidebarVisible(visible: boolean): Promise<void>;
-  openMainView(id: string, params?: unknown): Promise<void>;
-  /**
-   * 在 Files 中选中并在文件视图中打开当前 Project 的云端文件；有未保存修改时先由用户确认。
-   * Selects and opens a cloud file of the current Project in the Files view, after confirming unsaved changes.
-   */
-  openFile(uri: string): Promise<void>;
+  /** 打开或激活标签，JSON 参数最多 64 KiB。Opens or activates a tab with up to 64 KiB of serialized JSON parameters. */
+  openMainView(id: string, params?: unknown, options?: OpenMainViewOptions): Promise<void>;
+  /** 以标签打开当前 Project 的云端文件。Opens a cloud file in the current Project as a tab. */
+  openFile(uri: string, options?: OpenFileOptions): Promise<void>;
   /** 文件查看器报告未保存修改。A file viewer reports unsaved changes. */
   setUnsavedChanges(unsaved: boolean): Promise<void>;
   /**

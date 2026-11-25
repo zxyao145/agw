@@ -41,7 +41,6 @@ import {
 } from "@agw/components";
 import { Popover, PopoverContent, PopoverTrigger } from "@agw/components";
 import { buildChatHref, useExecutionActivity } from "@agw/chat";
-import type { ExecutionStatus } from "@agw/chat-runtime";
 import { DEFAULT_PROJECT_ID, normalizeProjectTabs } from "@agw/projects";
 import { cn } from "@agw/components";
 import { useDesktopTheme } from "../appearance/theme-provider";
@@ -49,11 +48,13 @@ import { useExtensionRuntime } from "../extensions/extension-host-provider";
 import { DEFAULT_WORKSPACE_LAYOUT } from "../extensions/workspace-layout-store";
 import { useDesktopRuntime } from "../runtime-provider";
 import { buildSettingsHref, getDesktopChatReturnHref } from "./app-shell-routing";
+import { STATUS_LABEL, StatusDot } from "./execution-status-dot";
 import {
   DesktopProjectPicker,
   type DesktopProjectCreateInput,
   type DesktopProjectOption,
 } from "./project-picker";
+import { useHorizontalTabWheel } from "./use-horizontal-tab-wheel";
 
 type ProjectSummary = DesktopProjectOption;
 
@@ -116,15 +117,6 @@ const SETTINGS_GROUPS: ReadonlyArray<{
   },
 ];
 
-const STATUS_LABEL: Record<ExecutionStatus, string> = {
-  idle: "Idle",
-  running: "Running",
-  "waiting-approval": "Waiting for approval",
-  "completed-unread": "Completed",
-  "failed-unread": "Failed",
-  detached: "Detached",
-};
-
 /** 在浅色与深色之间切换并保存 Mode；System 在 Appearance 页面选择。Toggles light and dark; System is on the Appearance page. */
 function ThemeButton() {
   const { kind, setMode } = useDesktopTheme();
@@ -147,12 +139,6 @@ function ThemeButton() {
   );
 }
 
-function StatusDot({ status }: { status: ExecutionStatus }) {
-  return (
-    <span className={cn("agw-status-dot", `is-${status}`)} aria-label={STATUS_LABEL[status]} />
-  );
-}
-
 function ChatShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -171,7 +157,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const activeProjectId = searchParams.get("projectId") ?? DEFAULT_PROJECT_ID;
   const chatReturnHref = buildChatHref("/desktop/chat", {
     projectId: activeProjectId,
-    conversationId: searchParams.get("conversationId"),
+    conversationId: null,
   });
   const settingsHref = buildSettingsHref("/settings/appearance/", chatReturnHref);
   const serverId = desktop.activeProfile?.id ?? "browser";
@@ -187,32 +173,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const storedTabs = desktop.runtimeState?.settings.projectTabsByServer[serverId] ?? [];
   const [browserTabs, setBrowserTabs] = React.useState<string[]>([DEFAULT_PROJECT_ID]);
 
-  React.useEffect(() => {
-    const projectTabs = projectTabsRef.current;
-    if (!projectTabs) return;
-
-    const scrollTabs = (event: WheelEvent) => {
-      if (
-        event.ctrlKey ||
-        Math.abs(event.deltaX) >= Math.abs(event.deltaY) ||
-        projectTabs.scrollWidth <= projectTabs.clientWidth
-      ) {
-        return;
-      }
-
-      const unit =
-        event.deltaMode === WheelEvent.DOM_DELTA_LINE
-          ? 16
-          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-            ? projectTabs.clientWidth
-            : 1;
-      event.preventDefault();
-      projectTabs.scrollLeft += event.deltaY * unit;
-    };
-
-    projectTabs.addEventListener("wheel", scrollTabs, { passive: false });
-    return () => projectTabs.removeEventListener("wheel", scrollTabs);
-  }, []);
+  useHorizontalTabWheel(projectTabsRef);
 
   React.useEffect(() => {
     if (desktop.isDesktop) return;
@@ -264,8 +225,8 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     [projects],
   );
 
-  // 离开当前文件（换 Project、换 Server、离开对话页面）前确认文件查看器的未保存修改。
-  // Leaving the current file (another Project or Server, or leaving the chat page) first confirms unsaved changes.
+  // 切换 Server 或进入 Settings 时确认全部未保存修改。
+  // Switching Server or entering Settings confirms all unsaved changes.
   const afterUnsavedConfirmed = (action: () => void) => {
     if (!extensionHost?.hasUnsavedChanges()) {
       action();
@@ -275,17 +236,13 @@ function ChatShell({ children }: { children: React.ReactNode }) {
       if (confirmed) action();
     });
   };
-  const confirmTitlebarLink = (event: React.MouseEvent) => {
+  const confirmSettingsLink = (event: React.MouseEvent<HTMLAnchorElement>) => {
     if (!extensionHost?.hasUnsavedChanges()) return;
-    const anchor = (event.target as Element).closest("a[href]");
-    if (!(anchor instanceof HTMLAnchorElement)) return;
     event.preventDefault();
-    event.stopPropagation();
-    const href = anchor.getAttribute("href")!;
-    afterUnsavedConfirmed(() => router.push(href));
+    afterUnsavedConfirmed(() => router.push(settingsHref));
   };
 
-  const closeTab = (projectId: string) => {
+  const closeTab = async (projectId: string) => {
     const status = activity.getProjectStatus(projectId);
     if (
       ["running", "waiting-approval", "detached"].includes(status) &&
@@ -293,6 +250,9 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     ) {
       return;
     }
+    const scope = { serverId, projectId };
+    if (extensionHost && !(await extensionHost.confirmDiscardScope(scope))) return;
+    extensionHost?.releaseScope(scope);
     const nextTabs = tabs.filter((id) => id !== projectId);
     persistTabs(nextTabs);
     if (activeProjectId === projectId) {
@@ -354,10 +314,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const hasBackgroundConversations = tabs.some((id) => activity.getProjectStatus(id) !== "idle");
   return (
     <div className="agw-app-shell">
-      <header
-        className={cn("agw-titlebar", `platform-${platform}`)}
-        onClickCapture={confirmTitlebarLink}
-      >
+      <header className={cn("agw-titlebar", `platform-${platform}`)}>
         <button
           type="button"
           className="agw-titlebar-button agw-titlebar-control"
@@ -391,11 +348,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                       type="button"
                       className="cursor-pointer"
                       aria-label={`Close ${projectId}`}
-                      onClick={() =>
-                        projectId === activeProjectId
-                          ? afterUnsavedConfirmed(() => closeTab(projectId))
-                          : closeTab(projectId)
-                      }
+                      onClick={() => void closeTab(projectId)}
                     >
                       <X />
                     </button>
@@ -409,7 +362,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
             activeProjectId={activeProjectId}
             isLoading={projectsQuery.isLoading}
             errorMessage={projectsQuery.isError ? getApiErrorMessage(projectsQuery.error) : null}
-            onSelect={(projectId) => afterUnsavedConfirmed(() => openProject(projectId))}
+            onSelect={openProject}
             onCreate={createProject}
           />
         </nav>
@@ -528,6 +481,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
         </span>
         <Link
           href={settingsHref}
+          onClick={confirmSettingsLink}
           className="agw-titlebar-button agw-titlebar-control"
           aria-label="Settings"
         >

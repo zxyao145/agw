@@ -26,7 +26,7 @@ import iconv from "iconv-lite";
 import { formatTokenCount } from "@agw/api";
 import EXTENSION_IDS from "../../test-fixtures/extension-ids.json" with { type: "json" };
 import { DEFAULT_APPEARANCE } from "../shared/appearance";
-import type { AppearanceSettings } from "../shared/contracts";
+import type { AppearanceSettings, WorkspaceTabsFileContent } from "../shared/contracts";
 import { THEME_TOKEN_KINDS, THEME_TOKEN_NAMES } from "../shared/theme-tokens";
 import {
   answerConfirmation,
@@ -249,16 +249,16 @@ async function untilFrame(extensionId: string, kind: string) {
   return frame;
 }
 
-/** 文件查看器 `viewerId`（manifest 中的 id，例如 `preview`）的 frame。The frame of file viewer `viewerId` (its manifest id, e.g. `preview`). */
-function viewerFrameOf(extensionId: string, viewerId: string) {
-  return frames(extensionId).find(
-    (frame) => runtime().registry.get(frame.frameId)?.viewId === viewerId,
-  );
-}
-
 async function untilViewerFrame(extensionId: string, viewerId: string) {
-  return until(() => {
-    const found = viewerFrameOf(extensionId, viewerId);
+  return until(async () => {
+    const frameIds = await evalHost<string[]>(
+      `[...document.querySelectorAll('${ACTIVE_WORKSPACE} [data-frame-id]')].map((slot) => slot.dataset.frameId)`,
+    );
+    const found = frames(extensionId).find(
+      (frame) =>
+        frameIds.includes(frame.frameId) &&
+        runtime().registry.get(frame.frameId)?.viewId === viewerId,
+    );
     return found && runtime().registry.get(found.frameId)?.pageId ? found : null;
   }, `${extensionId} ${viewerId} frame`);
 }
@@ -441,6 +441,93 @@ async function readJson<T>(path: string): Promise<T> {
 }
 
 /* ---------- 导航 Navigation ---------- */
+
+const WORKSPACE_TABS = '[aria-label="Open tabs"]';
+const ACTIVE_TAB = `${WORKSPACE_TABS} [role="tab"][aria-selected="true"]`;
+const ACTIVE_PANEL = "[data-workspace-tab-panel]:not([hidden])";
+const ACTIVE_WORKSPACE = `.agw-main-workspace ${ACTIVE_PANEL}`;
+const ACTIVE_DRAFT = `.agw-main-workspace[data-view-id="agw.chat"] ${ACTIVE_PANEL}:not([data-conversation-id])`;
+const ACTIVE_CONVERSATION_ID = `document.querySelector('${ACTIVE_WORKSPACE}')?.dataset.conversationId ?? null`;
+const NEW_CONVERSATION =
+  '.agw-left-sidebar[data-view-id="agw.conversations"] .tools button:has(svg.lucide-plus)';
+
+function workspaceTab(id: string): string {
+  return `${WORKSPACE_TABS} [role="tab"][data-tab-id="${id}"]`;
+}
+
+function workspaceTabWithTitle(title: string): string {
+  return `[...document.querySelectorAll('${WORKSPACE_TABS} [role="tab"]')].find((tab) => tab.querySelector('.agw-workspace-tab-title')?.textContent === ${JSON.stringify(title)})`;
+}
+
+async function selectedWorkspaceTab(viewId: string, tab?: string): Promise<string> {
+  const readActiveTab = `(() => {
+    const tab = ${tab ?? `document.querySelector('${ACTIVE_TAB}')`};
+    const workspace = document.querySelector('.agw-main-workspace');
+    if (!tab || tab.getAttribute('aria-selected') !== 'true' || workspace?.dataset.viewId !== ${JSON.stringify(viewId)}) return null;
+    return workspace.dataset.tabId === tab.dataset.tabId ? tab.dataset.tabId : null;
+  })()`;
+  return until(() => evalHost<string | null>(readActiveTab), `the active ${viewId} workspace tab`);
+}
+
+async function activateWorkspaceTab(id: string, viewId: string): Promise<void> {
+  await clickHost(workspaceTab(id));
+  await selectedWorkspaceTab(viewId, `document.querySelector('${workspaceTab(id)}')`);
+}
+
+async function closeWorkspaceTab(id: string): Promise<void> {
+  const close = `document.querySelector('${workspaceTab(id)}')?.parentElement?.querySelector('button[aria-label^="Close"]')`;
+  await clickHostElement(close);
+}
+
+async function reopenFileInTree(path: string): Promise<void> {
+  const id = await evalHost<string | null>(
+    `${workspaceTabWithTitle(basename(path))}?.dataset.tabId ?? null`,
+  );
+  if (id) {
+    await closeWorkspaceTab(id);
+    await untilHost(`!document.querySelector('${workspaceTab(id)}')`, `${path} to close`);
+  }
+  await openFileInTree(path);
+}
+
+async function openNewConversation(): Promise<string> {
+  await showSidebarView("agw.conversations", "agw.ribbon.conversations");
+  const activePanelId = `document.querySelector('${ACTIVE_WORKSPACE}')?.dataset.workspaceTabPanel ?? null`;
+  const previous = await evalHost<string | null>(activePanelId);
+  await clickHost(NEW_CONVERSATION);
+  return until(async () => {
+    const current = await evalHost<string | null>(
+      `document.querySelector('${ACTIVE_DRAFT}')?.dataset.workspaceTabPanel ?? null`,
+    );
+    return current !== previous ? current : null;
+  }, "the new conversation panel");
+}
+
+async function showChatTab(): Promise<void> {
+  await goToChat();
+  const workspace = `document.querySelector('${WORKSPACE_TABS}, ${ACTIVE_DRAFT}')`;
+  if (!(await evalHost<boolean>(`Boolean(${workspace})`))) {
+    await showSidebarView("agw.conversations", "agw.ribbon.conversations");
+  }
+  await untilHost(
+    `Boolean(${workspace} ?? document.querySelector('.agw-main-workspace[data-view-id="agw.empty"] button'))`,
+    "the workspace panels",
+  );
+  if (await evalHost<boolean>(`Boolean(document.querySelector('${ACTIVE_DRAFT}'))`)) return;
+  const lastChat = await evalHost<string | null>(
+    `document.querySelector('${WORKSPACE_TABS} [role="tab"][data-tab-kind="chat"][aria-selected="true"]')?.dataset.tabId ?? [...document.querySelectorAll('${WORKSPACE_TABS} [role="tab"][data-tab-kind="chat"]')].at(-1)?.dataset.tabId ?? null`,
+  );
+  if (lastChat) await activateWorkspaceTab(lastChat, "agw.chat");
+  else await openNewConversation();
+}
+
+async function waitForConversation(id: string): Promise<void> {
+  await selectedWorkspaceTab("agw.chat");
+  await untilHost(
+    `(${ACTIVE_CONVERSATION_ID}) === ${JSON.stringify(id)}`,
+    "the selected conversation",
+  );
+}
 
 async function openSettingsPage(href: string): Promise<void> {
   const onSettings = await evalHost<boolean>(
@@ -1391,7 +1478,11 @@ async function viewsAndLayout(): Promise<void> {
   assert.equal(main.view.getVisible(), true);
 
   const instance = await evalFrame<string>(main, "window.instance");
-  await api(main, `await api.workspace.openMainView("agw.chat");`);
+  assert.equal(
+    await errorCode(main, 'await api.workspace.openMainView("agw.chat");'),
+    "ERR_UNSUPPORTED_OPERATION",
+  );
+  await showChatTab();
   await until(() => !main.view.getVisible(), "the retained view to hide");
   assert.equal(frameOf(EXTENSION_IDS.sample, "mainView")?.frameId, main.frameId);
   await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.sample}:open"]`);
@@ -1779,12 +1870,9 @@ async function execution(): Promise<void> {
   await evalHost(
     `document.querySelector('.agw-left-sidebar[data-view-id="agw.conversations"] div.cursor-pointer').click(); true`,
   );
+  await waitForConversation(result.conversationId);
   await untilHost(
-    `new URLSearchParams(location.search).get("conversationId") === ${JSON.stringify(result.conversationId)}`,
-    "the conversation to open",
-  );
-  await untilHost(
-    `document.querySelector('.agw-main-workspace')?.textContent.includes("Echo: integration hello")`,
+    `document.querySelector('${ACTIVE_WORKSPACE}')?.textContent.includes("Echo: integration hello")`,
     "the conversation in the chat view",
   );
   const codes = await api<string[]>(
@@ -1837,18 +1925,18 @@ async function a2aAndHttp(): Promise<void> {
 }
 
 async function chatContributions(): Promise<void> {
-  await openMainView("agw.chat");
-  await openMenu('button[aria-label="Add"]');
+  await showChatTab();
+  await openMenu(`${ACTIVE_WORKSPACE} button[aria-label="Add"]`);
   await clickText("Insert greeting · Sample", OPEN_MENU);
   await untilHost(
-    `[...document.querySelectorAll("textarea")].some((area) => area.value.includes("Hello from sample"))`,
+    `[...document.querySelectorAll('${ACTIVE_WORKSPACE} textarea')].some((area) => area.value.includes("Hello from sample"))`,
     "the inserted greeting",
   );
   pass("the composer + menu runs the extension command that inserts text");
 
   await untilHost(`!${OPEN_MENU}`, "the composer menu to close");
   await evalHost(`(() => {
-    const trigger = [...document.querySelectorAll('.agw-msg-actions button')].find((button) => button.getAttribute("aria-label") === "More message actions");
+    const trigger = [...document.querySelectorAll('${ACTIVE_WORKSPACE} .agw-msg-actions button')].find((button) => button.getAttribute("aria-label") === "More message actions");
     trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }));
     return true;
   })()`);
@@ -2085,8 +2173,8 @@ async function floatingChat(): Promise<void> {
     return after;
   };
   const sendAndAssertContext = async (text: string, path: string, label: string) => {
-    await setInput('textarea[role="combobox"]', text);
-    await clickHost('button[aria-label="Send message"]');
+    await setInput(`${chatPanel} textarea[role="combobox"]`, text);
+    await clickHost(`${chatPanel} button[aria-label="Send message"]`);
     await until(
       async () =>
         (await serviceState()).echoInputs.some(
@@ -2103,15 +2191,7 @@ async function floatingChat(): Promise<void> {
   const waitForPanel = (label: string) =>
     untilHost(`Boolean(document.querySelector(${JSON.stringify(chatPanel)}))`, label);
 
-  await openMainView("agw.chat");
-  await showSidebarView("agw.conversations", "agw.ribbon.conversations");
-  await clickHost(
-    '.agw-left-sidebar[data-view-id="agw.conversations"] .tools button:has(svg.lucide-plus)',
-  );
-  await untilHost(
-    `!new URLSearchParams(location.search).get("conversationId")`,
-    "a fresh conversation for floating Chat",
-  );
+  await openNewConversation();
   await selectHostTarget("Echo");
 
   await openFileInTree("src/app.ts");
@@ -2129,7 +2209,7 @@ async function floatingChat(): Promise<void> {
   await closeChat("the Source floating Chat panel to close");
   await until(buttonFocused, "the Source Chat button to regain focus");
 
-  await openMainView("agw.chat");
+  await showChatTab();
   await untilHost(
     `!document.querySelector(${JSON.stringify(chatPanel)})`,
     "Chat to stay closed while Source hides",
@@ -2236,7 +2316,7 @@ async function floatingChat(): Promise<void> {
     "the switched Mixed view and Chat button to regain focus",
   );
 
-  await openMainView("agw.chat");
+  await showChatTab();
   await untilHost(
     `!document.querySelector(${JSON.stringify(chatPanel)})`,
     "the floating Chat panel to close before returning to Chat",
@@ -2284,7 +2364,7 @@ const CHAT_MARKDOWN = [
 
 const CONVERSATION_ITEMS = `[...document.querySelectorAll('.agw-left-sidebar[data-view-id="agw.conversations"] div.cursor-pointer')]`;
 const MARKDOWN_CONVERSATION = `${CONVERSATION_ITEMS}.find((item) => item.textContent.includes("Markdown check"))`;
-const MARKDOWN_REPLY = `[...document.querySelectorAll(".agw-main-workspace .msg-content")].find((element) => element.textContent.includes("Echo: Markdown check"))`;
+const MARKDOWN_REPLY = `[...document.querySelectorAll('${ACTIVE_WORKSPACE} .msg-content')].find((element) => element.textContent.includes("Echo: Markdown check"))`;
 
 /** 回复中标题为 language 的代码块。The reply's code block whose header names language. */
 function codeBlock(language: string): string {
@@ -2326,10 +2406,7 @@ async function chatMarkdown(): Promise<void> {
   assert.match(result.text, /^Echo: Markdown check/u);
   await untilHost(`Boolean(${MARKDOWN_CONVERSATION})`, "the Markdown conversation in the list");
   await evalHost(`${MARKDOWN_CONVERSATION}.click(); true`);
-  await untilHost(
-    `new URLSearchParams(location.search).get("conversationId") === ${JSON.stringify(result.conversationId)}`,
-    "the Markdown conversation to open",
-  );
+  await waitForConversation(result.conversationId);
   await untilHost(
     `Boolean(${MARKDOWN_REPLY}?.querySelector("section[data-footnotes]"))`,
     "the rendered Markdown reply",
@@ -2385,8 +2462,8 @@ async function chatMarkdown(): Promise<void> {
   );
 
   const page = await evalHost<Record<string, unknown>>(`(() => {
-    const userMessage = [...document.querySelectorAll(".agw-main-workspace .agw-msg-user")].find((element) => element.textContent.includes("Markdown check"));
-    const ids = [...document.querySelectorAll(".agw-main-workspace [id]")].map((element) => element.id);
+    const userMessage = [...document.querySelectorAll('${ACTIVE_WORKSPACE} .agw-msg-user')].find((element) => element.textContent.includes("Markdown check"));
+    const ids = [...document.querySelectorAll('${ACTIVE_WORKSPACE} [id]')].map((element) => element.id);
     const message = ${MARKDOWN_REPLY};
     message.querySelector("sup > a[data-footnote-ref]").click();
     return {
@@ -2410,7 +2487,7 @@ async function chatMarkdown(): Promise<void> {
     `${CONVERSATION_ITEMS}.find((item) => !item.textContent.includes("Markdown check")).click(); true`,
   );
   await untilHost(
-    `new URLSearchParams(location.search).get("conversationId") !== ${JSON.stringify(result.conversationId)}`,
+    `(${ACTIVE_CONVERSATION_ID}) !== ${JSON.stringify(result.conversationId)}`,
     "another conversation to open",
   );
   await evalHost(`${MARKDOWN_CONVERSATION}.click(); true`);
@@ -2420,7 +2497,7 @@ async function chatMarkdown(): Promise<void> {
   );
   assert.equal(
     await evalHost<boolean>(
-      `document.querySelector(".agw-main-workspace").textContent.includes("This view couldn’t be loaded")`,
+      `document.querySelector('${ACTIVE_WORKSPACE}').textContent.includes("This view couldn’t be loaded")`,
     ),
     false,
   );
@@ -2439,9 +2516,9 @@ type ObservedEvent = {
 };
 
 const CONVERSATION_DETAILS_PATH = "/api/projects/{projectId}/conversations/{conversationId}";
-const ASIDE_TOTAL_TERM = `[...(document.querySelector('aside[aria-label="Current conversation details"]')?.querySelectorAll("dt") ?? [])].find((term) => term.textContent === "Total")`;
-const COMPOSER = `.agw-main-workspace textarea[role="combobox"]`;
-const SEND_BUTTON = `.agw-main-workspace button[aria-label="Send message"]`;
+const ASIDE_TOTAL_TERM = `[...(document.querySelector('${ACTIVE_WORKSPACE} aside[aria-label="Current conversation details"]')?.querySelectorAll("dt") ?? [])].find((term) => term.textContent === "Total")`;
+const COMPOSER = `${ACTIVE_WORKSPACE} textarea[role="combobox"]`;
+const SEND_BUTTON = `${ACTIVE_WORKSPACE} button[aria-label="Send message"]`;
 
 /** UsageContent 中 totalTokenCount 的合计。The sum of totalTokenCount over UsageContent contents. */
 function usageTotal(events: readonly ObservedEvent[]): number {
@@ -2493,22 +2570,20 @@ async function chatObserve(): Promise<void> {
   const observed = (name: "responses" | "usage" | "requests" | "history") =>
     evalFrame<ObservedEvent[]>(main, `window.__chat.${name}`);
 
-  // 先开始新对话，再打开 execution() 创建的对话，使详情与历史请求都在订阅之后发出。
-  // Start a new chat first, then open the conversation execution() created, so the details and history requests
-  // are sent after the subscriptions.
-  await clickHost(
-    `.agw-left-sidebar[data-view-id="agw.conversations"] .tools button:has(svg.lucide-plus)`,
+  const previousTab = await evalHost<string | null>(
+    `${workspaceTabWithTitle("integration hello")}?.dataset.tabId ?? null`,
   );
-  await untilHost(`!new URLSearchParams(location.search).get("conversationId")`, "a new chat");
+  if (previousTab) await closeWorkspaceTab(previousTab);
+  await openNewConversation();
   const executionConversation = `${CONVERSATION_ITEMS}.find((item) => item.textContent.includes("integration hello"))`;
   await untilHost(`Boolean(${executionConversation})`, "the execution conversation in the list");
   await evalHost(`${executionConversation}.click(); true`);
   const conversationId = await until(
-    () => evalHost<string | null>(`new URLSearchParams(location.search).get("conversationId")`),
+    () => evalHost<string | null>(ACTIVE_CONVERSATION_ID),
     "the execution conversation to open",
   );
   await untilHost(
-    `document.querySelector('.agw-main-workspace')?.textContent.includes("Echo: integration hello")`,
+    `document.querySelector('${ACTIVE_WORKSPACE}')?.textContent.includes("Echo: integration hello")`,
     "the execution conversation in the chat view",
   );
   const baseline = await until(async () => {
@@ -2555,7 +2630,7 @@ async function chatObserve(): Promise<void> {
   );
   await clickHost(SEND_BUTTON);
   await untilHost(
-    `document.querySelector('.agw-main-workspace')?.textContent.includes("Echo: observe hello")`,
+    `document.querySelector('${ACTIVE_WORKSPACE}')?.textContent.includes("Echo: observe hello")`,
     "the reply to observe hello",
   );
   await until(
@@ -2577,7 +2652,7 @@ async function chatObserve(): Promise<void> {
   await untilAsideTotal(baseline.total + 2, "the baseline plus the pushed usage in ChatAside");
   // 宿主的 Turn 结束后发送按钮恢复为 Send message。The send button returns once the host's turn finishes.
   await untilHost(
-    `Boolean(document.querySelector(${JSON.stringify(SEND_BUTTON)})) && !document.querySelector('.agw-main-workspace button[aria-label="Stop execution"]')`,
+    `Boolean(document.querySelector(${JSON.stringify(SEND_BUTTON)})) && !document.querySelector('${ACTIVE_WORKSPACE} button[aria-label="Stop execution"]')`,
     "the host turn to finish",
   );
   pass(
@@ -2681,12 +2756,13 @@ async function writeProbe(
 
 /** 在聊天输入框的目标选择中选中名为 title 的目标。Selects the target titled title in the chat composer's target select. */
 async function selectHostTarget(title: string): Promise<void> {
-  await clickHost("#chat-target-select");
+  const targetSelect = `${ACTIVE_WORKSPACE} [id^="chat-target-select-"]`;
+  await clickHost(targetSelect);
   const option = `[...document.querySelectorAll('[role="option"]')].find((item) => item.textContent.trim() === ${JSON.stringify(title)})`;
   await untilHost(`Boolean(${option})`, `the ${title} target option`);
   await evalHost(`${option}.click(); true`);
   await untilHost(
-    `document.querySelector("#chat-target-select")?.textContent.trim() === ${JSON.stringify(title)}`,
+    `document.querySelector('${targetSelect}')?.textContent.trim() === ${JSON.stringify(title)}`,
     `the ${title} target`,
   );
 }
@@ -2700,11 +2776,11 @@ async function hostSendAndWait(text: string): Promise<void> {
   );
   await clickHost(SEND_BUTTON);
   await untilHost(
-    `document.querySelector('.agw-main-workspace')?.textContent.includes(${JSON.stringify(`Echo: ${text}`)})`,
+    `document.querySelector('${ACTIVE_WORKSPACE}')?.textContent.includes(${JSON.stringify(`Echo: ${text}`)})`,
     `the reply to ${text}`,
   );
   await untilHost(
-    `Boolean(document.querySelector(${JSON.stringify(SEND_BUTTON)})) && !document.querySelector('.agw-main-workspace button[aria-label="Stop execution"]')`,
+    `Boolean(document.querySelector(${JSON.stringify(SEND_BUTTON)})) && !document.querySelector('${ACTIVE_WORKSPACE} button[aria-label="Stop execution"]')`,
     `the turn of ${text} to finish`,
   );
 }
@@ -2715,15 +2791,12 @@ async function hostSendAndWait(text: string): Promise<void> {
  */
 async function hostConversationReadOnly(): Promise<void> {
   await goToChat();
-  await clickHost(
-    `.agw-left-sidebar[data-view-id="agw.conversations"] .tools button:has(svg.lucide-plus)`,
-  );
-  await untilHost(`!new URLSearchParams(location.search).get("conversationId")`, "a new chat");
+  await openNewConversation();
   // 新对话的默认目标是项目最近选择或默认 Agent，这里选中回显 Agent。A new chat defaults to the project's latest choice or the default Agent, so pick the echo Agent.
   await selectHostTarget("Echo");
   await hostSendAndWait("host hello");
   const conversationId = await until(
-    () => evalHost<string | null>(`new URLSearchParams(location.search).get("conversationId")`),
+    () => evalHost<string | null>(ACTIVE_CONVERSATION_ID),
     "the host conversation id",
   );
   const conversations = await listConversations();
@@ -3005,7 +3078,7 @@ async function otherExtensionReadOnly(): Promise<void> {
   pass(
     "extensions are read-only on each other's conversations, and a new conversation records its extension",
   );
-  await openMainView("agw.chat");
+  await showChatTab();
 }
 
 async function busyExtension(): Promise<void> {
@@ -3014,7 +3087,8 @@ async function busyExtension(): Promise<void> {
   await goToChat();
   const background = await untilFrame(EXTENSION_IDS.busy, "background");
   const pid = background.view.webContents.getOSProcessId();
-  await openMenu('button[aria-label="Add"]');
+  await showChatTab();
+  await openMenu(`${ACTIVE_WORKSPACE} button[aria-label="Add"]`);
   await clickText("Spin forever · Busy", OPEN_MENU);
   await goToExtensions();
   await untilStatus(EXTENSION_IDS.busy, "Failed", 30_000);
@@ -3387,7 +3461,7 @@ function treeItem(name: string): string {
  * 在 Files 中点击文件，`path` 中的目录依次展开。
  * Clicks a file in Files, expanding the directories in `path` on the way.
  */
-async function clickFileInTree(path: string): Promise<void> {
+async function clickFileInTree(path: string, pinned = false): Promise<void> {
   await goToChat();
   if (
     !(await evalHost<boolean>(
@@ -3406,25 +3480,31 @@ async function clickFileInTree(path: string): Promise<void> {
   }
   const item = treeItem(segments.at(-1)!);
   await untilHost(`Boolean(${item})`, `${path} in the file tree`);
-  await evalHost(`${item}.click(); true`);
+  await evalHost(`(() => {
+    const item = ${item};
+    item.click();
+    if (${pinned}) {
+      item.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }));
+      item.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 }));
+    }
+    return true;
+  })()`);
 }
 
 /** 在 Files 中点击文件并等待文件视图显示它。Clicks a file in Files and waits for the File view to show it. */
-async function openFileInTree(path: string): Promise<void> {
-  await clickFileInTree(path);
-  await untilHost(
-    `document.querySelector('.agw-main-workspace')?.getAttribute('data-view-id') === "agw.file"`,
-    "the file view",
-  );
+async function openFileInTree(path: string, pinned = false): Promise<string> {
+  await clickFileInTree(path, pinned);
+  const id = await selectedWorkspaceTab("agw.file", workspaceTabWithTitle(basename(path)));
   await untilHost(shownFileIs(basename(path)), `the file view to show ${path}`);
+  return id;
 }
 
 function shownFileIs(name: string): string {
-  return `[...document.querySelectorAll('.agw-main-workspace span.font-medium')].some((element) => element.textContent === ${JSON.stringify(name)})`;
+  return `[...document.querySelectorAll('${ACTIVE_WORKSPACE} span.font-medium')].some((element) => element.textContent === ${JSON.stringify(name)})`;
 }
 
 function viewerTab(id: string): string {
-  return `document.querySelector('[data-file-viewer-tab="${id}"]')`;
+  return `document.querySelector('${ACTIVE_WORKSPACE} [data-file-viewer-tab="${id}"]')`;
 }
 
 /**
@@ -3439,8 +3519,8 @@ function visibleMonacoText(editor: string): string {
     .join("\\n")`;
 }
 
-const FILE_DIFF = '.agw-main-workspace [data-code-view="diff"]';
-const SOURCE_TEXT = visibleMonacoText('.agw-main-workspace [data-code-view="source"]');
+const FILE_DIFF = `${ACTIVE_WORKSPACE} [data-code-view="diff"]`;
+const SOURCE_TEXT = visibleMonacoText(`${ACTIVE_WORKSPACE} [data-code-view="source"]`);
 const MODIFIED_DIFF_TEXT = visibleMonacoText(`${FILE_DIFF} .editor.modified`);
 
 function sourceIncludes(text: string): string {
@@ -3455,13 +3535,10 @@ async function filesView(): Promise<void> {
     `${viewerTab(`${EXTENSION_IDS.markdown}:markdown`)}?.getAttribute("aria-selected") === "true"`,
     "the Mixed tab",
   );
-  await clickHost('[data-file-viewer-tab="source"]');
+  await selectViewer("source");
   await untilHost(sourceIncludes("hello cloud"), "the file content");
-  await openMainView("agw.chat");
-  await untilHost(
-    `Boolean(document.querySelector('.agw-main-workspace textarea'))`,
-    "the composer",
-  );
+  await showChatTab();
+  await untilHost(`Boolean(document.querySelector('${COMPOSER}'))`, "the composer");
   await clickHost('.agw-ribbon [data-entry-id="agw.ribbon.conversations"]');
   pass("the Files view opens file content and the chat composer survives switching back");
 }
@@ -3543,13 +3620,13 @@ async function monacoDiffAndComments(): Promise<void> {
     host().sendInputEvent({ type: "mouseMove", ...button });
     host().sendInputEvent({ type: "mouseDown", ...button, button: "left", clickCount: 1 });
     host().sendInputEvent({ type: "mouseUp", ...button, button: "left", clickCount: 1 });
-    const textarea = '.agw-main-workspace [data-comment-line="2"] textarea';
+    const textarea = `${ACTIVE_WORKSPACE} [data-comment-line="2"] textarea`;
     await setInput(textarea, "Changed in the working tree");
     await evalHost(
       `document.querySelector(${JSON.stringify(textarea)}).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true })); true`,
     );
     await untilHost(
-      `document.querySelector('.agw-main-workspace [data-comment-line="2"]')?.textContent.includes("Changed in the working tree")`,
+      `document.querySelector('${ACTIVE_WORKSPACE} [data-comment-line="2"]')?.textContent.includes("Changed in the working tree")`,
       "the comment on the modified side",
     );
     assert.deepEqual(
@@ -3559,14 +3636,14 @@ async function monacoDiffAndComments(): Promise<void> {
 
     // 评论成为输入框的待发送评论；清除后不影响之后的步骤。The comment becomes a pending comment; clearing it keeps later
     // steps unaffected.
-    await openMainView("agw.chat");
+    await showChatTab();
     await untilHost(
-      `document.querySelector('.agw-main-workspace')?.textContent.includes("1 code comment")`,
+      `document.querySelector('${ACTIVE_WORKSPACE}')?.textContent.includes("1 code comment")`,
       "the pending code comment",
     );
-    await clickHost('.agw-main-workspace button[aria-label="Clear pending code comments"]');
+    await clickHost(`${ACTIVE_WORKSPACE} button[aria-label="Clear pending code comments"]`);
     await untilHost(
-      `!document.querySelector('.agw-main-workspace')?.textContent.includes("1 code comment")`,
+      `!document.querySelector('${ACTIVE_WORKSPACE}')?.textContent.includes("1 code comment")`,
       "the cleared code comment",
     );
     await clickFileInTree("readme.md");
@@ -3588,10 +3665,9 @@ async function monacoDiffAndComments(): Promise<void> {
   }
 }
 
-const VIEW_FILE_BUTTON = '.agw-main-workspace button[aria-label="View file"]';
-const VIEW_UNSAVED_FILE_BUTTON =
-  '.agw-main-workspace button[aria-label="View file, unsaved changes"]';
-const VIEW_CHANGES_BUTTON = '.agw-main-workspace button[aria-label="View changes"]';
+const VIEW_FILE_BUTTON = `${ACTIVE_WORKSPACE} button[aria-label="View file"]`;
+const VIEW_UNSAVED_FILE_BUTTON = `${ACTIVE_WORKSPACE} button[aria-label="View file, unsaved changes"]`;
+const VIEW_CHANGES_BUTTON = `${ACTIVE_WORKSPACE} button[aria-label="View changes"]`;
 
 async function diffModeFileView(readmePath: string, readme: string): Promise<void> {
   await clickHost(VIEW_FILE_BUTTON);
@@ -3609,7 +3685,7 @@ async function diffModeFileView(readmePath: string, readme: string): Promise<voi
 
   await clickFileInTree("images/logo.png");
   await untilHost(
-    `document.querySelector('.agw-main-workspace')?.textContent.includes("Binary file; its contents are not shown.")`,
+    `document.querySelector('${ACTIVE_WORKSPACE}')?.textContent.includes("Binary file; its contents are not shown.")`,
     "the binary diff",
   );
   await clickHost(VIEW_FILE_BUTTON);
@@ -3661,7 +3737,7 @@ async function diffModeSourceEdits(readmePath: string, readme: string): Promise<
 const MARKDOWN_VIEWER = `${EXTENSION_IDS.markdown}:preview`;
 
 /** 文件标题行的 "More" 按钮。The file title row's "More" button. */
-const MORE_BUTTON = '.agw-main-workspace button[aria-label="More"]';
+const MORE_BUTTON = `${ACTIVE_WORKSPACE} button[aria-label="More"]`;
 /** 打开的 "More" 菜单第一行的查看器说明。The viewer info in the first row of the open "More" menu. */
 const MORE_MENU_INFO = `${OPEN_MENU}?.querySelector('[data-slot="dropdown-menu-label"]')?.textContent`;
 
@@ -3691,7 +3767,7 @@ async function chooseFileHeaderEntry(text: string): Promise<void> {
  * The file title row's right-side items and whether each is clickable inside the window.
  */
 const FILE_HEADER_ACTIONS = `(() => {
-  const actions = document.querySelector('.agw-main-workspace [role="tablist"]')?.parentElement;
+  const actions = document.querySelector('${ACTIVE_WORKSPACE} [role="tablist"]')?.parentElement;
   const clickable = (element) => {
     const rect = element.getBoundingClientRect();
     const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -3730,11 +3806,7 @@ function markdownText(includes: string): string {
 
 /** 选择 Preview：Markdown 文件默认由 Mixed 打开。Selects Preview; Markdown files open in Mixed by default. */
 async function selectPreview(): Promise<void> {
-  await clickHost(`[data-file-viewer-tab="${MARKDOWN_VIEWER}"]`);
-  await untilHost(
-    `${viewerTab(MARKDOWN_VIEWER)}?.getAttribute("aria-selected") === "true"`,
-    "the Preview tab",
-  );
+  await selectViewer(MARKDOWN_VIEWER);
 }
 
 async function textEditorPreview(): Promise<void> {
@@ -3792,14 +3864,11 @@ async function textEditorPreview(): Promise<void> {
     ["More", true],
   ]);
   await chooseFileHeaderEntry("Reload view");
-  const preview = await until(() => {
-    const frame = viewerFrameOf(EXTENSION_IDS.markdown, "preview");
-    return frame &&
-      frame.frameId !== firstPreview.frameId &&
-      runtime().registry.get(frame.frameId)?.pageId
-      ? frame
-      : null;
-  }, "the reloaded preview");
+  await until(
+    () => !runtime().registry.get(firstPreview.frameId),
+    "the old Preview frame to close",
+  );
+  const preview = await untilViewerFrame(EXTENSION_IDS.markdown, "preview");
   await until(() => evalFrame<boolean>(preview, rendered), "the Markdown after reloading");
   pass("Reload view in the More menu reloads the viewer");
 
@@ -3807,7 +3876,7 @@ async function textEditorPreview(): Promise<void> {
   // File viewers have no host title bar; the source shows in the first row of the "More" menu.
   assert.equal(
     await evalHost<boolean>(
-      `Boolean(document.querySelector('.agw-main-workspace .agw-extension-view-header'))`,
+      `Boolean(document.querySelector('${ACTIVE_WORKSPACE} .agw-extension-view-header'))`,
     ),
     false,
   );
@@ -3844,18 +3913,18 @@ async function textEditorPreview(): Promise<void> {
   assert.equal(await evalFrame<number>(preview, "window.__infoProbe"), 1);
   // 文件标题行的边框与主区域两侧对齐，没有内边距留下的空隙。The file title row's border spans the main workspace edge to edge.
   const edges = await evalHost<{ header: [number, number]; main: [number, number] }>(`(() => {
-    const header = document.querySelector('.agw-main-workspace [role="tablist"]').parentElement.parentElement.getBoundingClientRect();
+    const header = document.querySelector('${ACTIVE_WORKSPACE} [role="tablist"]').parentElement.parentElement.getBoundingClientRect();
     const main = document.querySelector('.agw-main-workspace').getBoundingClientRect();
     return { header: [header.left, header.right], main: [main.left, main.right] };
   })()`);
   assert.deepEqual(edges.header, edges.main);
   pass("the first row of the More menu names the viewer and its extension");
 
-  await clickHost('[data-file-viewer-tab="source"]');
+  await selectViewer("source");
   await untilHost(sourceIncludes("[Notes](docs/notes.md)"), "the Markdown source");
   // 切换到 Source 时查看器隐藏并保留页面。Switching to Source hides the viewer and keeps its page.
   await until(() => !preview.view.getVisible(), "the preview to hide");
-  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "preview")?.frameId, preview.frameId);
+  assert.ok(runtime().registry.get(preview.frameId)?.pageId);
   // 源码中的长行不撑宽主区；Source 时标题行仍有切换按钮与 "More"，都在窗口内可以点到。
   // Long source lines do not widen the main workspace; with Source the title row keeps the switch and "More", both
   // clickable inside the window.
@@ -3886,22 +3955,22 @@ async function textEditorPreview(): Promise<void> {
   await chooseFileHeaderEntry("Reload file");
   await untilHost(sourceIncludes("Reloaded source line."), "the reloaded source");
   await writeFile(guidePath, guide);
-  await clickHost(`[data-file-viewer-tab="${MARKDOWN_VIEWER}"]`);
+  await selectPreview();
   await until(() => preview.view.getVisible(), "the preview to show again");
 
   await evalFrame(preview, `document.querySelector('a[href="docs/notes.md"]').click(); true`);
+  await selectedWorkspaceTab("agw.file", workspaceTabWithTitle("notes.md"));
   await untilHost(shownFileIs("notes.md"), "docs/notes.md in the file view");
-  // 打开的文件回到默认的 Mixed，再选 Preview 时由同一个 Preview frame 显示。The opened file returns to the default
-  // Mixed; selecting Preview again shows it in the same Preview frame.
   await untilHost(selectedViewerIs(MIXED_VIEWER), "docs/notes.md in the default Mixed viewer");
   await selectPreview();
+  const notesPreview = await untilViewerFrame(EXTENSION_IDS.markdown, "preview");
   await until(
-    () => evalFrame<boolean>(preview, markdownText("project notes")),
+    () => evalFrame<boolean>(notesPreview, markdownText("project notes")),
     "the notes preview",
   );
-  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "preview")?.frameId, preview.frameId);
+  assert.notEqual(notesPreview.frameId, preview.frameId);
   pass(
-    "Source shows the text, a relative link opens the linked file in the default viewer, and Preview then shows it in the same frame",
+    "Source shows the text and a relative link opens its file in a new tab with its own Preview frame",
   );
 
   await openFileInTree("guide.md");
@@ -3925,7 +3994,7 @@ async function textEditorPreview(): Promise<void> {
   assert.equal(frames(EXTENSION_IDS.markdown).length, 0);
   await openFileInTree("guide.md");
   await untilHost(
-    `!document.querySelector('[data-file-viewer-tab]') && ${sourceIncludes("[Notes](docs/notes.md)")}`,
+    `!document.querySelector('${ACTIVE_WORKSPACE} [data-file-viewer-tab]') && ${sourceIncludes("[Notes](docs/notes.md)")}`,
     "the Markdown source without viewers",
   );
   await enable(EXTENSION_IDS.markdown, "Markdown");
@@ -4006,12 +4075,12 @@ function drag(frame: FrameHandle, start: { x: number; y: number }, end: { x: num
 
 async function excalidrawEditor(): Promise<void> {
   const diagramPath = join(config.projectDirectory, "diagram.excalidraw");
-  await openFileInTree("diagram.excalidraw");
+  const diagramTab = await openFileInTree("diagram.excalidraw");
   await untilHost(
     `${viewerTab(EXCALIDRAW_VIEWER)}?.getAttribute("aria-selected") === "true"`,
     "the Excalidraw tab",
   );
-  const editor = await untilFrame(EXTENSION_IDS.excalidraw, "fileViewer");
+  const editor = await untilViewerFrame(EXTENSION_IDS.excalidraw, "editor");
   await until(
     async () => (await evalFrame<number>(editor, DRAWN_PIXELS)) > 0,
     "the restored diagram",
@@ -4020,13 +4089,13 @@ async function excalidrawEditor(): Promise<void> {
   assert.equal(await evalHost<boolean>(UNSAVED_MARKER), false);
   pass("Excalidraw files open in the Excalidraw editor with the saved scene");
 
-  await clickHost('[data-file-viewer-tab="source"]');
+  await selectViewer("source");
   await untilHost(sourceIncludes('"elements"'), "the Excalidraw source");
   assert.deepEqual(await evalHost(FILE_HEADER_ACTIONS), [
     ["File views", true],
     ["More", true],
   ]);
-  await clickHost(`[data-file-viewer-tab="${EXCALIDRAW_VIEWER}"]`);
+  await selectViewer(EXCALIDRAW_VIEWER);
   await until(() => editor.view.getVisible(), "the editor to show again");
   pass("with Source selected the Excalidraw file keeps the switch and the More menu");
 
@@ -4044,11 +4113,14 @@ async function excalidrawEditor(): Promise<void> {
   drag(editor, start, { x: start.x + 120, y: start.y + 80 });
   await untilHost(UNSAVED_MARKER, "the unsaved marker");
 
-  await clickFileInTree("guide.md");
+  await openFileInTree("guide.md");
+  assert.equal(noConfirmation(), true);
+  await activateWorkspaceTab(diagramTab, "agw.file");
+  await closeWorkspaceTab(diagramTab);
   await expectConfirmation(
     "discard-unsaved",
     ["diagram.excalidraw", "Excalidraw"],
-    "the discard confirmation",
+    "the discard confirmation before closing the diagram tab",
   );
   await answerConfirmation("Cancel");
   assert.equal(await evalHost<boolean>(shownFileIs("diagram.excalidraw")), true);
@@ -4062,14 +4134,16 @@ async function excalidrawEditor(): Promise<void> {
   );
   await answerConfirmation("Cancel");
   assert.equal(await evalHost<boolean>("location.pathname.startsWith('/desktop/chat')"), true);
-  pass("unsaved changes show a marker and ask before another file or Settings replaces them");
+  pass(
+    "an edited diagram stays open while opening files and asks before closing or leaving for Settings",
+  );
 
   // 同一个文件重新显示时文档会话不读取，未保存的矩形与画布保留。Showing the same file again does not read, so the
   // unsaved rectangle and the canvas stay.
   const drawn = await evalFrame<number>(editor, DRAWN_PIXELS);
-  await clickHost('[data-file-viewer-tab="source"]');
+  await selectViewer("source");
   await until(() => !editor.view.getVisible(), "the editor to hide");
-  await clickHost(`[data-file-viewer-tab="${EXCALIDRAW_VIEWER}"]`);
+  await selectViewer(EXCALIDRAW_VIEWER);
   await until(() => editor.view.getVisible(), "the editor to show again");
   await delay(500);
   assert.equal(await evalHost<boolean>(UNSAVED_MARKER), true);
@@ -4151,12 +4225,13 @@ async function excalidrawEditor(): Promise<void> {
   assert.equal(noConfirmation(), true);
   await openFileInTree("guide.md");
   assert.equal(noConfirmation(), true);
-  await until(() => frames(EXTENSION_IDS.excalidraw).length === 0, "the Excalidraw frame to close");
+  await until(() => !editor.view.getVisible(), "the Excalidraw frame to hide");
   pass("saving writes the new element and later file changes need no confirmation");
 
   // 冲突：保存时磁盘上的场景已被其他写入方修改。A conflict: the scene on disk was changed by another writer.
   await openFileInTree("diagram.excalidraw");
-  const conflicted = await untilFrame(EXTENSION_IDS.excalidraw, "fileViewer");
+  const conflicted = await untilViewerFrame(EXTENSION_IDS.excalidraw, "editor");
+  assert.equal(conflicted.frameId, editor.frameId);
   await until(
     async () => (await evalFrame<number>(conflicted, DRAWN_PIXELS)) > 0,
     "the saved diagram on the canvas",
@@ -4204,7 +4279,7 @@ async function excalidrawEditor(): Promise<void> {
 
   // 没有修改时重新显示读取磁盘上的新场景，未保存标记不出现。Showing again with no changes reads the new scene from
   // disk without the unsaved marker appearing.
-  await clickHost('[data-file-viewer-tab="source"]');
+  await selectViewer("source");
   await until(() => !conflicted.view.getVisible(), "the editor to hide");
   const beforeRefresh = await evalFrame<number>(conflicted, DRAWN_PIXELS);
   await writeScene({
@@ -4214,7 +4289,7 @@ async function excalidrawEditor(): Promise<void> {
       { id: "added", type: "diamond", x: 100, y: 320, width: 200, height: 200 },
     ],
   });
-  await clickHost(`[data-file-viewer-tab="${EXCALIDRAW_VIEWER}"]`);
+  await selectViewer(EXCALIDRAW_VIEWER);
   let markerSeen = false;
   await until(async () => {
     if (await evalHost<boolean>(UNSAVED_MARKER)) markerSeen = true;
@@ -4270,11 +4345,11 @@ async function excalidrawEditor(): Promise<void> {
 
   await openFileInTree("guide.md");
   assert.equal(noConfirmation(), true);
-  await until(() => frames(EXTENSION_IDS.excalidraw).length === 0, "the Excalidraw frame to close");
+  await until(() => !conflicted.view.getVisible(), "the Excalidraw frame to hide");
   pass("after an Overwrite or a Reload, other files open without confirmation");
 
   await openFileInTree("blank.excalidraw");
-  const blank = await untilFrame(EXTENSION_IDS.excalidraw, "fileViewer");
+  const blank = await untilViewerFrame(EXTENSION_IDS.excalidraw, "editor");
   await until(async () => (await evalFrame<number>(blank, DRAWN_PIXELS)) === 0, "the blank canvas");
   assert.equal(
     await evalFrame<boolean>(blank, `Boolean(document.querySelector(".status-error"))`),
@@ -4306,14 +4381,14 @@ async function excalidrawEditor(): Promise<void> {
 /* ---------- Markdown extension 与 todo-editor Markdown extension and todo-editor ---------- */
 
 const MIXED_VIEWER = `${EXTENSION_IDS.markdown}:markdown`;
-const FILE_VIEWER_TABS = `[...document.querySelectorAll('[data-file-viewer-tab]')].map((tab) => tab.getAttribute("data-file-viewer-tab"))`;
+const FILE_VIEWER_TABS = `[...document.querySelectorAll('${ACTIVE_WORKSPACE} [data-file-viewer-tab]')].map((tab) => tab.getAttribute("data-file-viewer-tab"))`;
 /** 宿主文件名后的保存状态。The save status after the host's file name. */
 function saveStatusIs(status: string): string {
-  return `document.querySelector("[data-file-save-status]")?.getAttribute("data-file-save-status") === ${JSON.stringify(status)}`;
+  return `document.querySelector('${ACTIVE_WORKSPACE} [data-file-save-status]')?.getAttribute("data-file-save-status") === ${JSON.stringify(status)}`;
 }
 const EDITOR = `document.querySelector(".ProseMirror")`;
 /** 文件视图中 Source 的区域。Source's area in the File view. */
-const SOURCE_AREA = ".agw-main-workspace .agw-file-source";
+const SOURCE_AREA = `${ACTIVE_WORKSPACE} .agw-file-source`;
 const SOURCE_STATUS = `(document.querySelector('${SOURCE_AREA} [data-code-view-status-bar]')?.textContent ?? "")`;
 const SOURCE_ERROR = `(document.querySelector('${SOURCE_AREA} [data-source-error]')?.textContent ?? "")`;
 /** 状态栏的编码按钮（状态栏中第一个弹出菜单按钮）。The status bar's encoding button, its first popup button. */
@@ -4346,7 +4421,7 @@ function projectPath(path: string): string {
 }
 
 async function selectViewer(viewerId: string): Promise<void> {
-  await clickHost(`[data-file-viewer-tab="${viewerId}"]`);
+  await clickHostElement(viewerTab(viewerId));
   await untilHost(selectedViewerIs(viewerId), `the ${viewerId} tab`);
 }
 
@@ -4754,14 +4829,13 @@ async function viewerOrderAndDefaults(): Promise<void> {
   const defaults = async () =>
     (await readJson<{ fileViewerDefaults: Record<string, string> }>(settingsPath))
       .fileViewerDefaults;
-  const more = '.agw-main-workspace button[aria-label="More"]';
   await openFileInTree("notes/edit.md");
   await selectViewer("source");
   // 切换到 Source 后立即打开 More 菜单（宿主页面有焦点，与点击按钮相同）：Source 随后读取完文件并让编辑器获得焦点，
   // 菜单保持打开。The More menu opens right after switching to Source (the host page has focus, as after clicking the
   // button): Source then finishes reading the file and focuses its editor, and the menu stays open.
   await focusHostWindow();
-  await openMenuAndWait(more);
+  await openMenuAndWait(MORE_BUTTON);
   const sourceRead = `${saveStatusIs("saved")} && ${SOURCE_STATUS}.includes("Markdown")`;
   const loadedBeforeMenu = await evalHost<boolean>(sourceRead);
   await untilHost(sourceRead, "edit.md read in Source");
@@ -4780,7 +4854,7 @@ async function viewerOrderAndDefaults(): Promise<void> {
     async () => (await defaults())["*.md"] === "source",
     "the *.md default in settings.json",
   );
-  await openFileInTree("readme.md");
+  await reopenFileInTree("readme.md");
   await untilHost(selectedViewerIs("source"), "Source as the default for readme.md");
   await sourceShowing(sourceIncludes("hello cloud"), "readme.md in Source");
   assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [
@@ -4792,7 +4866,7 @@ async function viewerOrderAndDefaults(): Promise<void> {
   await until(async () => !("*.md" in (await defaults())), "the *.md default to be removed");
   // 重置不切换正在显示的查看器。The reset keeps the viewer being shown.
   assert.equal(await evalHost<boolean>(selectedViewerIs("source")), true);
-  await openFileInTree("guide.md");
+  await reopenFileInTree("guide.md");
   await untilHost(selectedViewerIs(MIXED_VIEWER), "Mixed as the default for guide.md");
   pass(
     "More sets Source as the default for *.md in settings.json, and after Reset default for *.md the shown file keeps Source while other Markdown files open in Mixed",
@@ -4805,7 +4879,7 @@ async function viewerOrderAndDefaults(): Promise<void> {
     async () => (await defaults())["*.md"] === MARKDOWN_VIEWER,
     "Preview as the *.md default in settings.json",
   );
-  await openFileInTree("readme.md");
+  await reopenFileInTree("readme.md");
   await untilHost(selectedViewerIs(MARKDOWN_VIEWER), "Preview as the default for readme.md");
   assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [
     MARKDOWN_VIEWER,
@@ -6458,7 +6532,7 @@ type ScanResult = { checked: number; truncated: { selector: string; text: string
 /** 每个视图的扫描结果，在 hostScaling 结尾一起断言。The scan result of every view, asserted together at the end of hostScaling. */
 const scanResults: { view: string; checked: number; reported: ScanResult["truncated"] }[] = [];
 
-/** 扫描当前页面并记录结果，同时断言标题栏高度为 48。Scans the current page, records the result, and asserts the title bar is 48 high. */
+/** 扫描当前页面、记录结果并检查标题栏高度。Scans the current page, records the result, and checks the title bar height. */
 async function scanTruncation(view: string): Promise<void> {
   const { checked, truncated } = await evalHost<ScanResult>(TRUNCATED_TEXT);
   assert.ok(checked > 0, `${view} has no text elements to check`);
@@ -6468,7 +6542,7 @@ async function scanTruncation(view: string): Promise<void> {
     await evalHost<number>(
       `document.querySelector(".agw-titlebar").getBoundingClientRect().height`,
     ),
-    48,
+    38,
     `${view} title bar height`,
   );
 }
@@ -6528,10 +6602,10 @@ async function seedQuickPrompt(): Promise<void> {
 }
 
 /**
- * 基础字号 20 下，Chat、Files、每个 Settings 页面与服务器配置对话框没有被截断的文字，标题栏保持 48 高，
- * macOS 红绿灯位置不变；最后恢复默认字号。
+ * 基础字号 20 下，检查 Chat、Files、每个 Settings 页面与服务器配置对话框的文字、标题栏高度和 macOS 窗口按钮位置。
+ * 检查完成后恢复默认字号。
  * At base size 20, Chat, Files, every Settings page and the server profile dialog show no truncated text, the title
- * bar stays 48 high and the macOS traffic lights stay in place; the default sizes are restored at the end.
+ * bar is 38 px tall, and the macOS traffic lights stay centered. The default sizes are restored at the end.
  */
 async function hostScaling(): Promise<void> {
   scanResults.length = 0;
@@ -6602,7 +6676,7 @@ async function hostScaling(): Promise<void> {
   window.setSize(width, height);
 
   if (process.platform === "darwin") {
-    assert.deepEqual(window.getWindowButtonPosition(), { x: 18, y: 18 });
+    assert.deepEqual(window.getWindowButtonPosition(), { x: 18, y: 12 });
   }
 
   await saveAppearance(RESET_APPEARANCE, () => clickText("Reset all"));
@@ -6613,7 +6687,7 @@ async function hostScaling(): Promise<void> {
   );
   assert.deepEqual(reported, [], `truncated text: ${JSON.stringify(reported, null, 2)}`);
   pass(
-    `at base size 20, ${settingsPages} Settings pages (also at width 980), Chat, Files and the server profile dialog show no truncated text (${scanResults.length} views, ${scanResults.reduce((sum, result) => sum + result.checked, 0)} elements checked, the control button reported), the title bar is 48 high and the traffic lights stay at 18, 18`,
+    `at base size 20, ${settingsPages} Settings pages (also at width 980), Chat, Files and the server profile dialog show no truncated text (${scanResults.length} views, ${scanResults.reduce((sum, result) => sum + result.checked, 0)} elements checked, the control button reported), the title bar is 38 px tall and the macOS traffic lights are at 18, 12`,
   );
 }
 
@@ -7292,12 +7366,12 @@ type WorkspaceStyles = {
   marked: boolean;
   image: string;
   /** Chat 列的背景、圆角与其中的 `--background`。The Chat column's background, radius and `--background`. */
-  card: string;
-  radius: string;
-  cardBackground: string;
+  card: string | null;
+  radius: string | null;
+  cardBackground: string | null;
   /** Chat 列四周的留白与输入框区域的下边角。The space around the Chat column and the composer's lower corner. */
-  padding: string;
-  composerRadius: string;
+  padding: string | null;
+  composerRadius: string | null;
   /** 文件 Source 区域的背景与外边距，没有显示时为 null。The file Source area's background and margin, or null. */
   source: { background: string; margin: string } | null;
 };
@@ -7309,17 +7383,21 @@ function untilWorkspace(
 ): Promise<WorkspaceStyles> {
   return until(async () => {
     const styles = await evalHost<WorkspaceStyles>(`(() => {
-      const style = (selector) => getComputedStyle(document.querySelector(".agw-main-workspace " + selector));
+      const panel = document.querySelector('${ACTIVE_WORKSPACE}');
+      const style = (selector) => {
+        const element = panel?.querySelector(selector);
+        return element ? getComputedStyle(element) : null;
+      };
       const column = style(".agw-chat-column");
-      const source = document.querySelector(".agw-main-workspace .agw-file-source");
+      const source = document.querySelector('${SOURCE_AREA}');
       return {
         marked: document.documentElement.hasAttribute("data-workspace-backdrop"),
         image: getComputedStyle(document.querySelector(".agw-main-workspace")).backgroundImage,
-        card: column.backgroundColor,
-        radius: column.borderTopLeftRadius,
-        cardBackground: column.getPropertyValue("--background").trim(),
-        padding: style(".agw-chat-column-area").paddingTop,
-        composerRadius: style(".agw-chat-composer").borderBottomLeftRadius,
+        card: column?.backgroundColor ?? null,
+        radius: column?.borderTopLeftRadius ?? null,
+        cardBackground: column?.getPropertyValue("--background").trim() ?? null,
+        padding: style(".agw-chat-column-area")?.paddingTop ?? null,
+        composerRadius: style(".agw-chat-composer")?.borderBottomLeftRadius ?? null,
         source: source ? { background: getComputedStyle(source).backgroundColor, margin: getComputedStyle(source).marginTop } : null,
       };
     })()`);
@@ -7377,6 +7455,7 @@ async function warmMinimalismTheme(): Promise<void> {
   // 工作区背景：宿主在 Main Workspace 上画背景图形，Chat 列显示为卡片，卡片内的 --background 为卡片颜色。
   // Workspace backdrop: the host draws it on the Main Workspace, the Chat column becomes a card, and --background inside
   // the card is the card color.
+  await showChatTab();
   await untilWorkspace(
     (styles) =>
       styles.marked &&
@@ -7407,7 +7486,7 @@ async function warmMinimalismTheme(): Promise<void> {
     styles.card === "rgba(0, 0, 0, 0)" &&
     styles.radius === "0px" &&
     styles.margin === "0px";
-  await openFileInTree("readme.md");
+  const fileTab = await openFileInTree("readme.md");
   await untilHost(selectedViewerIs(MIXED_VIEWER), "Mixed for readme.md");
   const mixed = await mixedShowing("true", "readme.md in Mixed");
   const mixedLight = await untilBackdrop(
@@ -7427,7 +7506,7 @@ async function warmMinimalismTheme(): Promise<void> {
     "Source filling the Main Workspace",
   );
   await untilHost(
-    `getComputedStyle(document.querySelector('.agw-main-workspace .agw-file-source .monaco-editor-background')).backgroundColor === "rgb(247, 244, 240)"`,
+    `getComputedStyle(document.querySelector('${SOURCE_AREA} .monaco-editor-background')).backgroundColor === "rgb(247, 244, 240)"`,
     "Monaco in Source with the host background",
   );
   await selectViewer(MARKDOWN_VIEWER);
@@ -7447,7 +7526,11 @@ async function warmMinimalismTheme(): Promise<void> {
   await untilBackdrop(preview, PREVIEW_BACKDROP, darkCard, "the dark backdrop in Preview");
   await applyAppearanceInPlace({ theme: "default" });
   await untilBackdrop(preview, PREVIEW_BACKDROP, noCard, "no backdrop in Preview under Default");
-  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "preview")?.frameId, preview.frameId);
+  assert.equal(
+    (await untilViewerFrame(EXTENSION_IDS.markdown, "preview")).frameId,
+    preview.frameId,
+  );
+  await showChatTab();
   await untilWorkspace(
     (styles) =>
       !styles.marked &&
@@ -7461,12 +7544,17 @@ async function warmMinimalismTheme(): Promise<void> {
     async () => (await identity()).join() === "default,Default",
     "the Default theme id and title in the background frame",
   );
+  await activateWorkspaceTab(fileTab, "agw.file");
   await selectViewer(MIXED_VIEWER);
   const defaultMixed = await mixedShowing("true", "readme.md in Mixed under Default");
   await untilBackdrop(defaultMixed, MIXED_BACKDROP, noCard, "no backdrop in Mixed under Default");
   await applyAppearanceInPlace({ theme: WARM_THEME });
   await untilBackdrop(defaultMixed, MIXED_BACKDROP, darkCard, "the dark backdrop in Mixed");
-  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "markdown")?.frameId, defaultMixed.frameId);
+  assert.equal(
+    (await untilViewerFrame(EXTENSION_IDS.markdown, "markdown")).frameId,
+    defaultMixed.frameId,
+  );
+  await showChatTab();
   await untilWorkspace(
     (styles) =>
       styles.marked &&
@@ -7642,7 +7730,7 @@ function testImageDataUrl(): string {
   return nativeImage.createFromBitmap(bitmap, { width, height }).toDataURL();
 }
 
-const IMAGE_REPLY = `[...document.querySelectorAll(".agw-main-workspace .msg-content")].find((element) => element.textContent.includes("Echo: Image check"))`;
+const IMAGE_REPLY = `[...document.querySelectorAll('${ACTIVE_WORKSPACE} .msg-content')].find((element) => element.textContent.includes("Echo: Image check"))`;
 
 /** 图片预览中受主题影响的颜色。The image preview colors themes affect. */
 async function imagePreviewColors(): Promise<Record<string, string>> {
@@ -7720,14 +7808,11 @@ async function imagePreviewThemes(): Promise<void> {
     await session.dispose();
     return session.conversationId;`,
   );
-  await openMainView("agw.chat");
+  await showSidebarView("agw.conversations", "agw.ribbon.conversations");
   const conversation = `${CONVERSATION_ITEMS}.find((item) => item.textContent.includes("Image check"))`;
   await untilHost(`Boolean(${conversation})`, "the image conversation in the list");
   await evalHost(`${conversation}.click(); true`);
-  await untilHost(
-    `new URLSearchParams(location.search).get("conversationId") === ${JSON.stringify(conversationId)}`,
-    "the image conversation to open",
-  );
+  await waitForConversation(conversationId);
   const link = `${IMAGE_REPLY}?.querySelector('.agw-prose a[href="https://example.com/docs"]')`;
   const image = `${IMAGE_REPLY}?.querySelector('img[aria-label="Preview image: Pixel"]')`;
   await untilHost(
@@ -7968,7 +8053,7 @@ async function darkModeAndExtensionViews(): Promise<void> {
       )) === "#212121",
     "the dark Soft background in the open Mixed frame",
   );
-  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "markdown")?.frameId, mixed.frameId);
+  assert.equal((await untilViewerFrame(EXTENSION_IDS.markdown, "markdown")).frameId, mixed.frameId);
   assert.equal(await evalFrame<string>(mixed, "window.__themeMarker"), "kept");
   assert.deepEqual(await sampleStyle(), sampleBefore);
   await showSidebarView("agw.conversations", "agw.ribbon.conversations");
@@ -8393,7 +8478,7 @@ async function cssThemes(): Promise<void> {
   } finally {
     views.updateLayout = updateLayout;
   }
-  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "markdown")?.frameId, mixed.frameId);
+  assert.equal((await untilViewerFrame(EXTENSION_IDS.markdown, "markdown")).frameId, mixed.frameId);
   assert.equal(await evalFrame<string>(mixed, "window.__cssThemeMarker"), "kept");
   pass(
     "the WebContentsView follows position-only moves, size changes, CSS hiding, opacity, animations and :hover/:has() while the CSS theme is active, without updates while nothing changes",
@@ -8814,7 +8899,7 @@ async function excalidrawThemes(): Promise<void> {
     `${viewerTab(EXCALIDRAW_VIEWER)}?.getAttribute("aria-selected") === "true"`,
     "the Excalidraw tab",
   );
-  const editor = await untilFrame(EXTENSION_IDS.excalidraw, "fileViewer");
+  const editor = await untilViewerFrame(EXTENSION_IDS.excalidraw, "editor");
   await until(async () => (await evalFrame<number>(editor, DRAWN_PIXELS)) > 0, "the diagram");
   pressKey(editor, "r");
   const { width, height } = editor.view.getBounds();
@@ -9686,17 +9771,13 @@ async function mixedInteractions(): Promise<void> {
     "the discard confirmation for Reload view",
   );
   await answerConfirmation("Cancel");
-  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "markdown")?.frameId, mixed.frameId);
+  assert.equal((await untilViewerFrame(EXTENSION_IDS.markdown, "markdown")).frameId, mixed.frameId);
   assert.equal(await evalFrame<boolean>(mixed, `Boolean(${mixedBlock("Related:", "h3")})`), true);
   assert.equal(await evalHost<boolean>(unsavedIn(MIXED_VIEWER)), true);
   await chooseFileHeaderEntry("Reload view");
   await answerConfirmation("Discard");
-  const reloaded = await until(() => {
-    const frame = viewerFrameOf(EXTENSION_IDS.markdown, "markdown");
-    return frame && frame.frameId !== mixed.frameId && runtime().registry.get(frame.frameId)?.pageId
-      ? frame
-      : null;
-  }, "the reloaded Mixed viewer");
+  await until(() => !runtime().registry.get(mixed.frameId), "the old Mixed frame to close");
+  const reloaded = await untilViewerFrame(EXTENSION_IDS.markdown, "markdown");
   await until(
     async () =>
       (await evalHost<boolean>(savedIn(MIXED_VIEWER))) &&
@@ -9987,14 +10068,13 @@ async function conflictsAndRefresh(): Promise<void> {
 
   // 6：没有修改时切到 Chat 再回到文件视图，Source 显示磁盘上的新内容。Without changes, Chat and back to the File view
   // shows the new disk content in Source.
-  const fileViewShown = `document.querySelector('.agw-main-workspace')?.getAttribute('data-view-id') === "agw.file"`;
-  await openMainView("agw.chat");
-  await untilHost(`!(${fileViewShown})`, "the File view to hide");
+  const appTab = await selectedWorkspaceTab("agw.file", workspaceTabWithTitle("app.ts"));
+  await showChatTab();
   const refreshed = `${reloadedText}// refreshed\n`;
   await writeFile(appPath, refreshed);
-  await openMainView("agw.file");
+  await activateWorkspaceTab(appTab, "agw.file");
   await untilHost(
-    `${fileViewShown} && ${saveStatusIs("saved")} && (${SOURCE_TEXT}) === ${JSON.stringify(refreshed)}`,
+    `${saveStatusIs("saved")} && (${SOURCE_TEXT}) === ${JSON.stringify(refreshed)}`,
     "the refreshed content",
   );
   pass("showing unchanged Source again reads the new content from disk");
@@ -10005,40 +10085,42 @@ async function conflictsAndRefresh(): Promise<void> {
   moveSourceCursor("end");
   await typeInSource("// kept");
   await untilHost(SOURCE_UNSAVED, "the unsaved status");
-  await openMainView("agw.chat");
-  await untilHost(`!(${fileViewShown})`, "the File view to hide");
+  await showChatTab();
   const changedAgain = `${refreshed}// changed again\n`;
   await writeFile(appPath, changedAgain);
-  await openMainView("agw.file");
-  await untilHost(`${fileViewShown} && ${SOURCE_FOCUSED}`, "Source shown again");
+  await activateWorkspaceTab(appTab, "agw.file");
+  await untilHost(SOURCE_FOCUSED, "Source shown again");
   await delay(500);
   assert.equal(await evalHost<boolean>(SOURCE_UNSAVED), true);
   assert.equal(await evalHost<string>(SOURCE_TEXT), `${refreshed}// kept`);
   pass("showing Source again with unsaved changes keeps them and does not read the file");
 
-  // 8：有未保存修改时切换文件，确认窗口列出 "app.ts · Source"；Cancel 保留，Discard 切换。Switching files with unsaved
-  // changes lists "app.ts · Source" in the confirmation; Cancel keeps them and Discard switches.
-  await clickFileInTree("config.json");
+  const configTab = await openFileInTree("config.json");
+  assert.equal(noConfirmation(), true);
+  await activateWorkspaceTab(appTab, "agw.file");
+  await closeWorkspaceTab(appTab);
   await expectConfirmation(
     "discard-unsaved",
     ["Discard unsaved changes?", "app.ts", "· Source"],
-    "the discard confirmation for another file",
+    "the discard confirmation before closing the Source tab",
   );
   await answerConfirmation("Cancel");
   assert.equal(await evalHost<boolean>(shownFileIs("app.ts")), true);
   assert.equal(await evalHost<boolean>(SOURCE_UNSAVED), true);
-  await clickFileInTree("config.json");
+  await closeWorkspaceTab(appTab);
   await expectConfirmation(
     "discard-unsaved",
     ["app.ts", "· Source"],
-    "the discard confirmation for another file",
+    "the discard confirmation before closing the Source tab",
   );
   await answerConfirmation("Discard");
+  await untilHost(`!document.querySelector('${workspaceTab(appTab)}')`, "app.ts to close");
+  await selectedWorkspaceTab("agw.file", `document.querySelector('${workspaceTab(configTab)}')`);
   await untilHost(shownFileIs("config.json"), "config.json in the File view");
   await sourceShowing(sourceIncludes('"port": 8080'), "config.json in Source");
   assert.equal(await readFile(appPath, "utf8"), changedAgain);
   pass(
-    "switching files with unsaved Source changes asks first: Cancel keeps them and Discard opens the other file",
+    "switching files keeps unsaved Source changes and closing the edited tab offers Cancel and Discard",
   );
 }
 
@@ -10503,6 +10585,355 @@ async function viewReloads(): Promise<void> {
   pass("reloading a view page releases the old page's sessions and watchers");
 }
 
+type WorkspaceTabsFixture = {
+  firstFile: string;
+  secondFile: string;
+  chatTab: string;
+  conversationId: string;
+  secondProject: string;
+};
+
+const WORKSPACE_TAB_IDS = `[...document.querySelectorAll('${WORKSPACE_TABS} [role="tab"]')].map((tab) => tab.dataset.tabId)`;
+
+function projectTabLink(projectId: string): string {
+  return `[...document.querySelectorAll('[aria-label="Open projects"] .agw-project-tab a')].find((link) => new URL(link.href).searchParams.get("projectId") === ${JSON.stringify(projectId)})`;
+}
+
+async function untilWorkspaceProject(projectId: string): Promise<void> {
+  await untilHost(
+    `new URLSearchParams(location.search).get("projectId") === ${JSON.stringify(projectId)} && Boolean((${projectTabLink(projectId)})?.closest(".agw-project-tab.is-active"))`,
+    `project ${projectId} to become active`,
+  );
+}
+
+async function storedWorkspaceTabs() {
+  const file = await readJson<WorkspaceTabsFileContent>(
+    join(config.userData, "workspace-tabs.json"),
+  );
+  return file.servers[config.remoteProfile.id]?.[config.projectId];
+}
+
+async function workspaceTabs(): Promise<WorkspaceTabsFixture> {
+  await goToChat();
+  const repository = join(config.userData, "..", "workspace-tabs-repository");
+  await mkdir(repository, { recursive: true });
+  const git = (...args: string[]) =>
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Agw Tests",
+        "-c",
+        "user.email=tests@agw.local",
+        "-c",
+        "commit.gpgsign=false",
+        ...args,
+      ],
+      { cwd: repository, stdio: "pipe" },
+    );
+  git("init", "-b", "trunk");
+  await writeFile(join(repository, "repository-alpha.txt"), "Alpha repository file.\n");
+  await writeFile(join(repository, "repository-beta.txt"), "Beta repository file.\n");
+  git("add", ".");
+  git("commit", "-m", "Add workspace tab fixtures");
+  git("branch", "tab-fixture");
+
+  await clickHost('button[aria-label="Open project"]');
+  await clickHost('button[aria-label="Create project"]');
+  await setInput("#desktop-project-name", "Workspace tabs repository");
+  await setInput("#desktop-project-workspace", repository);
+  await clickHost('form[aria-label="Create project"] button[type="submit"]');
+  const newProject = `(() => {
+    const id = new URLSearchParams(location.search).get("projectId");
+    return id === ${JSON.stringify(config.projectId)} ? null : id;
+  })()`;
+  const secondProject = await until(
+    () => evalHost<string | null>(newProject),
+    "the repository fixture project to open",
+  );
+  await untilWorkspaceProject(secondProject);
+  await untilHost(
+    `Boolean(document.querySelector('${COMPOSER}')) && !document.querySelector('${WORKSPACE_TABS}')`,
+    "the initial conversation composer without a tab strip",
+  );
+  await clickHostElement(projectTabLink(config.projectId));
+  await untilWorkspaceProject(config.projectId);
+
+  const previewOf = (id: string) =>
+    `document.querySelector('${workspaceTab(id)}')?.classList.contains('is-preview')`;
+  const firstPreview = await openFileInTree("tabs-alpha.md");
+  assert.equal(await evalHost<boolean>(previewOf(firstPreview)), true);
+  const secondFile = await openFileInTree("tabs-beta.md");
+  await untilHost(
+    `!document.querySelector('${workspaceTab(firstPreview)}')`,
+    "the first preview to close",
+  );
+  assert.equal(await evalHost<boolean>(previewOf(secondFile)), true);
+  assert.equal(await openFileInTree("tabs-beta.md", true), secondFile);
+  await untilHost(`!${previewOf(secondFile)}`, "the second Markdown tab to pin");
+  const secondFrame = await mixedShowing(
+    `Boolean(${mixedBlock("Body beta.", "p")})`,
+    "the beta Markdown page",
+  );
+
+  const firstFile = await openFileInTree("tabs-alpha.md", true);
+  assert.notEqual(firstFile, firstPreview);
+  await untilHost(`!${previewOf(firstFile)}`, "the first Markdown tab to pin");
+  const firstFrame = await mixedShowing(
+    `Boolean(${mixedBlock("Body alpha.", "p")})`,
+    "the alpha Markdown page",
+  );
+
+  const thirdFile = await openFileInTree("tabs-gamma.md");
+  assert.equal(await evalHost<boolean>(previewOf(thirdFile)), true);
+  const thirdFrame = await mixedShowing(
+    `Boolean(${mixedBlock("Body gamma.", "p")})`,
+    "the gamma Markdown page",
+  );
+  const markdownFrames = [firstFrame, secondFrame, thirdFrame];
+  assert.equal(new Set(markdownFrames.map(({ frameId }) => frameId)).size, 3);
+  assert.ok(markdownFrames.every(({ frameId }) => runtime().registry.get(frameId)?.pageId));
+  const tabOrder = await evalHost<string[]>(WORKSPACE_TAB_IDS);
+  assert.ok([firstFile, secondFile, thirdFile].every((id) => tabOrder.includes(id)));
+
+  await placeCaret(thirdFrame, mixedBlock("Body gamma.", "p"));
+  await typeIn(thirdFrame, " Unsaved workspace edit.");
+  const dirty = `document.querySelector('${workspaceTab(thirdFile)}')?.getAttribute('aria-description') === 'Unsaved changes'`;
+  await untilHost(
+    `${dirty} && !${previewOf(thirdFile)}`,
+    "the edited Markdown tab to pin and show unsaved changes",
+  );
+  await closeWorkspaceTab(thirdFile);
+  await expectConfirmation(
+    "discard-unsaved",
+    ["tabs-gamma.md", "Markdown"],
+    "closing the edited Markdown tab",
+  );
+  await answerConfirmation("Cancel");
+
+  await clickHostElement(projectTabLink(secondProject));
+  await untilWorkspaceProject(secondProject);
+  await untilHost(`Boolean(document.querySelector('${ACTIVE_DRAFT}'))`, "the default draft panel");
+  assert.equal(noConfirmation(), true);
+  assert.ok((await evalHost<string[]>(WORKSPACE_TAB_IDS)).every((id) => !tabOrder.includes(id)));
+
+  const bareSidebar = `${EXTENSION_IDS.bareRepository}:repositories`;
+  await showSidebarView(bareSidebar);
+  const sidebar = await untilFrame(EXTENSION_IDS.bareRepository, "sidebarView");
+  const branchTrigger = `document.querySelector('button[aria-label="Branch"]')`;
+  await until(
+    () => evalFrame<boolean>(sidebar, `Boolean(${branchTrigger})`),
+    "the Bare Repository branch picker",
+  );
+  await evalFrame(
+    sidebar,
+    `${branchTrigger}.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" })); true`,
+  );
+  const branch = `[...document.querySelectorAll('[role="option"]')].find((option) => option.textContent === "tab-fixture")`;
+  await until(
+    () => evalFrame<boolean>(sidebar, `Boolean(${branch})`),
+    "the unchecked-out branch option",
+  );
+  await evalFrame(
+    sidebar,
+    `(${branch}).focus(); (${branch}).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); true`,
+  );
+  await until(
+    () =>
+      evalFrame<boolean>(
+        sidebar,
+        `${branchTrigger}?.textContent === "tab-fixture" && document.querySelector('.location')?.textContent.includes('Read-only')`,
+      ),
+    "the unchecked-out repository branch",
+  );
+  const repositoryView = `${EXTENSION_IDS.bareRepository}:file`;
+  const alpha = `document.querySelector('.tree-item[data-path="repository-alpha.txt"]')`;
+  await clickInFrame(sidebar, alpha);
+  const alphaTab = await selectedWorkspaceTab(
+    repositoryView,
+    workspaceTabWithTitle("repository-alpha.txt"),
+  );
+  await evalFrame(
+    sidebar,
+    `${alpha}.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 })); true`,
+  );
+  await untilHost(`!${previewOf(alphaTab)}`, "the first repository file tab to pin");
+  const alphaFrame = await untilViewerFrame(EXTENSION_IDS.bareRepository, "file");
+  await clickInFrame(
+    sidebar,
+    `document.querySelector('.tree-item[data-path="repository-beta.txt"]')`,
+  );
+  const betaTab = await selectedWorkspaceTab(
+    repositoryView,
+    workspaceTabWithTitle("repository-beta.txt"),
+  );
+  const betaFrame = await untilViewerFrame(EXTENSION_IDS.bareRepository, "file");
+  assert.notEqual(alphaTab, betaTab);
+  assert.notEqual(alphaFrame.frameId, betaFrame.frameId);
+  assert.ok(runtime().registry.get(alphaFrame.frameId)?.pageId);
+
+  await clickHostElement(projectTabLink(config.projectId));
+  await untilWorkspaceProject(config.projectId);
+  assert.equal(await selectedWorkspaceTab("agw.file"), thirdFile);
+  assert.deepEqual(await evalHost<string[]>(WORKSPACE_TAB_IDS), tabOrder);
+  assert.equal(await evalHost<boolean>(dirty), true);
+  const retained = await mixedShowing(
+    `Boolean(${mixedBlock("Unsaved workspace edit.", "p")})`,
+    "the retained Markdown edit",
+  );
+  assert.equal(retained.frameId, thirdFrame.frameId);
+  await placeCaret(retained, mixedBlock("Unsaved workspace edit.", "p"));
+  await until(
+    () =>
+      evalFrame<boolean>(
+        retained,
+        'document.activeElement?.classList.contains("ProseMirror") && document.hasFocus()',
+      ),
+    "the Markdown editor to have focus",
+  );
+  pressKey(retained, "w", [MOD]);
+  await expectConfirmation(
+    "discard-unsaved",
+    ["tabs-gamma.md"],
+    "the Mod+W confirmation from Markdown",
+  );
+  await answerConfirmation("Discard");
+  await untilHost(
+    `!document.querySelector('${workspaceTab(thirdFile)}')`,
+    "Mod+W to close the Markdown tab",
+  );
+  assert.match(
+    await readFile(projectPath("tabs-gamma.md"), "utf8"),
+    /^# Tabs gamma\n\nBody gamma\.\n$/u,
+  );
+
+  const chatTab = await openNewConversation();
+  const tabStyles = await evalHost<{ height: number; cursors: string[] }[]>(
+    `[...document.querySelectorAll('${WORKSPACE_TABS} .agw-workspace-tab')].map((tab) => ({
+      height: tab.getBoundingClientRect().height,
+      cursors: [tab, ...tab.querySelectorAll('button')].map((element) => getComputedStyle(element).cursor),
+    }))`,
+  );
+  assert.ok(tabStyles.length >= 2);
+  for (const { height, cursors } of tabStyles) {
+    assert.equal(height, 32);
+    assert.deepEqual(cursors, ["pointer", "pointer", "pointer"]);
+  }
+  const message = "workspace tab first message";
+  await selectHostTarget("Echo");
+  await setInput(COMPOSER, message);
+  await untilHost(
+    `document.querySelector('${SEND_BUTTON}')?.disabled === false`,
+    "the first message to be ready",
+  );
+  await evalHost(
+    `document.querySelector('${SEND_BUTTON}').click(); (${projectTabLink(secondProject)}).click(); true`,
+  );
+  await untilWorkspaceProject(secondProject);
+  await selectedWorkspaceTab(repositoryView, workspaceTabWithTitle("repository-beta.txt"));
+  await clickHostElement(projectTabLink(config.projectId));
+  await untilWorkspaceProject(config.projectId);
+  await selectedWorkspaceTab("agw.chat", `document.querySelector('${workspaceTab(chatTab)}')`);
+  const conversationId = await until(
+    () => evalHost<string | null>(ACTIVE_CONVERSATION_ID),
+    "the draft to become a conversation",
+  );
+  await untilHost(
+    `document.querySelector('${ACTIVE_WORKSPACE}')?.textContent.includes(${JSON.stringify(`Echo: ${message}`)})`,
+    "the reply in the restored conversation tab",
+  );
+  await untilHost(
+    `Array.from(document.querySelectorAll('${ACTIVE_WORKSPACE} .agw-msg-user')).some((item) => item.textContent.includes(${JSON.stringify(message)}))`,
+    "the user's first message in the restored conversation tab",
+  );
+  await until(async () => {
+    const tab = (await storedWorkspaceTabs())?.tabs.find((item) => item.id === chatTab);
+    return (
+      tab?.kind === "chat" &&
+      tab.conversationId === conversationId &&
+      tab.draftId === conversationId &&
+      !tab.draftSubmitted
+    );
+  }, "the same tab and draft id committed as the accepted conversation");
+  await untilHost(
+    `${CONVERSATION_ITEMS}.filter((item) => item.textContent.includes(${JSON.stringify(message)})).length === 1`,
+    "one row for the accepted conversation",
+  );
+  assert.deepEqual(
+    (await listConversations())
+      .filter((item) => item.title === message)
+      .map((item) => item.conversationId),
+    [conversationId],
+  );
+  assert.equal(
+    await evalHost<boolean>('new URLSearchParams(location.search).has("conversationId")'),
+    false,
+  );
+  await activateWorkspaceTab(secondFile, "agw.file");
+  pass(
+    "workspace tabs replace previews, keep independent editors and project state, confirm closure and retain the first conversation",
+  );
+  return { firstFile, secondFile, chatTab, conversationId, secondProject };
+}
+
+async function workspaceTabsRestore(fixture: WorkspaceTabsFixture): Promise<void> {
+  const tabOrder = await evalHost<string[]>(WORKSPACE_TAB_IDS);
+  await until(async () => {
+    const group = await storedWorkspaceTabs();
+    return (
+      group?.activeTabId === fixture.secondFile &&
+      isDeepStrictEqual(
+        group.tabs.map((tab) => tab.id),
+        tabOrder,
+      )
+    );
+  }, "workspace-tabs.json to contain the tab order and active file");
+  const oldHost = runtime().registry.hostInstanceId;
+  host().reload();
+  await until(
+    () => runtime().registry.hostInstanceId && runtime().registry.hostInstanceId !== oldHost,
+    "the renderer to reload",
+    60_000,
+  );
+  await selectedWorkspaceTab(
+    "agw.file",
+    `document.querySelector('${workspaceTab(fixture.secondFile)}')`,
+  );
+  const active = await mixedShowing(
+    `Boolean(${mixedBlock("Body beta.", "p")})`,
+    "the restored active Markdown page",
+  );
+  assert.deepEqual(await evalHost<string[]>(WORKSPACE_TAB_IDS), tabOrder);
+  const panels = `[...document.querySelectorAll('.agw-main-workspace [data-workspace-tab-panel]')].filter((panel) => panel.childElementCount > 0).map((panel) => panel.dataset.workspaceTabPanel)`;
+  assert.deepEqual(await evalHost<string[]>(panels), [fixture.secondFile]);
+  await activateWorkspaceTab(fixture.firstFile, "agw.file");
+  const lazy = await mixedShowing(
+    `Boolean(${mixedBlock("Body alpha.", "p")})`,
+    "the inactive Markdown page to load on selection",
+  );
+  assert.notEqual(lazy.frameId, active.frameId);
+  assert.ok(runtime().registry.get(active.frameId)?.pageId);
+  await activateWorkspaceTab(fixture.chatTab, "agw.chat");
+  await waitForConversation(fixture.conversationId);
+  await untilHost(
+    `document.querySelector('${ACTIVE_WORKSPACE}')?.textContent.includes("Echo: workspace tab first message")`,
+    "the restored chat history",
+  );
+  pass("renderer reload restores workspace tabs and loads other pages on activation");
+
+  for (const id of [fixture.firstFile, fixture.secondFile, fixture.chatTab]) {
+    await closeWorkspaceTab(id);
+    await untilHost(`!document.querySelector('${workspaceTab(id)}')`, `fixture tab ${id} to close`);
+  }
+  await hostSend(
+    "DELETE",
+    `/api/projects/${config.projectId}/conversations/${fixture.conversationId}`,
+  );
+  await clickHost(`button[aria-label="Close ${fixture.secondProject}"]`);
+  await hostSend("DELETE", `/api/projects/${fixture.secondProject}`);
+  await showSidebarView("agw.conversations", "agw.ribbon.conversations");
+}
+
 async function hostReloads(): Promise<void> {
   for (const trigger of ["tray", "crash"] as const) {
     await goToChat();
@@ -10927,8 +11358,7 @@ async function serverExtensionLifecycle(): Promise<void> {
 
 async function serverExtensionContextSwitchRace(): Promise<void> {
   const { id, releaseHashV1, releaseHashV2, versionV1 } = config.serverExtension;
-  const dirtyFrame = viewerFrameOf(id, "viewer");
-  assert.ok(dirtyFrame);
+  const dirtyFrame = await untilViewerFrame(id, "viewer");
   const dirtyFrameRegistration = runtime().registry.get(dirtyFrame.frameId);
   assert.ok(dirtyFrameRegistration);
   assert.equal(dirtyFrameRegistration.releaseHash, releaseHashV1);
@@ -10986,7 +11416,7 @@ async function serverExtensionContextSwitchRace(): Promise<void> {
   assert.equal(await api<string>(dirtyFrame, "return api.manifest.version;"), versionV1);
   assert.equal(await evalFrame<string | null>(dirtyFrame, "window.loadedFile"), "readme.md");
   await untilHost(
-    `!document.querySelector(${JSON.stringify(`[data-file-viewer-tab="${fileViewerId}"]`)})`,
+    `!${viewerTab(fileViewerId)}`,
     "the unavailable Server file viewer contribution to be withdrawn",
   );
   await untilHost(
@@ -11207,6 +11637,8 @@ async function run(): Promise<void> {
   await beforeEnabling();
   await textCodecBridge();
   await bundledDefaults();
+  const workspaceTabsFixture = await workspaceTabs();
+  await workspaceTabsRestore(workspaceTabsFixture);
   await bareRepositoryWorkflow();
   await enableSample();
   await processIsolation();

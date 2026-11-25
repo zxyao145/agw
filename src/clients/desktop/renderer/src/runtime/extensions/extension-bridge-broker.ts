@@ -7,10 +7,16 @@ import {
   validateChatEventFilter,
 } from "@agw/execution-core";
 import { getProjectDirectories } from "@agw/projects-core";
+import {
+  isWorkspaceJsonValue,
+  MAX_EXTENSION_PARAMS_BYTES,
+  workspaceOpenOptions,
+} from "@agw/extension-sdk/workspace-params";
 import type {
   AgwDesktopBridge,
   ExtensionCaller,
   ExtensionIpcResult,
+  JsonValue,
   ServerExtensionOrigin,
   ThemeStyleText,
 } from "@desktop/shared/contracts";
@@ -28,6 +34,7 @@ import {
   type FileHeaderMenuEntry,
   fromExtensionErrorData,
   type HostContext,
+  type OpenFileOptions,
   type PreviewImageType,
   RpcEndpoint,
   type RpcPort,
@@ -142,7 +149,12 @@ export type ExtensionBridgeBrokerOptions = {
   ): void;
   onPong(frameId: string, pageId: string): void;
   /** 在 Files 中打开当前 Project 的云端文件。Opens a cloud file of the current Project in the Files view. */
-  openFile(extensionId: string, uri: string): Promise<void>;
+  openFile(
+    extensionId: string,
+    uri: string,
+    options: OpenFileOptions,
+    checkCaller: () => void,
+  ): Promise<void>;
   setUnsavedChanges(frameId: string, pageId: string, unsaved: boolean): void;
   /** 文件查看器的文档会话报告保存状态。A file viewer's document session reports its save status. */
   setSaveStatus(frameId: string, pageId: string, status: DocumentSaveStatus | null): void;
@@ -188,6 +200,15 @@ function unwrap<T>(result: ExtensionIpcResult<T>): T {
 
 function invalidArgument(message: string): Error {
   return createExtensionError("ERR_INVALID_ARGUMENT", message);
+}
+
+export function workspaceViewParams(value: unknown): JsonValue {
+  if (
+    !isWorkspaceJsonValue(value) ||
+    new TextEncoder().encode(JSON.stringify(value)).byteLength > MAX_EXTENSION_PARAMS_BYTES
+  )
+    throw invalidArgument("params must be a JSON value of at most 64 KiB serialized.");
+  return value;
 }
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
@@ -968,13 +989,34 @@ export class ExtensionBridgeBroker {
         layout.setSidebarVisible(Boolean(params.visible));
         return null;
       },
-      "workspace.openMainView": (connection, params: { id: string; params?: unknown }) => {
-        layout.openMainView(resolveViewId(connection.instanceId, params.id), params.params ?? {});
+      "workspace.openMainView": async (
+        connection,
+        params: { id: string; params?: unknown; options?: unknown },
+      ) => {
+        const options = workspaceOpenOptions("options" in params ? params.options : {}, "view");
+        const value = "params" in params ? params.params : {};
+        await layout.openMainView(
+          resolveViewId(connection.instanceId, params.id),
+          workspaceViewParams(value),
+          options,
+        );
         return null;
       },
-      "workspace.openFile": async (connection, params: { uri: string }) => {
+      "workspace.openFile": async (connection, params: { uri: string; options?: unknown }) => {
         this.requireServerContext(connection);
-        await this.options.openFile(connection.instanceId, params.uri);
+        await this.options.openFile(
+          connection.instanceId,
+          params.uri,
+          workspaceOpenOptions("options" in params ? params.options : {}, "file"),
+          () => {
+            if (
+              this.connections.get(connection.frameId) !== connection ||
+              this.options.isFrameClosing(connection.frameId)
+            )
+              throw frameClosing();
+            this.requireServerContext(connection);
+          },
+        );
         return null;
       },
       "workspace.setUnsavedChanges": (connection, params: { unsaved: boolean }) => {
