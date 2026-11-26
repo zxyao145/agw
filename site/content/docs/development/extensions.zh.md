@@ -343,6 +343,8 @@ public sealed class BuiltInPluginCatalog : IPluginCatalog
 - **Server 扩展（`Agw.Extensions.Sdk`）**：实现 `IServerExtension`，注册 HTTP 接口、Skills（`IExtensionRegistration.RegisterSkill`）、Tools（`IExtensionTool`）、事件处理器、通知渠道，以及源码生成的 `JsonSerializerContext` 元数据（`RegisterJsonContext`）。拥有独立业务表的扩展引用 `Agw.Extensions.Sdk.EntityFrameworkCore`，注册按 generation 隔离迁移锁与事务锁的 `ExtensionDbContext`。
 - **Desktop 扩展（`@agw/extension-sdk`）**：编写运行在 Desktop `ExtensionHost` 独立 `WebContentsView` 会话中的视图（`defineView`）、后台脚本（`defineBackground`）、文件查看器（`fileViewers`）以及 JSON 或 CSS 主题（`themes`）。Server/Desktop 组合扩展把 Desktop 资源放在 Server 扩展目录的 `desktop/` 子目录中。
 
+完整的清单格式、代码示例、数据库迁移与调试步骤见[开发 Server 与 Desktop 扩展]({{< relref "/docs/development/extension-sdk" >}})。
+
 ## 验证
 
 至少覆盖成功调用、非法参数、权限不足、外来 Connection 和未就绪 Connection。保持编译期诊断有效。测试使用真实实现，不使用 mock 或 fake 实现；依赖真实账号或外部 CLI 的测试需要显式开启，不放进默认测试套件。

@@ -11,5 +11,5 @@ Each guide explains one part of AGW and can be read on its own. If you do not ye
 
 - Conversations: start with [model providers]({{< relref "/docs/guides/providers" >}}), [agents]({{< relref "/docs/guides/agents" >}}), and [Chat]({{< relref "/docs/guides/chat" >}}).
 - Project material: set a [workspace]({{< relref "/docs/guides/projects" >}}), then add [tools and Skills]({{< relref "/docs/guides/tools-skills" >}}).
-- External capabilities: choose [external agents]({{< relref "/docs/guides/external-agents" >}}), [MCP]({{< relref "/docs/guides/mcp" >}}), or [integration accounts]({{< relref "/docs/guides/integrations" >}}).
+- External capabilities: choose [external agents]({{< relref "/docs/guides/external-agents" >}}) (including ACP and A2A), [MCP]({{< relref "/docs/guides/mcp" >}}), [integration accounts]({{< relref "/docs/guides/integrations" >}}), or [extensions]({{< relref "/docs/guides/extensions" >}}).
 - Automation: verify the task, organize steps with an [Agentflow]({{< relref "/docs/guides/agentflows" >}}), schedule with a [Job]({{< relref "/docs/guides/jobs" >}}), and route triggers or notices in [Events and Notifications]({{< relref "/docs/guides/events" >}}).
