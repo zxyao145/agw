@@ -2,7 +2,7 @@
 title: "Memory: preferences and project knowledge"
 description: "Save personal preferences and project knowledge, and choose where project memory lives."
 weight: 30
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/features/memory
 ---
 
@@ -15,7 +15,7 @@ A conversation may end while working preferences and project knowledge remain us
 | User Memory | Personal preferences, writing conventions, lasting background | The current user, across Projects |
 | Project Memory | Project conventions, decisions, working notes | The project’s working context |
 
-Configure the appropriate Memory capability on an Agent or Project, then ask the agent to save information and check or update it in later conversations. Memory needs deliberate maintenance; it does not automatically retain and inject every chat message forever. User Memory is isolated by user. Project Memory scope also depends on the project and storage choice; filesystem memory is shared when workspaces are shared. External agents (Claude Code, Codex, Pi) only receive existing User Memory entries (up to 50) as read-only context. They get no memory tools, so they cannot save or update memory, and Project Memory configured on the Agent or Project does not apply to them.
+Configure the appropriate Memory capability on an Agent or Project, then ask the agent to save information and check or update it in later conversations. Memory needs deliberate maintenance; it does not automatically retain and inject every chat message forever. User Memory is isolated by user. Project Memory scope also depends on the project and storage choice; filesystem memory is shared when workspaces are shared. External agents (Claude Code, Codex, Pi, and ACP) only receive existing User Memory entries (up to 50) as read-only context. They get no memory tools, so they cannot save or update memory, and Project Memory configured on the Agent or Project does not apply to them.
 
 ![AGW Desktop: configure User Memory, Project Memory, and Background Agents as tool capabilities.](/images/screenshots/tool-blocks.png)
 {caption="AGW Desktop: configure User Memory, Project Memory, and Background Agents as tool capabilities."}

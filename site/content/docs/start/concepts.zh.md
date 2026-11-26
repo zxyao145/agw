@@ -2,7 +2,7 @@
 title: "核心概念"
 description: "理解模型、Agent、Project、会话、工具、Agentflow 与 Job 如何配合。"
 weight: 15
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/start/concepts
 ---
 
@@ -25,7 +25,7 @@ translationKey: docs/start/concepts
 Agent 定义任务由谁完成、遵循什么指令，以及可以使用哪些能力。
 
 - **自定义 Agent**：在 AGW 中配置模型、指令、工具和 Skills，由 AGW 运行。
-- **外部 Agent**：接入 Claude Code、Codex、Pi 等 CLI，使用执行节点上已安装并配置好的工具环境。
+- **外部 Agent**：接入 Claude Code、Codex、Pi 等 CLI，或使用执行节点上已安装并配置好的 ACP Agent。
 
 Agent 定义可以用于多次任务；一次执行则是它处理某次输入的过程。例如，“代码解释助手”是 Agent，“解释这个函数”是一次输入。参见[创建自定义 Agent]({{< relref "/docs/guides/agents" >}})与[接入外部 Agent]({{< relref "/docs/guides/external-agents" >}})。
 

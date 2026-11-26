@@ -2,7 +2,7 @@
 title: "Control/Data Plane 分离部署"
 description: "共享 PostgreSQL、密钥和工作目录，按角色路由请求。"
 weight: 20
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/operations/split
 ---
 
@@ -18,7 +18,7 @@ translationKey: docs/operations/split
 | Data Plane | SignalR Execution、A2A、Distributed 执行 Worker |
 | Standalone | 合并两种职责，适合单机 |
 
-分离部署使用 Distributed 执行模式。在这种模式下，Chat 中直接运行 External Agent（Claude Code、Codex、Pi）的回合会报错 “Distributed execution currently supports System Agents only.”；需要直接使用这些外部 Agent 时，应选择 InProcess 执行的 Standalone。
+Control/Data Plane 部署使用 Distributed 执行模式。Claude Code、Codex 和 Pi 在 Chat 中直接运行时需要 InProcess。ACP Agent 也支持 Distributed，但需要使用 FullAccess，并让各 Data Plane 副本在同一路径挂载 ACP Agent 的会话目录。详见[接入外部 Agent]({{< relref "/docs/guides/external-agents" >}})和[ACP 部署配置](https://github.com/zxyao145/agw/blob/main/docs/4.Deployment.md)。
 
 分离部署要求两端使用 PostgreSQL 数据库、Distributed 执行和 PostgreSQL 锁。不能使用 SQLite 或内存锁替代跨节点协调。
 

@@ -2,7 +2,7 @@
 title: "配置 Integrations"
 description: "连接自己的外部服务账号，并授权 Agent 使用。"
 weight: 100
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/guides/integrations
 ---
 
@@ -35,7 +35,7 @@ Alias 创建后不可修改，并在当前用户内唯一；只能使用小写�
 
 ## 当前限制
 
-没有远程 Plugin Marketplace 的下载、签名或升级机制；不执行第三方 Plugin Skill 自带脚本；Connection 不注入任何 External Agent（Claude Code、Codex、Pi）。连接变化不应被理解为实时改写已创建的工具列表，修改后使用新回合验证。
+没有远程 Plugin Marketplace 的下载、签名或升级机制；不执行第三方 Plugin Skill 自带脚本；Connection 不注入任何 External Agent（Claude Code、Codex、Pi、ACP）。连接变化不应被理解为实时改写已创建的工具列表，修改后使用新回合验证。
 
 ## 实现与参考
 

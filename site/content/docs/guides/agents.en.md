@@ -2,13 +2,13 @@
 title: "Create a custom agent"
 description: "Define an agent with a model, instructions, and the capabilities it needs."
 weight: 20
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/guides/agents
 ---
 
 An agent is a reusable assistant configuration. Its model interprets requests, its instructions define the task, and its tools determine which operations it can perform. For example, create separate agents for explaining code and reviewing documentation, then select one in Chat.
 
-Start with a working [Model Provider]({{< relref "/docs/guides/providers" >}}). This page covers custom agents run by AGW; see [External agents]({{< relref "/docs/guides/external-agents" >}}) for Claude Code, Codex, and Pi.
+Start with a working [Model Provider]({{< relref "/docs/guides/providers" >}}). This page covers custom agents run by AGW; see [External agents]({{< relref "/docs/guides/external-agents" >}}) for Claude Code, Codex, Pi, and ACP.
 
 ## Create an agent
 

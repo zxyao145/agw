@@ -2,7 +2,7 @@
 title: "Configure integrations"
 description: "Create your own Connection from an available integration and bind it to an agent."
 weight: 100
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/guides/integrations
 ---
 
@@ -35,7 +35,7 @@ Installation setup and Connections belong to the current user. Setup changes inv
 
 ## Current limits
 
-Remote Plugin Marketplace download, signing, and upgrades are unavailable. Third-party Plugin Skill scripts are not executed. Connections are not injected into any external agent (Claude Code, Codex, or Pi). Connection changes do not imply live mutation of an existing tool list; verify changes in a new turn.
+Remote Plugin Marketplace download, signing, and upgrades are unavailable. Third-party Plugin Skill scripts are not executed. Connections are not injected into any external agent (Claude Code, Codex, Pi, or ACP). Connection changes do not imply live mutation of an existing tool list; verify changes in a new turn.
 
 ## Implementation and references
 

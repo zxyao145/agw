@@ -8,7 +8,7 @@
 Agw is a self-hosted backend engineering agent hub for individuals and small R&D teams, as well as an AaaS (Agent as a Service) platform and agent gateway. It lets users work with multiple agents from a single UI:
 
 - Create custom agents
-- Integrate external agents: Claude Code, Codex, and Pi
+- Integrate external agents: Claude Code, Codex, Pi, and ACP agents
 
 Agw also provides Jobs and Agent Workflow (Agentflow) capabilities for creating scheduled and recurring tasks and orchestrating agents.
 
@@ -20,7 +20,7 @@ This project is primarily built on [MAF](https://github.com/microsoft/agent-fram
 ## Features
 
 - **Custom agents:** Combine a model, instructions, Tools, MCP tool servers, Skills, and Integration connections. A Response Schema makes the final reply a JSON object, and the Mode ToolBlock adds Plan and Execute modes.
-- **External agents:** Run Claude Code, Codex, or Pi, optionally through a Model Provider configured in Agw.
+- **External agents:** Run Claude Code, Codex, Pi, or an ACP agent. Claude Code, Codex, and Pi can optionally use a Model Provider configured in Agw.
 - **Chat and Projects:** Conversations belong to Projects. Chat accepts images, lets you switch agents within one conversation, asks for tool approval according to the permission mode, and queues new input while a turn is running. The Files view browses the Project Workspace, shows Git changes, and sends line comments back to the agent.
 - **Agentflows:** Connect Agents, nested Agentflows, Human Gates, and concurrent, handoff, group-chat, and Magentic blocks into an executable graph with checkpoints.
 - **Jobs:** Schedule Agent and Agentflow runs with Events Timer sources; Events handles delivery retries and per-attempt history.
@@ -84,7 +84,7 @@ Agw can serve as an agent control plane for Cloud Desktop environments, allowing
   docker run -d --name agw -p 127.0.0.1:30816:8080 -v agw-data:/data ghcr.io/zxyao145/agw:latest
   ```
 
-  The image does not include Claude Code, Codex, or Pi; install and configure them in the container when needed. [`deploy/compose.yaml`](deploy/compose.yaml) is a Compose example for use behind a reverse proxy.
+  The image does not include external agents such as Claude Code, Codex, Pi, or ACP registry agents; install and configure them in the container when needed. [`deploy/compose.yaml`](deploy/compose.yaml) is a Compose example for use behind a reverse proxy.
 - **Portable Server:** Build it with `publish.sh` (see [Publishing](#publishing)), then run `agw-server serve` (`agw-server.exe serve` on Windows). It listens on `http://127.0.0.1:30816` unless `ASPNETCORE_URLS` is set.
 - **Source:** See [Development](#development).
 
@@ -118,7 +118,7 @@ Unattended deployments inject the initial password through `Setup__AdminPassword
 - Claude Code, Codex, and Pi may optionally select a Model Provider. Claude Code requires Anthropic, Codex requires OpenAI Responses, and Pi supports OpenAI Chat Completions, OpenAI Responses, and Anthropic; clearing the selection uses the external tool's own configuration.
 - Codex uses `CodexSdk.AppServer.MAF` with the local Codex app-server. Generated images and completed image views are saved as byte-backed `DataContent` in chat history and displayed in Web and Desktop chat. Development package setup is documented in the [development guide](docs/1.Development.md#codex-app-server-packages).
 - Agent definition edits take effect at the next turn while preserving the conversation.
-- Chat offers only the permission modes the target supports. Claude Code and custom agents support Always ask, Allow same arguments, and Full access; Codex and Pi support Full access only. See the [execution protocol](docs/ws-flow.md) for permission capabilities, the input queue, and reconnect behavior.
+- Chat offers only the permission modes the target supports. Claude Code and custom agents support Always ask, Allow same arguments, and Full access; Codex and Pi support Full access only; ACP supports all three modes with InProcess and Full access only with Distributed. See the [execution protocol](docs/ws-flow.md) for permission capabilities, the input queue, and reconnect behavior.
 
 ### Project Workspaces
 
@@ -383,7 +383,7 @@ flowchart TB
     piAgentSdkMAF --> piAgentSdk
 ```
 
-- **Agw.Agents:** Custom agent definitions, external agents (Claude Code, Codex, and Pi), Agentflows, MCP tool servers, and traces.
+- **Agw.Agents:** Custom agent definitions, external agents (Claude Code, Codex, Pi, and ACP agents), Agentflows, MCP tool servers, and traces.
 - **Agw.Agents.Execution:** Agent and Agentflow execution, external-agent runtimes, the SignalR hub, human interaction, and InProcess or Distributed execution. It references `Agw.Agents` one way, and the two form one logical Agents module.
 - **Agw.Providers:** Models, providers, model-provider links, and provider authentication settings.
 - **Agw.Tools:** The unified Tool and ToolBlock catalog, runtime tool materialization, and User Memory.

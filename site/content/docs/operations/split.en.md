@@ -2,7 +2,7 @@
 title: "Split Control/Data Plane deployment"
 description: "Share PostgreSQL, keys, and workspaces, and route requests by Host role."
 weight: 20
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/operations/split
 ---
 
@@ -18,7 +18,7 @@ This page assumes familiarity with containers, databases, and reverse proxies. P
 | Data Plane | SignalR Execution, A2A, Distributed execution workers |
 | Standalone | Both roles combined for a single-server setup |
 
-Split deployment uses Distributed execution. In this mode, turns that run an External Agent (Claude Code, Codex, or Pi) directly in Chat fail with “Distributed execution currently supports System Agents only.” To use those external agents directly, choose Standalone with InProcess execution.
+Split deployment uses Distributed execution. Claude Code, Codex, and Pi require InProcess execution when run directly in Chat. ACP agents also support Distributed execution with FullAccess; mount the ACP agent's session storage at the same path on every Data Plane replica. See [Connect external agents]({{< relref "/docs/guides/external-agents" >}}) and [ACP deployment configuration](https://github.com/zxyao145/agw/blob/main/docs/4.Deployment.md).
 
 Split deployments require PostgreSQL for the database and locks, plus Distributed execution on both roles. SQLite or in-memory locks cannot replace cross-node coordination.
 

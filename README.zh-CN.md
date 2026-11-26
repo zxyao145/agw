@@ -8,7 +8,7 @@
 Agw 是一个面向个人用户和小型研发团队的、自托管的后台工程 Agent 中心，也是一个 AaaS (Agent as a Service) 平台和 Agent Gateway。用户可以在一个 UI 中同时操作多个 Agent：
 
 - 自定义创建 Agent
-- 集成外部 Agent：Claude Code、Codex 和 Pi
+- 集成外部 Agent：Claude Code、Codex、Pi 和 ACP Agent
 
 除此之外，Agw 还提供 Jobs 和 Agent Workflow（Agentflow）。Jobs 通过 Events Timer 事件按计划运行 Agent 或 Agentflow。
 
@@ -20,7 +20,7 @@ Agw 是一个面向个人用户和小型研发团队的、自托管的后台工�
 ## 功能
 
 - **自定义 Agent：** 组合模型、指令、Tools、MCP Tool Server、Skills 和集成 Connection。配置 Response Schema 后，最终回复是符合指定结构的 JSON 对象；Mode ToolBlock 提供 Plan 和 Execute 两种模式。
-- **外部 Agent：** 运行 Claude Code、Codex 或 Pi，并可以选择使用 Agw 中配置的 Model Provider。
+- **外部 Agent：** 运行 Claude Code、Codex、Pi 或 ACP Agent。Claude Code、Codex 和 Pi 可以选择使用 Agw 中配置的 Model Provider。
 - **Chat 与 Project：** 对话归属于 Project。Chat 支持图片输入、在同一个对话中切换 Agent、按照权限模式请求工具审批，并在一轮执行（Turn）进行期间把新的输入加入队列。Files 视图可以浏览 Project Workspace、查看 Git 变更，并把行级评论发送给 Agent。
 - **Agentflow：** 把 Agent、嵌套 Agentflow、Human Gate，以及并发（Concurrent）、交接（Handoff）、群聊（Group Chat）和 Magentic 模块连接成可以执行的图，并支持 Checkpoint。
 - **Jobs：** 通过 Events Timer 来源安排 Agent 和 Agentflow 执行；Events 负责投递重试和每次尝试的记录。
@@ -84,7 +84,7 @@ Agw 可以作为 Cloud Desktop 的 Agent 控制平面，让 AI 在隔离的云�
   docker run -d --name agw -p 127.0.0.1:30816:8080 -v agw-data:/data ghcr.io/zxyao145/agw:latest
   ```
 
-  镜像中不包含 Claude Code、Codex 或 Pi，需要时请在容器中自行安装和配置。[`deploy/compose.yaml`](deploy/compose.yaml) 是在反向代理后面运行的 Compose 示例。
+  镜像中不包含 Claude Code、Codex、Pi 或通过 ACP registry 安装的 Agent，需要时请在容器中自行安装和配置。[`deploy/compose.yaml`](deploy/compose.yaml) 是在反向代理后面运行的 Compose 示例。
 - **Portable Server：** 使用 `publish.sh` 构建（见[发布](#发布)），然后运行 `agw-server serve`（Windows 上运行 `agw-server.exe serve`）。没有设置 `ASPNETCORE_URLS` 时，默认监听 `http://127.0.0.1:30816`。
 - **源码：** 见[开发](#开发)。
 
@@ -117,7 +117,7 @@ Control Plane 与 Data Plane 分离部署的说明见[部署指南](docs/4.Deplo
 - 管理列表支持复制 Agent、完整的 Agentflow 图和非内建 Project。
 - Claude Code、Codex 和 Pi 都可以选择 Model Provider：Claude Code 要求 Anthropic，Codex 要求 OpenAI Responses，Pi 支持 OpenAI Chat Completions、OpenAI Responses 和 Anthropic；取消选择后沿用外部工具自身的配置。
 - Agent 定义的修改在下一轮执行时生效，并保留当前对话。
-- Chat 只提供目标支持的权限模式。Claude Code 和自定义 Agent 支持 Always ask、Allow same arguments 和 Full access；Codex 和 Pi 只支持 Full access。权限能力查询、输入队列与重连行为见[执行协议](docs/ws-flow.md)。
+- Chat 只提供目标支持的权限模式。Claude Code 和自定义 Agent 支持 Always ask、Allow same arguments 和 Full access；Codex 和 Pi 只支持 Full access；ACP 在 InProcess 下支持三种模式，在 Distributed 下只支持 Full access。权限能力查询、输入队列与重连行为见[执行协议](docs/ws-flow.md)。
 
 ### 项目 Workspace
 
@@ -382,7 +382,7 @@ flowchart TB
     piAgentSdkMAF --> piAgentSdk
 ```
 
-- **Agw.Agents：** 自定义 Agent 定义、外部 Agent（Claude Code、Codex 和 Pi）、Agentflow、MCP Tool Server 和 Trace。
+- **Agw.Agents：** 自定义 Agent 定义、外部 Agent（Claude Code、Codex、Pi 和 ACP Agent）、Agentflow、MCP Tool Server 和 Trace。
 - **Agw.Agents.Execution：** Agent 与 Agentflow 执行、外部 Agent 运行时、SignalR Hub、人工交互，以及 InProcess 或 Distributed 执行。它单向引用 `Agw.Agents`，两者在逻辑上组成同一个 Agents 模块。
 - **Agw.Providers：** 模型、供应商、模型供应商关联和供应商认证配置。
 - **Agw.Tools：** 统一的 Tool 与 ToolBlock 目录、运行时工具实例化和 User Memory。

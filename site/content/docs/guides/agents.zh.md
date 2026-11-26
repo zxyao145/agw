@@ -2,13 +2,13 @@
 title: "创建自定义 Agent"
 description: "用模型、指令与必要能力定义 Agent。"
 weight: 20
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/guides/agents
 ---
 
 Agent 是一份可重复使用的助手配置：模型决定它如何理解问题，指令说明它要做什么，工具决定它能执行哪些操作。例如，可以分别创建“代码解释助手”和“文档审查助手”，在 Chat 中按任务选择。
 
-开始前，先按[模型提供商指南]({{< relref "/docs/guides/providers" >}})准备可用的 Model Provider。本页介绍由 AGW 运行的自定义 Agent；Claude Code、Codex 和 Pi 请参阅[外部 Agent]({{< relref "/docs/guides/external-agents" >}})。
+开始前，先按[模型提供商指南]({{< relref "/docs/guides/providers" >}})准备可用的 Model Provider。本页介绍由 AGW 运行的自定义 Agent；Claude Code、Codex、Pi 和 ACP 请参阅[外部 Agent]({{< relref "/docs/guides/external-agents" >}})。
 
 ## 创建步骤
 
