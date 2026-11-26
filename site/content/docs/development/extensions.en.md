@@ -341,6 +341,8 @@ Beyond built-in Tools, ToolBlocks, and Integration plugins, AGW provides two ext
 - **Server extensions (`Agw.Extensions.Sdk`)**: implement `IServerExtension`, register HTTP endpoints, Skills (`IExtensionRegistration.RegisterSkill`), Tools (`IExtensionTool`), event handlers, notification channels, and source-generated `JsonSerializerContext` metadata (`RegisterJsonContext`). Extensions that own tables reference `Agw.Extensions.Sdk.EntityFrameworkCore` and register an `ExtensionDbContext` with generation-scoped migration and transaction locks.
 - **Desktop extensions (`@agw/extension-sdk`)**: author views (`defineView`), background scripts (`defineBackground`), file viewers (`fileViewers`), and JSON or CSS themes (`themes`) running in isolated `WebContentsView` sessions under Desktop's `ExtensionHost`. Combined Server/Desktop packages place Desktop assets under `desktop/` in the Server extension folder.
 
+See [Build Server and Desktop extensions]({{< relref "/docs/development/extension-sdk" >}}) for manifest formats, code examples, database migrations, and debugging steps.
+
 ## Verify
 
 Cover successful invocation, invalid arguments, insufficient permissions, foreign Connections, and non-Ready Connections. Keep compile-time diagnostics effective. Tests use real implementations, never mocks or fake implementations; tests that depend on real accounts or external CLIs are opt-in and stay out of the default suite.
