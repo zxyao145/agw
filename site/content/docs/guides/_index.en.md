@@ -2,7 +2,7 @@
 title: "User guide"
 description: "Turn models, tools, and projects into runnable tasks."
 weight: 20
-lastmod: 2026-09-15
+lastmod: 2026-11-26
 translationKey: docs/guides/_index
 icon: fa-solid fa-book-open
 ---
@@ -12,4 +12,4 @@ Each guide explains one part of AGW and can be read on its own. If you do not ye
 - Conversations: start with [model providers]({{< relref "/docs/guides/providers" >}}), [agents]({{< relref "/docs/guides/agents" >}}), and [Chat]({{< relref "/docs/guides/chat" >}}).
 - Project material: set a [workspace]({{< relref "/docs/guides/projects" >}}), then add [tools and Skills]({{< relref "/docs/guides/tools-skills" >}}).
 - External capabilities: choose [external agents]({{< relref "/docs/guides/external-agents" >}}), [MCP]({{< relref "/docs/guides/mcp" >}}), or [integration accounts]({{< relref "/docs/guides/integrations" >}}).
-- Automation: verify the task, organize steps with an [Agentflow]({{< relref "/docs/guides/agentflows" >}}), and set a schedule with a [Job]({{< relref "/docs/guides/jobs" >}}).
+- Automation: verify the task, organize steps with an [Agentflow]({{< relref "/docs/guides/agentflows" >}}), schedule with a [Job]({{< relref "/docs/guides/jobs" >}}), and route triggers or notices in [Events and Notifications]({{< relref "/docs/guides/events" >}}).

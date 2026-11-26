@@ -2,7 +2,7 @@
 title: "Structured responses with JSON Schema"
 description: "Configure a Response Schema so an agent's final reply follows a fixed JSON structure."
 weight: 45
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/features/structured-output
 ---
 
@@ -37,7 +37,7 @@ Validation on save:
 | Custom agent (System) | Response format of the model request |
 | Claude Code | The CLI's `--json-schema` argument |
 | Codex | The turn's output schema |
-| Pi | Not supported |
+| Pi, ACP, A2A | Not supported |
 
 AGW passes the schema to the model or CLI, which generates the result; AGW itself does not validate each field against the schema. For a custom agent with Generate Turn Summary enabled, AGW requires exactly one valid JSON object or array in the turn's last complete reply; otherwise the turn fails and keeps its execution record. When a Result marked as JSON cannot be parsed, Chat shows “Invalid structured result: expected one JSON object or array.”
 

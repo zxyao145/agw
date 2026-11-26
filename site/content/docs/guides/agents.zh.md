@@ -8,7 +8,7 @@ translationKey: docs/guides/agents
 
 Agent 是一份可重复使用的助手配置：模型决定它如何理解问题，指令说明它要做什么，工具决定它能执行哪些操作。例如，可以分别创建“代码解释助手”和“文档审查助手”，在 Chat 中按任务选择。
 
-开始前，先按[模型提供商指南]({{< relref "/docs/guides/providers" >}})准备可用的 Model Provider。本页介绍由 AGW 运行的自定义 Agent；Claude Code、Codex、Pi 和 ACP 请参阅[外部 Agent]({{< relref "/docs/guides/external-agents" >}})。
+开始前，先按[模型提供商指南]({{< relref "/docs/guides/providers" >}})准备可用的 Model Provider。本页介绍由 AGW 运行的自定义 Agent；Claude Code、Codex、Pi、ACP 和远程 A2A Agent 请参阅[外部 Agent]({{< relref "/docs/guides/external-agents" >}})。
 
 ## 创建步骤
 
@@ -44,7 +44,7 @@ Agent 是一份可重复使用的助手配置：模型决定它如何理解问�
 
 保存要求内容是合法 JSON，且根节点为对象；留空表示关闭结构化响应。Anthropic 模型还要求写明 `type` 为 `object`、`properties` 为对象、`required` 为数组。Schema 会作为响应格式交给模型。自定义 Agent 同时开启“Generate Turn Summary”时，AGW 要求最后一条完整回复中恰好有一个 JSON 对象或数组，否则该回合报错结束；这份 JSON 直接作为本轮 Result，不再调用 Summary Model Provider。
 
-外部 Agent 中，Claude Code 和 Codex 支持该配置；Pi 的 Response Schema 标签显示为不可用，Server 也会拒绝为 Pi 保存 Schema。完整说明见 [JSON Schema 结构化响应]({{< relref "/docs/features/structured-output" >}})。
+外部 Agent 中，Claude Code 和 Codex 支持该配置；Pi 的 Response Schema 标签显示为不可用，Server 也会拒绝为 Pi 保存 Schema；ACP 与 A2A 不使用 Response Schema。完整说明见 [JSON Schema 结构化响应]({{< relref "/docs/features/structured-output" >}})。
 
 ## 每轮总结
 
@@ -56,7 +56,7 @@ Agent 是一份可重复使用的助手配置：模型决定它如何理解问�
 
 Agent 定义修改在下一回合生效，同时保留现有会话身份。活跃回合使用开始时的配置快照，不会在执行中途切换权限或目录。
 
-Agents 列表中的 **Copy agent** 可以复制任何 Agent。复制 External Agent 时保留 Engine 类型、Model Provider、环境变量、Extra Settings 和 Response Schema，Instructions、Tools、Skills、MCP Tool Server 与 Integrations 不会复制。复制后应检查模型、能力与项目环境再运行。
+Agents 列表中的 **Copy agent** 可以复制任何 Agent。复制 External Agent 时保留 Engine 类型、Model Provider、环境变量、Extra Settings 和 Response Schema；复制 A2A Agent 时会预填 Agent Card URL 与请求头名称，便于重新填写凭据值。Instructions、Tools、Skills、MCP Tool Server 与 Integrations 不会复制。复制后应检查模型、能力与项目环境再运行。
 
 ## 验证
 

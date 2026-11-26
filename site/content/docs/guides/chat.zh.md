@@ -1,8 +1,8 @@
 ---
 title: "Chat 与执行记录"
-description: "运行对话、发送图片、处理人工输入并检查执行状态。"
+description: "运行对话、发送图片、排队与回合内追加输入、处理人工输入并检查执行状态。"
 weight: 40
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/guides/chat
 ---
 
@@ -17,7 +17,7 @@ Chat 是向 Agent 或 Agentflow 提交任务、查看结果的地方。同一会
 3. 查看流式回复与工具活动；如果出现审批或用户输入请求，在当前会话中处理。
 4. 回看会话记录，确认结果与执行状态。
 
-Web、Desktop、Mobile 支持文本和 JPEG、PNG、GIF、WebP 图片。Web 和 Desktop 通过粘贴添加图片，Mobile 从相册选择。每条消息最多 5 张，单张最多 5 MB，总计最多 10 MB。模型是否理解图片还取决于所选模型能力。
+Web、Desktop、Mobile 支持文本和 JPEG、PNG、GIF、WebP 图片。Web 和 Desktop 通过粘贴添加图片，Mobile 从相册选择。每条消息最多 5 张，单张最多 5 MB，总计最多 10 MB。模型是否理解图片还取决于所选模型能力。Codex 生成或查看的图片会保存在聊天历史中，并在 Web 和 Desktop 的 Chat 中显示。
 
 ![AGW Desktop 对话界面：选择 Project 和 Agent 后输入消息。](/images/screenshots/desktop-chat.png)
 {caption="AGW Desktop 对话界面：选择 Project 和 Agent 后输入消息。"}
@@ -35,6 +35,13 @@ Web、Desktop、Mobile 支持文本和 JPEG、PNG、GIF、WebP 图片。Web 和 
 | **Go to latest message** / **Go to first message** | 跳转到最新消息，或加载完整历史并跳转到第一条消息 |
 
 **Quick prompts** 页面分为 **My prompts**（当前用户自己的条目）和 **System prompts**（所有用户可见，只有管理员可以编辑）。Web 在导航中打开这个页面，Desktop 在 Settings 中打开。
+
+## 回合运行期间排队与追加输入
+
+一轮执行仍在运行期间，Web 与 Desktop 的输入框仍可继续输入，支持两种提交方式：
+
+- **Queue（排队）**：当前回合成功结束后自动发送下一条。待发送的消息会列在输入框上方，可编辑、移除，或在前面回合失败、被中断导致暂停时点击 **Resume** 继续。队列保存在当前客户端会话内存中，主动停止任务或刷新页面时会清空。
+- **Steer（回合内追加输入）**：在当前这批工具调用结束之后、下一次模型请求之前把新输入送入正在运行的回合（默认最多 8 条待送达输入）。对于支持该能力的目标（当前为 `InProcess` 模式下的自定义 System Agent），可通过分体发送按钮菜单或 `Alt+Enter` 在 **Queue** 与 **Steer** 之间切换；目标不支持时自动使用 **Queue**。
 
 ## 怎样判断任务进行到哪一步
 
@@ -56,7 +63,7 @@ Web、Desktop、Mobile 支持文本和 JPEG、PNG、GIF、WebP 图片。Web 和 
 
 会话列表顶部可以刷新列表、删除全部历史（**Delete All History**），并通过 Info 按钮打开 **Conversation Settings**；每个会话可以重命名或删除。
 
-Conversation Settings 显示当前会话的 ID、消息数、创建时间和更新时间，还提供两项设置：
+Conversation Settings 显示当前会话的 ID、消息数、创建时间和更新时间，以及 **Engine Sessions**（在会话未运行时查看并归档 External Agent 绑定的 provider session）和两项执行设置：
 
 - **Only Stream Turn Result**：只推送每一回合的 Result，并自动拒绝需要人工处理的提问和工具审批；会话历史仍完整保存。它只对 External Agent 和开启 Generate Turn Summary 的自定义 Agent 生效，从下一回合开始生效。
 - **Environment Variables**：随执行发送的环境变量。
@@ -69,13 +76,13 @@ Conversation Settings 显示当前会话的 ID、消息数、创建时间和更�
 
 连接中断时，界面显示 “Reconnecting to Server…” 并自动重试，也可以点击 **Retry now** 立即重试。重新连接后客户端恢复执行状态；检查任务是否仍在运行、等待输入或已经结束。
 
-Desktop 的每个 Server、Project、Conversation 组合有独立执行连接。切换 Project 页签会改变当前显示的会话，不会自动停止后台任务；项目标签页上的状态点显示后台任务状态，关闭仍有任务运行的标签页前会先确认。
+Desktop 的每个 Server、Project、Conversation 组合有独立执行连接。切换 Project 页签会改变当前显示的会话，不会自动停止后台任务；项目标签页上的状态点显示后台任务状态，关闭仍有任务运行的标签页前会先确认。每个 Project 内，对话、文件、Jobs 与扩展视图都在主工作区标签页中打开（单击打开预览标签页，双击、拖动或编辑后保持打开），同时支持扩展按上下文打开的悬浮对话面板（**Floating Chat**）。
 
 ## 历史
 
 会话与工具活动由服务端持久化，历史采用批量写入。Host 模板将刷新间隔设为 10 秒，省略配置时的代码回退为 5 秒；不要把尚未刷新的实时输出当成已完成持久化。
 
-打开会话时先显示最近的消息，向上滚动时每次加载 50 条较早的消息。Desktop 还提供用户输入导航，列出会话中的每一条用户输入，包括尚未加载的早期输入；点击后跳转到该输入，并按需加载更早的历史。
+打开会话时先显示最近的消息，向上滚动时每次加载 50 条更早的消息。Desktop 还提供用户输入导航，列出会话中的每一条用户输入，包括尚未加载的早期输入；点击后跳转到该输入，并按需加载更早的历史。
 
 回合被中断或失败时，未完成的消息和带致命错误的消息仍显示在会话中，但不会进入后续回合的模型上下文，也不会交给切换后的 Agent。
 

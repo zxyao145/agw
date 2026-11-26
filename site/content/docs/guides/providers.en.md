@@ -2,7 +2,7 @@
 title: "Model providers"
 description: "Configure providers, models, and model-provider links with accurate limits."
 weight: 10
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/guides/providers
 ---
 
@@ -14,13 +14,13 @@ This page covers model configuration in AGW. To use an existing command-line set
 
 A **Provider** describes the endpoint and authentication. A **Model** describes a model and its limits. A **Model Provider** links the two for agent selection. Creating a Model alone does not establish a connection.
 
-1. In **Providers**, open **Create provider**, select the matching protocol, enter the endpoint, and add and enable a credential in **Auth Configs**.
-2. Switch to the **Models** tab and select the models this Provider serves. For OpenAI Chat Completions or OpenAI Responses with an enabled ApiKey in Auth Configs, click **Fetch Models** to load the service's model list. For an Anthropic Provider, first create the models manually with **Create model** on the **Models** page, then return to the Provider and select them.
+1. In **Providers**, open **Create provider**, select the matching protocol, enter the endpoint, and add and enable a credential in **Auth Configs** when the service requires authentication.
+2. Switch to the **Models** tab and select the models this Provider serves. For OpenAI Chat Completions or OpenAI Responses (with an enabled `ApiKey` in Auth Configs), or **OllamaNative** (which reads local models and measured context windows without requiring an `ApiKey`), click **Fetch Models** to load the service's model list. For an Anthropic Provider, first create the models manually with **Create model** on the **Models** page, then return to the Provider and select them.
 3. Save the Provider. This links each selected model to the Provider as a Model Provider and creates any newly fetched models.
 4. On the **Models** page, use **Edit model** to verify each identifier and set **Context window** and **Maximum output** from the limits your service publishes.
 5. Select that link in an agent and test it with a short question.
 
-Current protocols include OpenAI Chat Completions, OpenAI Responses, and Anthropic. Compatible services must match the actual protocol; “OpenAI” in a name is not sufficient.
+Current protocols include `OpenAIChatCompletions`, `OpenAIResponses`, `Anthropic`, and `OllamaNative`. Compatible services must match the actual protocol; “OpenAI” in a name is not sufficient.
 
 ![AGW Desktop: create a Provider with its protocol, endpoint, authentication, and models. No credentials have been entered.](/images/screenshots/provider-create.png)
 {caption="AGW Desktop: create a Provider with its protocol, endpoint, authentication, and models. No credentials have been entered."}

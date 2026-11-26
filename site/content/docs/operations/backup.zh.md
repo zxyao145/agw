@@ -2,7 +2,7 @@
 title: "数据目录、备份与升级"
 description: "备份数据库与密钥，并单独管理项目工作目录。"
 weight: 40
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/operations/backup
 ---
 
@@ -16,8 +16,8 @@ translationKey: docs/operations/backup
 
 需要一起保存：
 
-- 数据库，包括 `setting`、`api_token`、会话和执行记录。
-- 数据目录中的 `keys/` 和 `skills/`。
+- 数据库，包括 `setting`、`api_token`、会话、执行记录、Events、Notifications 与扩展业务表。
+- 数据目录中的 `keys/`、`skills/` 和 `acp-agents/`（如有安装），以及 `Extensions:Directory` 中的 Server 扩展目录。
 - 部署配置及其秘密引用，实际秘密通过安全存储备份。
 - 各 Project 主目录与附加目录中的业务文件，使用独立文件备份策略。
 

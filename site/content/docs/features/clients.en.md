@@ -2,7 +2,7 @@
 title: "Multiple clients"
 description: "Access your AGW Server from a browser, desktop, or mobile device."
 weight: 60
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/features/clients
 ---
 
@@ -13,7 +13,7 @@ AGW provides Web, Desktop, and Mobile clients. Connect to the same Server with t
 | Client | Useful for |
 | --- | --- |
 | Web | Management and chat in a browser without a desktop installation |
-| Desktop | A daily workspace, multiple Server profiles, local or remote use |
+| Desktop | A daily workspace with tabbed conversations and files, floating chat, bundled viewers, themes, extensions, and multiple Server profiles |
 | Mobile | Checking conversations, accessing projects, and continuing discussions on the go |
 
 ![The AGW Desktop chat workspace; Web and Mobile use interfaces adapted to their platforms.](/images/screenshots/desktop-chat.png)

@@ -2,7 +2,7 @@
 title: "Web, Desktop, and Mobile"
 description: "Choose a client, connect to the right Server, and manage conversations."
 weight: 110
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/guides/clients
 ---
 
@@ -21,7 +21,11 @@ Prerequisite: an initialized Server. Clients do not replace the Server-side mode
 3. Configure Mobile with a Server URL reachable from the device and an API Key. Device localhost usually is not your development computer. Alternatively, create an API Key in Web under **Settings → Server access**, click **Copy config**, and paste it into **Import Web configuration** on Mobile. Deleting a Mobile profile does not revoke its API Key on the Server; revoke it in Web.
 4. Start a short conversation and verify the target Server, Project, and history.
 
-Desktop centers on Chat; Projects and other administration routes live in Settings. Each Server profile uses an isolated cache. Changing its URL or API Key discards the old connection’s cache so data from different Servers does not get mixed.
+Desktop centers on Chat; Projects and other administration routes live in Settings. Its workspace combines a Ribbon (`Conversations`, `Files`, `Jobs`, `Events`, `Notifications`, and extension entries), a collapsible left sidebar, and Main Workspace tabs (`Cmd/Ctrl+W` closes the active tab, `Ctrl+Tab` and `Ctrl+Shift+Tab` switch tabs), plus a per-Project **Floating Chat** panel.
+
+Desktop manages themes under **Settings → Appearance** (Light, Dark, System, and installed theme extensions) and extensions under **Settings → Extensions**. It bundles **Markdown** (**Mixed**, **Preview**, and **Code**), **Excalidraw**, **Image Viewer**, **Bare Repository**, **Soft Theme**, and **Warm Minimalism Theme**, and can install custom `.zip` or folder extensions as well as Server-published Desktop views.
+
+Each Server profile uses an isolated cache. Changing its URL or API Key discards the old connection’s cache so data from different Servers does not get mixed.
 
 ![AGW Desktop chat: select a Project and Agent, then enter a message.](/images/screenshots/desktop-chat.png)
 {caption="AGW Desktop chat: select a Project and Agent, then enter a message."}

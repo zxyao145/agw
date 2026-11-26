@@ -12,8 +12,8 @@ hero:
   title_lines:
     - 让 AI 助手
     - 在项目中协作。
-  lead: 接入模型或已有的 Claude Code、Codex、Pi，在项目中管理对话和文件。让不同 Agent 分工，按步骤完成任务，再把验证过的工作设为定时执行。
-  note: 自定义 Agent · Claude Code · Codex · Pi
+  lead: 接入模型或已有的 Claude Code、Codex、Pi、ACP 与远程 A2A Agent，在项目中管理对话和文件。让不同 Agent 分工，按步骤完成任务，再把验证过的工作设为定时执行。
+  note: 自定义 Agent · Claude Code · Codex · Pi · ACP · A2A
   actions:
     - {label: 快速开始, url: 'https://docs.agw-ai.dev/zh/docs/start/first-chat/', icon: fa-solid fa-arrow-right, style: primary}
     - {label: 阅读文档, url: 'https://docs.agw-ai.dev/zh/docs/', icon: fa-solid fa-book-open, style: ghost}

@@ -2,7 +2,7 @@
 title: "Testing and contribution"
 description: "Validate the affected behavior and follow formatting, boundary, and migration rules."
 weight: 50
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/development/testing
 ---
 
@@ -18,17 +18,19 @@ dotnet test Agw.slnx
 dotnet csharpier check .
 ```
 
-Test projects use xUnit v3 and run on Microsoft.Testing.Platform, selected by the root `global.json`. Start with relevant tests when investigating a failure, such as `dotnet test tests/Agw.Files.Tests`. Unit and composition tests use real implementations and pure option helpers, never mocks or fake implementations. Constructing `CodexAIAgent` or `ClaudeCodeAIAgent` probes the CLI, so those tests run as real CLI tests: they are opt-in, require the executable, and stay out of the default suite.
+Test projects use xUnit v3 and run on Microsoft.Testing.Platform, selected by the root `global.json`. Start with relevant tests when investigating a failure, such as `dotnet test tests/Agw.Files.Tests`. Unit and composition tests use real implementations and pure option helpers, never mocks or fake implementations. Before running backend agent tests, install the pinned Codex app-server test fixture (`npm ci --prefix tests/Agw.Agents.Tests/fixtures/codex-app-server --ignore-scripts --no-audit --no-fund`). Constructing `CodexAIAgent` or `ClaudeCodeAIAgent` probes the CLI, so live CLI tests are opt-in and stay out of the default suite; ACP agent tests run with `dotnet test --project tests/Agw.Agents.Tests --filter-class "*Acp*"`.
+
+Extension tests are grouped in `tests/Agw.Extensions.Tests`, `tests/Agw.Extensions.Runtime.Tests`, `tests/Agw.Extensions.Database.Tests`, and `tests/Agw.Host.Tests` (`ExtensionStartupTests`).
 
 After changing error codes or exception rules, run `dotnet test tests/Agw.Shared.Tests`. After changing module dependencies, run the backend architecture tests with `dotnet test tests/Agw.Architecture.Tests`.
 
-PostgreSQL tests for durable execution (lease protection, event order, active execution upgrades, and scheduler capacity) connect to an isolated test instance through `AGW_TEST_POSTGRES_CONNECTION_STRING`; the test role needs permission to create databases. Redis event-projection tests use `AGW_TEST_REDIS_CONNECTION_STRING`. Without these variables, the corresponding tests are skipped. CI runs the PostgreSQL tests on PostgreSQL 18 and checks the TRX results to confirm every required test ran and passed; see the [Development guide](https://github.com/zxyao145/agw/blob/main/docs/1.Development.md) for the full commands.
+PostgreSQL tests for durable execution (lease protection, event order, active execution upgrades, and scheduler capacity) connect to an isolated test instance through `AGW_TEST_POSTGRES_CONNECTION_STRING`; the test role needs permission to create databases. Jobs, Files, Events, and PostgreSQL extension tests read `ConnectionString` from `.scratch/postgres-tests.json`, and Redis event tests read `.scratch/redis-tests.json` (or `AGW_TEST_REDIS_CONNECTION_STRING`). Without these settings, the corresponding tests are skipped. CI runs the PostgreSQL tests on PostgreSQL 18 and checks the TRX results to confirm every required test ran and passed; see the [Development guide](https://github.com/zxyao145/agw/blob/main/docs/1.Development.md) for the full commands.
 
 For sign-in changes, run `dotnet test tests/Agw.Auth.Tests`. These tests use a controlled provider and per-test SQLite databases by default. To verify against PostgreSQL, set `AGW_TEST_OIDC_POSTGRES` to an isolated test server's admin connection string with a role that can create databases; never point it at a production server. Desktop main-process sign-in and credential-storage tests run with `pnpm --filter @agw/desktop test`.
 
 ## Client checks
 
-From `src/clients`:
+From `src`:
 
 ```bash
 pnpm lint
@@ -37,9 +39,13 @@ pnpm fmt:check
 pnpm build
 ```
 
-Use oxlint/oxfmt, not ESLint/Prettier. Package-boundary changes must pass `pnpm test:boundaries`. After API changes, export the Development OpenAPI document to `src/clients/packages/api/openapi.json`, run `pnpm gen:api` to regenerate the typed client, and validate callers.
+Use oxlint/oxfmt, not ESLint/Prettier. Package-boundary changes must pass `pnpm test:boundaries` (included in `pnpm test`). After API changes, export the Development OpenAPI document to `src/clients/packages/api/openapi.json`, run `pnpm gen:api`, and validate callers.
 
-Component rendering tests use the shared `@agw/test-harness` package to set up a DOM environment. When a test needs API responses, its `startApiServer` starts a real local HTTP server so components exercise their own request path. For Web browser tests, run `pnpm --filter @agw/web exec playwright install chromium`, then `pnpm --filter @agw/web test:e2e`. Playwright starts an isolated Web server on `127.0.0.1:3101` and needs no backend.
+Component rendering tests use the shared `@agw/test-harness` package to set up a DOM environment. When a test needs API responses, its `startApiServer` starts a real local HTTP server so components exercise their own request path. Browser and Electron checks include:
+
+- Web browser e2e (`test:e2e`, `test:e2e:export`, `test:e2e:extensions`): build `Agw.slnx` / `src/server/Agw.Standalone.Host` from the repository root, install Chromium (`pnpm --filter @agw/web exec playwright install chromium`), and run the target script from `src/clients`.
+- Code view and Files browser tests: `pnpm --filter @agw/code-view test:browser` and `pnpm --filter @agw/projects test:browser`.
+- Desktop extension integration tests: `pnpm --filter @agw/desktop test:extensions` (requires user confirmation before every run).
 
 ## Data and commits
 

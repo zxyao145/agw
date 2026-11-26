@@ -12,8 +12,8 @@ hero:
   title_lines:
     - Let AI assistants
     - work together on your project.
-  lead: Connect a model or an existing Claude Code, Codex, or Pi setup. Organize conversations and files by project, assign work to different agents, and schedule tasks after verifying them.
-  note: Custom agents · Claude Code · Codex · Pi
+  lead: Connect a model or an existing Claude Code, Codex, Pi, ACP, or A2A agent. Organize conversations and files by project, assign work to different agents, and schedule tasks after verifying them.
+  note: Custom agents · Claude Code · Codex · Pi · ACP · A2A
   actions:
     - {label: Quick start, url: 'https://docs.agw-ai.dev/docs/start/first-chat/', icon: fa-solid fa-arrow-right, style: primary}
     - {label: Read the docs, url: 'https://docs.agw-ai.dev/docs/', icon: fa-solid fa-book-open, style: ghost}

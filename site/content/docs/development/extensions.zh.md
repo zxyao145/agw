@@ -2,7 +2,7 @@
 title: "扩展 Tools 与 Integrations"
 description: "选择能力归属，使用编译期工具声明与用户连接。"
 weight: 40
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/development/extensions
 ---
 
@@ -336,6 +336,13 @@ public sealed class BuiltInPluginCatalog : IPluginCatalog
 
 当前没有远程 Marketplace 的下载、签名与自动升级机制。完整调用链参考 [GitHub Native Provider](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/Tools/GitHub/GitHubConnectionNativeCapabilityProvider.cs)、[GitHub Invoker](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/Tools/GitHub/GitHubConnectionInvoker.cs) 和 [能力源定义](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/Domain/Plugins/CapabilitySourceDefinition.cs)。
 
+## Server 与 Desktop 扩展 SDK
+
+除了内置 Tool、ToolBlock 和集成 Plugin 之外，AGW 还为可加载的扩展提供两套 SDK：
+
+- **Server 扩展（`Agw.Extensions.Sdk`）**：实现 `IServerExtension`，注册 HTTP 接口、Skills（`IExtensionRegistration.RegisterSkill`）、Tools（`IExtensionTool`）、事件处理器、通知渠道，以及源码生成的 `JsonSerializerContext` 元数据（`RegisterJsonContext`）。拥有独立业务表的扩展引用 `Agw.Extensions.Sdk.EntityFrameworkCore`，注册按 generation 隔离迁移锁与事务锁的 `ExtensionDbContext`。
+- **Desktop 扩展（`@agw/extension-sdk`）**：编写运行在 Desktop `ExtensionHost` 独立 `WebContentsView` 会话中的视图（`defineView`）、后台脚本（`defineBackground`）、文件查看器（`fileViewers`）以及 JSON 或 CSS 主题（`themes`）。Server/Desktop 组合扩展把 Desktop 资源放在 Server 扩展目录的 `desktop/` 子目录中。
+
 ## 验证
 
 至少覆盖成功调用、非法参数、权限不足、外来 Connection 和未就绪 Connection。保持编译期诊断有效。测试使用真实实现，不使用 mock 或 fake 实现；依赖真实账号或外部 CLI 的测试需要显式开启，不放进默认测试套件。
@@ -344,3 +351,7 @@ public sealed class BuiltInPluginCatalog : IPluginCatalog
 
 - [Tool abstractions and examples](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Tools.Abstractions/README.md)
 - [Integrations](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/README.md)
+- [Server extension SDK](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Extensions.Sdk/README.md)
+- [Server extension EF Core SDK](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Extensions.Sdk.EntityFrameworkCore/README.md)
+- [Desktop extension SDK](https://github.com/zxyao145/agw/blob/main/src/clients/packages/extension-sdk/README.md)
+- [Desktop extension runtime](https://github.com/zxyao145/agw/blob/main/src/clients/desktop/README.md)

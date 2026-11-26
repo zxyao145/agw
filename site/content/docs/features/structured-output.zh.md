@@ -2,7 +2,7 @@
 title: "JSON Schema 结构化响应"
 description: "为 Agent 配置 Response Schema，让最终回复按固定的 JSON 结构返回。"
 weight: 45
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/features/structured-output
 ---
 
@@ -37,7 +37,7 @@ Response Schema 是 Agent 创建和编辑对话框中的一个 Tab，内容为�
 | 自定义 Agent（System） | 模型请求的响应格式 |
 | Claude Code | CLI 的 `--json-schema` 参数 |
 | Codex | Turn 的输出 Schema |
-| Pi | 暂不支持 |
+| Pi、ACP、A2A | 暂不支持 |
 
 AGW 把 Schema 交给模型或 CLI，由它们按 Schema 生成结果；AGW 本身不逐项校验字段是否符合 Schema。自定义 Agent 开启 Generate Turn Summary 时，AGW 要求本轮最后一条完整回复中恰好有一个有效的 JSON 对象或数组，否则该回合报错结束，保留原有的执行记录。标记为 JSON 的 Result 内容无法解析时，Chat 显示 “Invalid structured result: expected one JSON object or array.”。
 

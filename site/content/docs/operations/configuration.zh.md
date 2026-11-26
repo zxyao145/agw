@@ -2,7 +2,7 @@
 title: "配置与认证"
 description: "了解各项设置的用途、默认值，以及如何配置服务和登录认证。"
 weight: 30
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/operations/configuration
 ---
 
@@ -79,6 +79,7 @@ Standalone 也可以使用 PostgreSQL，而继续保留 InProcess。若选择 Di
 | --- | --- | --- |
 | `Provider` | InProcess | `InProcess`：由当前 Server 直接运行任务，适合简单的单机部署。`Distributed`：将执行状态保存到 PostgreSQL，由负责执行的 Server 领取并运行任务，支持多个执行节点协作。选择 Distributed 时，数据库和分布式锁都必须使用 PostgreSQL。 |
 | `TurnBroadcastRetentionSeconds` | 300 | 一个回合结束后，本 Server 在内存中保留该回合回放内容的秒数。在这段时间内重新连接，或重试已被接受的同一回合的客户端，可以收到完整回放。 |
+| `Steer:MaxPendingPerTurn` | 8 | 单个运行中的回合最多允许等待送达的 Steer 输入条数，必须大于 0。 |
 
 InProcess 模式下，回合只存在于当前 Server 进程中。Server 重启时，上一个进程遗留的运行中回合会被结束为 Interrupted，不会继续执行；需要跨重启恢复时使用 Distributed。
 
@@ -186,15 +187,69 @@ Agent 执行时会不断产生回复和状态消息。系统保存这些消息�
 
 这些设置决定聊天记录什么时候保存到数据库，页面仍可实时显示回复。先暂存、后保存可以减少数据库写入，但程序意外退出时，尚未保存的部分可能丢失。如果更看重记录及时保存，可以选择 Immediate。
 
-### Shell 工具
-
-下表配置项的完整名称都以 `Agents:Shell:` 开头。
+### Shell 工具与 Project 工作目录
 
 | 配置项 | 默认值 | 用途与可选值 |
 | --- | --- | --- |
-| `Backend` | local | `local`：直接在运行 Agent 的主机上执行命令，使用项目工作目录。`docker`：在 Docker 容器中执行命令，需要主机已安装并能使用 Docker。容器中的项目目录为 `/workspace`，附加目录为 `/project-directories/{id}`；当前容器禁用网络，命令超时为 30 秒。 |
+| `Agents:Shell:Backend` | local | `local`：直接在运行 Agent 的主机上执行命令，使用项目工作目录。`docker`：在 Docker 容器中执行命令，需要主机已安装并能使用 Docker。容器中的项目目录为 `/workspace`，附加目录为 `/project-directories/{id}`；当前容器禁用网络，命令超时为 30 秒。 |
+| `Projects:Workspace:IsolationEnabled` | false | 设为 `true` 时，新建的空工作目录 Project 默认使用 `~/.agw/projects/{ProjectId:N}`（而非 `~/.agw/{normalizedName}`），并在选择 `~/.agw/projects/{ProjectId:N}` 内路径时校验 Project 归属。 |
 
-此项只选择 AGW Shell 工具的执行后端，不改变整个 Server 的部署模式，也不为外部 Agent 安装 CLI。
+`Agents:Shell:Backend` 只选择 AGW Shell 工具的执行后端，不改变整个 Server 的部署模式，也不为外部 Agent 安装 CLI。
+
+### Server 扩展
+
+以下配置项均以 `Extensions:` 开头，安装步骤见 [Server 扩展与 ACP 主机配置]({{< relref "/docs/operations/extensions" >}})。
+
+| 配置项 | 默认值 | 用途与可选值 |
+| --- | --- | --- |
+| `Directory` | `./Extensions` | 启动时扫描扩展子目录的根目录；相对路径以 Server 可执行文件目录为起点。 |
+| `PublicBaseUrl` | 空 | 供飞书等扩展生成回调与身份绑定链接的公开 HTTPS 地址（本地开发允许回环 HTTP）。 |
+| `DrainTimeout` | `00:01:00` | 停用扩展前等待活跃任务排空的最长时长。 |
+| `UnloadTimeout` | `00:00:30` | 排空后卸载扩展 generation 的超时时间。 |
+| `StatePollInterval` | `00:00:05` | 各 Host 检查 `setting` 表中共享扩展启用版本的时间间隔。 |
+
+### Events 与 Notifications
+
+以下配置项均以 `Events:` 或 `Notifications:` 开头。
+
+| 配置项 | 默认值 | 用途与可选值 |
+| --- | --- | --- |
+| `Events:Transport:Provider` | `InProcess` | 单机使用 `InProcess`；Control/Data Plane 分离部署必须使用 `Redis`。 |
+| `Events:Transport:Redis:ConnectionString` | 空 | `Events:Transport:Provider` 为 `Redis` 时必填的 Redis 连接字符串。 |
+| `Events:Transport:Redis:StreamMaxLength` | `100000` | Redis 事件传输流的大致最大长度。 |
+| `Events:Outbox:Enabled` | `true` | 启用事件发件箱，用于暂存并恢复尚未发布成功的事件、投递和通知。 |
+| `Events:Outbox:StaleAfter` / `RecoveryInterval` | `00:05:00` / `00:00:30` | 判定发件箱记录超时的时长以及恢复扫描间隔。 |
+| `Events:Dispatch:MaxHops` | `8` | 允许的级联事件触发最大跳数。 |
+| `Events:Payload:MaxBytes` | `262144` | 单个 CloudEvent 载荷的最大字节数。 |
+| `Events:Delivery:MaxAttempts` | `10` | 可重试投递进入 `Parked` 状态前的最大尝试次数。 |
+| `Events:Delivery:BaseBackoff` / `MaxBackoff` | `00:00:30` / `00:30:00` | 失败投递重试的初始退避时长与最大退避时长。 |
+| `Events:Delivery:RunningTimeout` | `00:10:00` | 运行中投递超时后允许重新恢复的时间阈值。 |
+| `Events:HttpPoll:MinInterval` / `AllowPrivateNetworks` | `00:01:00` / `false` | HTTP 轮询最小间隔以及是否允许请求内网地址（同时包含 `MaxPages=20`、`MaxItems=5000`、`MaxResponseBytes=8388608`）。 |
+| `Notifications:Stream:PollInterval` | `00:00:01` | 通知中心 SSE 流的轮询间隔。 |
+| `Notifications:Dispatch:MaxAttempts` / `ClaimDuration` | `8` / `00:01:00` | 通知渠道派发的最大尝试次数与领取租约时长。 |
+
+### ACP 与远程 A2A Agent
+
+`AcpAgents:` 配置 ACP registry 目录、安装程序与 stdio 进程生命周期：
+
+| 配置项 | 默认值 | 用途与可选值 |
+| --- | --- | --- |
+| `AcpAgents:RegistryUrl` | `https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json` | Agent 表单与 `acp install` 查询的 registry 地址，支持 HTTPS 或回环 HTTP。 |
+| `AcpAgents:RegistryRefreshInterval` / `RegistryFetchTimeout` / `RegistryMaxBytes` | `01:00:00` / `00:00:30` / `8388608` | registry 缓存刷新间隔、拉取超时和响应大小上限。 |
+| `AcpAgents:InstallRoot` | `{AgwDataDir}/acp-agents` | `acp install` 与执行主机使用的安装目录；显式填写时必须是绝对路径。 |
+| `AcpAgents:AllowUnverifiedBinaries` | `false` | 是否允许安装缺少 SHA-256 摘要的二进制分发包。 |
+| `AcpAgents:DownloadTimeout` / `MaxDownloadBytes` | `00:10:00` / `1073741824` | 单个发布文件的下载超时与大小上限（字节）。 |
+| `AcpAgents:InitializeTimeout` / `RequestTimeout` / `CancelGracePeriod` | `00:02:00` / `00:01:00` / `00:00:05` | 进程 `initialize`、单次请求及 `session/cancel` 的超时时间。 |
+| `AcpAgents:StderrTailLines` | `20` | ACP 进程报错时附带的标准错误输出最大行数。 |
+
+`A2ARemoteAgents:` 配置调用远程 A2A Agent 的请求参数：
+
+| 配置项 | 默认值 | 用途与可选值 |
+| --- | --- | --- |
+| `A2ARemoteAgents:AllowPrivateNetworks` | `true` | 是否允许远程 A2A 请求及拉取 Agent Card 访问内网地址。 |
+| `A2ARemoteAgents:CardFetchTimeout` / `CardMaxBytes` | `00:00:15` / `1048576` | 拉取 Agent Card 的超时时间与大小上限。 |
+| `A2ARemoteAgents:RequestTimeout` / `StreamIdleTimeout` | `00:01:00` / `00:05:00` | 远程 A2A 调用的请求超时与流式空闲超时。 |
+| `A2ARemoteAgents:PollInterval` / `ResubscribeAttempts` | `00:00:02` / `3` | 任务轮询间隔与流式重订阅尝试次数。 |
 
 ### OpenTelemetry
 

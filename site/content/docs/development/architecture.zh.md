@@ -2,7 +2,7 @@
 title: "架构与模块边界"
 description: "理解模块化单体、数据所有权和客户端包分工。"
 weight: 20
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/development/architecture
 ---
 
@@ -34,19 +34,19 @@ Domain 中的 Entity 保存状态。单个 Aggregate 的业务规则由 Behavior
 
 每张表只有一个负责它的模块。即使多个模块共用实体类型和数据库，也要通过所属模块提供的接口访问数据，不能直接查询或修改其他模块的表。
 
-拥有数据表的模块在 `Application/Persistence` 中声明自己的持久化接口 `I<Module>DbContext`。十个持久化接口分别属于 Agents、Auth、Events、Integrations、Notifications、Projects、Providers、Settings、Skills 和 Tools。Files、Setup、A2A 和 Jobs 不拥有数据表，也没有这类接口。同一次请求中，这些接口由同一个 `AgwDbContext` 实例实现。这样既能共用数据库连接和事务，又能限制模块可见的数据范围。跨模块调用使用 Contracts 中的公开约定，必要的跨模块事务放在经过批准的 Infrastructure 适配器中。
+拥有数据表的模块在 `Application/Persistence` 中声明自己的持久化接口 `I<Module>DbContext`。十个持久化接口分别属于 Agents、Auth、Events、Integrations、Notifications、Projects、Providers、Settings、Skills 和 Tools。Files、Setup、A2A、Jobs 和 Extensions 不拥有核心 `AgwDbContext` 数据表，也没有这类接口（拥有独立业务表的 Server 扩展通过 `Agw.Extensions.Sdk.EntityFrameworkCore` 使用隔离的 `ExtensionDbContext`）。同一次请求中，这些接口由同一个 `AgwDbContext` 实例实现。这样既能共用数据库连接和事务，又能限制模块可见的数据范围。跨模块调用使用 Contracts 中的公开约定，必要的跨模块事务放在经过批准的 Infrastructure 适配器中。
 
 `Agw.Agents.Execution → Agw.Agents` 单向依赖，两程序集属于同一 Agents 模块。Agentflow 的选择性 DDD 不扩展到普通 CRUD 模块。
 
 ## 以修改 Agentflow 为例
 
-请求先进入 Api，再由 Application 检查用户能否访问该流程，并加载流程及全部节点和连线。Policy 判断新图是否符合规则，返回 Decision；Behavior 将有效变更应用到已加载的对象，最后由 Application 保存。
+请求先进入 Api，再由 Application 检查用户能否访问该流程，并加载流程及其修订版本、节点和连线。Policy 判断新图是否符合规则，返回 Decision；Behavior 将有效变更应用到已加载的对象，最后由 Application 保存为不可变修订版本。
 
 因此，修改连线规则时应查看 Agentflow 的 Policy 和 Topology；调整权限、加载或保存顺序时应查看 Application；修改数据库实现时再进入 Infrastructure。这个分工让业务规则与网络、数据库细节分开，也便于分别测试。
 
 ## 客户端
 
-Web 与 Desktop 各自拥有路由壳和构建，业务包位于 `src/clients/packages`。`chat-core` 负责消息语义，`chat-runtime` 负责执行连接和状态，`chat` 负责 DOM 呈现。Mobile 通过 `chat-native` 与 RN-safe 包接入，不直接依赖 DOM 包。
+Web 与 Desktop 各自拥有路由壳和构建，业务包位于 `src/clients/packages`，内置扩展位于 `src/extensions/`，共同组成根目录在 `src` 的 pnpm/Turborepo workspace。`@agw/execution-types` 与 `@agw/execution-core` 存放与传输层无关的执行消息、命令和流合并逻辑；`chat-core` 负责消息语义，`chat-runtime` 负责执行连接和状态（`ChatHttpClient`），`chat` 负责 DOM 呈现（Web 使用 `react-markdown`，Desktop 使用 `@agw/chat/markdown-tiptap`）。`@agw/code-view` 为 Files 与 diff 提供 Monaco 编辑器；`@agw/events`、`@agw/notifications` 与 `@agw/server-extensions` 分别提供事件中心、通知中心和 Server 扩展管理界面。Desktop 通过 `ExtensionHost` 与 `@agw/extension-sdk` 在独立视图中运行扩展；Mobile 通过 `chat-native` 与 RN-safe 包接入，不依赖 DOM 包。
 
 增加功能前确认所属模块与公开入口；修改边界后运行 `pnpm test:boundaries` 和后端架构测试 `dotnet test tests/Agw.Architecture.Tests`。
 

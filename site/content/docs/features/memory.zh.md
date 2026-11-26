@@ -15,7 +15,7 @@ translationKey: docs/features/memory
 | User Memory | 个人偏好、常用表达方式、长期背景 | 当前用户，可跨 Project 使用 |
 | Project Memory | 项目约定、关键决策、工作说明 | 当前项目的工作上下文 |
 
-为 Agent 或 Project 配置相应的 Memory 能力后，可以让 Agent 保存需要复用的信息，并在后续会话中检查或更新。记忆需要明确维护，不等于自动永久保存和注入全部聊天记录。User Memory 按用户隔离；Project Memory 的范围还取决于项目及所选存储方式，共用工作目录的文件型记忆也会共用。External Agent（Claude Code、Codex、Pi、ACP）只会读到已有的 User Memory（最多 50 条）作为上下文，没有记忆工具，不能保存或更新记忆；在 Agent 或 Project 上配置的 Project Memory 对它们不生效。
+为 Agent 或 Project 配置相应的 Memory 能力后，可以让 Agent 保存需要复用的信息，并在后续会话中检查或更新。记忆需要明确维护，不等于自动永久保存和注入全部聊天记录。User Memory 按用户隔离；Project Memory 的范围还取决于项目及所选存储方式，共用工作目录的文件型记忆也会共用。External Agent（Claude Code、Codex、Pi、A2A、ACP）只会读到已有的 User Memory（最多 50 条）作为上下文，没有记忆工具，不能保存或更新记忆；在 Agent 或 Project 上配置的 Project Memory 对它们不生效。
 
 ![AGW Desktop：User Memory、Project Memory 和 Background Agents 可在工具能力中配置。](/images/screenshots/tool-blocks.png)
 {caption="AGW Desktop：User Memory、Project Memory 和 Background Agents 可在工具能力中配置。"}

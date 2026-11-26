@@ -2,7 +2,7 @@
 title: "Data, backups, and upgrades"
 description: "Back up databases and keys, and manage project workspaces separately."
 weight: 40
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/operations/backup
 ---
 
@@ -16,8 +16,8 @@ Locate the actual database, data directory, and Project workspaces first. Use th
 
 Preserve together:
 
-- The database, including `setting`, `api_token`, conversations, and execution records.
-- `keys/` and `skills/` under the data directory.
+- The database, including `setting`, `api_token`, conversations, execution records, Events, Notifications, and extension business tables.
+- `keys/`, `skills/`, and `acp-agents/` (if installed) under the data directory, plus `Extensions:Directory` if Server extensions are installed.
 - Deployment configuration and secret references, with actual secrets backed up in secure storage.
 - Business files in each primary and additional Project directory, using a separate file-backup strategy.
 

@@ -2,7 +2,7 @@
 title: "多端客户端"
 description: "通过浏览器、桌面和移动设备访问自己的 AGW 服务。"
 weight: 60
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/features/clients
 ---
 
@@ -13,7 +13,7 @@ AGW 提供 Web、Desktop 和 Mobile 客户端。连接同一个 Server 并使用
 | 客户端 | 适合的场景 |
 | --- | --- |
 | Web | 无需安装桌面客户端，在浏览器中管理和对话 |
-| Desktop | 日常工作空间、多个 Server 配置、本机或远程使用 |
+| Desktop | 日常工作空间，支持会话与文件标签页、悬浮对话、内置文件查看器、主题、扩展与多个 Server 配置 |
 | Mobile | 在移动设备上查看对话、访问项目并继续交流 |
 
 ![AGW Desktop 的对话工作空间；Web 与 Mobile 使用各自适配的界面。](/images/screenshots/desktop-chat.png)

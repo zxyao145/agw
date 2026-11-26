@@ -2,7 +2,7 @@
 title: "文件浏览与 Git 变更审查"
 description: "在 Chat 工作区浏览项目文件，查看 Git diff、暂存变更，并用行评论让 Agent 继续修改。"
 weight: 55
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/features/files-git
 ---
 
@@ -17,7 +17,9 @@ Agent 修改代码后，需要确认它改了哪些文件、每处改动是否�
 
 打开文件树顶部的 **Diff** 开关后，文件树只显示有 Git 变更的文件，并分为 **Staged** 和 **Unstaged** 两组。一个文件同时包含已暂存和未暂存的改动时，会在两组中各出现一次。文件名旁的字母表示变更类型：`A` 新增、`M` 修改、`D` 删除、`U` 未跟踪。
 
-选中文件后，右侧左右对照显示改动前后的内容。Staged 分组对比 `HEAD → Staged`，Unstaged 分组对比 `Staged → Working Tree`。关闭 Diff 开关后，文件树显示完整目录，右侧显示文件的当前内容。
+选中文件后，右侧在 Monaco diff 编辑器中左右对照显示改动前后的内容。Staged 分组对比 `HEAD → Staged`，Unstaged 分组对比 `Staged → Working Tree`。在 Diff 模式下，点击标题栏右侧的文件切换按钮，可以在 diff 与完整文件视图之间切换（使用与关闭 Diff 时相同的查看器和 **Source** 视图）。关闭 Diff 开关后，文件树显示完整目录，右侧在 **Source** 中显示文件当前内容：Web 为只读视图，Desktop 支持直接编辑（`Cmd/Ctrl+S` 保存，**More** 菜单或状态栏提供格式化、自动换行与编码切换）。
+
+Desktop 还内置了常用文件查看器与仓库管理扩展：**Markdown**（**Mixed** 块编辑、**Preview** 与 **Code** 视图，支持 Mermaid 图表、标题大纲与查找替换）、**Excalidraw**（`*.excalidraw`）、**Image Viewer**，以及用于管理项目 Git 主检出、特性 worktree、分支文件树和仓库代理设置的 **Bare Repository** 侧边栏。
 
 | 操作 | 入口 | 效果 |
 | --- | --- | --- |

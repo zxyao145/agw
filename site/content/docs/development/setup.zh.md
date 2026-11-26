@@ -2,7 +2,7 @@
 title: "开发环境与运行"
 description: "安装依赖，独立运行后端、Web、Desktop 或 Mobile。"
 weight: 10
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/development/setup
 ---
 
@@ -26,7 +26,7 @@ dotnet run --project src/server/Agw.Standalone.Host
 另开终端，从仓库根进入 workspace：
 
 ```bash
-cd src/clients
+cd src
 pnpm install
 pnpm dev:web
 ```

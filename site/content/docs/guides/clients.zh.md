@@ -2,7 +2,7 @@
 title: "Web、Desktop 与 Mobile"
 description: "选择客户端，连接正确的 Server 并管理会话。"
 weight: 110
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/guides/clients
 ---
 
@@ -21,7 +21,11 @@ translationKey: docs/guides/clients
 3. Mobile 配置可从设备访问的 Server 地址与 API Key；设备上的 localhost 通常不是开发电脑。也可以在 Web 的 **Settings → Server access** 创建 API Key 后点击 **Copy config**，再在 Mobile 的 **Import Web configuration** 中粘贴。删除 Mobile 上的 profile 不会撤销 Server 端的 API Key，需要在 Web 中撤销。
 4. 创建一个短会话，确认连接目标、Project 与历史记录。
 
-Desktop 以 Chat 为主界面，Projects 和其他管理入口在 Settings 中。Server profile 切换使用独立缓存，修改地址或 API Key 后，会清除旧连接使用的缓存，避免混入其他 Server 的数据。
+Desktop 以 Chat 为主界面，Projects 和其他管理入口在 Settings 中。主界面由 Ribbon（包含 `Conversations`、`Files`、`Jobs`、`Events`、`Notifications` 与扩展入口）、可折叠左侧栏和主工作区标签页组成（支持 `Cmd/Ctrl+W` 关闭当前标签页、`Ctrl+Tab` 与 `Ctrl+Shift+Tab` 切换标签页），每个 Project 还拥有独立的 **Floating Chat** 悬浮对话面板。
+
+Desktop 在 **Settings → Appearance** 中切换亮暗模式与主题扩展，在 **Settings → Extensions** 中管理扩展。应用内置了 **Markdown**（**Mixed**、**Preview** 与 **Code**）、**Excalidraw**、**Image Viewer**、**Bare Repository**、**Soft Theme** 和 **Warm Minimalism Theme**，同时支持从文件夹、`.zip` 包或已连接的 Server 安装扩展。
+
+Server profile 切换使用独立缓存，修改地址或 API Key 后，会清除旧连接使用的缓存，避免混入其他 Server 的数据。
 
 ![AGW Desktop 对话界面：选择 Project 和 Agent 后输入消息。](/images/screenshots/desktop-chat.png)
 {caption="AGW Desktop 对话界面：选择 Project 和 Agent 后输入消息。"}

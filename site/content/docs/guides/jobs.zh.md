@@ -2,7 +2,7 @@
 title: "Jobs 定时任务"
 description: "通过 Events Timer 安排 Agent 或 Agentflow，并查看投递尝试。"
 weight: 70
-lastmod: 2026-11-22
+lastmod: 2026-11-26
 translationKey: docs/guides/jobs
 ---
 
@@ -113,7 +113,7 @@ Jobs 接口返回 Bens.Results envelope。计划字段沿用 Events Timer：`kin
 
 Job 响应包含 `dueAt`、`scheduleCompleted` 和 `lastDelivery`。Timer 计划未处于活动状态时，`dueAt` 为空。`scheduleCompleted` 表示计划已完成，Once Job 的 **Next Run** 此时显示 **Ended**。`lastDelivery.state` 使用 Events 投递状态值。每条运行记录包含 `id`、`deliveryId`、`attempt`、`startedAt`、`endedAt`、`result`、`error` 和 `conversationId`。
 
-[配置工具与 Skills]({{< relref "/docs/guides/tools-skills" >}}) · [了解记忆能力]({{< relref "/docs/features/memory" >}}) · [查看执行状态]({{< relref "/docs/guides/chat" >}})
+[配置工具与 Skills]({{< relref "/docs/guides/tools-skills" >}}) · [事件中心与通知]({{< relref "/docs/guides/events" >}}) · [了解记忆能力]({{< relref "/docs/features/memory" >}}) · [查看执行状态]({{< relref "/docs/guides/chat" >}})
 
 ## 实现与参考
 
