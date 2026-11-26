@@ -2,7 +2,7 @@
 title: "Agentflow"
 description: "Agents reason and act; Agentflow routes work and executes predefined steps."
 weight: 2
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/features/agentflow
 ---
 
@@ -24,11 +24,11 @@ flowchart LR
 
 | Task requirement | How Agentflow arranges it |
 | --- | --- |
-| Follow a fixed sequence | Direct passes results to the next step |
-| Select a path by condition | If / Else If checks conditions in order and sends the message only to the first matching branch; Else runs when none match |
-| Run independent tasks together | Fan Out distributes work across branches; a Concurrent block calls its members in parallel |
-| Wait for branch results | Fan-in Barrier waits for all sources in the same group before continuing |
-| Request confirmation or more information | Human Gate pauses the workflow for a human response |
+| Follow a fixed sequence | **Pass on** passes results to each connected step |
+| Select a path by condition | **Branch** checks **If / Else if** conditions in order and sends the message only to the first matching branch; **Else** runs when none match |
+| Run independent tasks together | **Send to all** distributes work across branches; a **Concurrent Block** calls its members in parallel |
+| Wait for branch results | **Wait** (Fan-in Barrier) waits for all waited-for sources before continuing |
+| Request confirmation or a decision | **Human Gate** pauses the workflow and routes by the selected choice (with optional text reply) |
 
 Agents interpret content, generate text, and call tools. Agentflow defines the connections and branching rules between steps, making it possible to inspect whether required reviews and confirmations are included.
 
@@ -49,9 +49,9 @@ The workflow assigns these responsibilities:
 
 Configure Codex, Claude Code, and Git in the execution environment, and confirm that each node accesses the same Project workspace. Give implementation, review, and commit nodes distinct instructions. Verify the complete path with a small change, then test the revision path.
 
-Express revisions through human feedback and If / Else If conditions. Set the Human Step Mode to **Input** so a person replies in Response: for example, “revise” returns to Coding and “done” proceeds to the commit. Approval mode offers only Reject and Approve and collects no text, so conditions cannot read human feedback. **Interrupt in Input mode and Reject in Approval mode both stop the workflow; neither takes the revision branch.** The loop must have an explicit exit path.
+Express revisions by configuring **Choices** on the Human Gate (such as “Request changes” and “Approve”) and routing each choice's outgoing connection to Coding or to the commit step. Enable **Allow a text reply** when the reviewer should add notes that pass downstream with their selection. **Rejecting or interrupting at a Human Gate stops the workflow.** Any loop must have an explicit exit path.
 
-Agentflow fixes responsibilities, order, and human decision points. You still need to check tests, resolved review findings, and the final diff. See the [Agentflow guide]({{< relref "/docs/guides/agentflows" >}}) for checkpoint recovery conditions.
+Agentflow fixes responsibilities, order, and human decision points. Every save creates an immutable revision, and **Publish** sets which revision runs in Chat and Jobs. You still need to check tests, resolved review findings, and the final diff. See the [Agentflow guide]({{< relref "/docs/guides/agentflows" >}}) for revision and checkpoint recovery conditions.
 
 ## Example 2: Extract locations from Xiaohongshu notes
 
@@ -76,13 +76,13 @@ Tools retrieve notes and query locations, the model interprets text and extracts
 
 1. Prepare and individually verify the agents you need, such as an organizer and a documentation reviewer.
 2. Open the Agentflows editor and connect Input, two Agent nodes, Human Gate, and Output.
-3. Define each Agent node's task. Set the Human Gate's Human Step Mode to Approval and write the confirmation prompt.
-4. Save, select the Agentflow in Chat, and submit a short passage. Chat shows the input each node receives in the current turn as it runs; use it to check execution order, human confirmation, and the final output.
+3. Define each Agent node's task. On the Human Gate, set the confirmation prompt and choices (and enable **Allow a text reply** if feedback text is needed).
+4. Save and publish the Agentflow, select it in Chat (or test directly in the editor's **Run** panel), and submit a short passage. Chat shows the input each node receives in the current turn as it runs; use it to check execution order, human confirmation, and the final output.
 5. Add conditional branches or parallel work after the basic path succeeds, then verify each path.
 
 ## The workflow rules are predefined
 
-Predefined steps do not mean the model returns identical answers on every run. Agents still assess their inputs, and conditional branches select paths from runtime results. Choosing Reject or Interrupt at a Human Gate stops the workflow.
+Predefined steps do not mean the model returns identical answers on every run. Agents still assess their inputs, and conditional branches select paths from runtime results. Choosing Reject at a Human Gate stops the workflow.
 
 Agentflow also supports dynamic collaboration through blocks such as Handoff and Magentic. Use explicit sequential edges when every step must execute; choose dynamic orchestration when the task calls for handoffs or planning.
 

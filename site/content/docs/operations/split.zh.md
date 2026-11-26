@@ -18,9 +18,9 @@ translationKey: docs/operations/split
 | Data Plane | SignalR Execution、A2A、Distributed 执行 Worker |
 | Standalone | 合并两种职责，适合单机 |
 
-Control/Data Plane 部署使用 Distributed 执行模式。Claude Code、Codex 和 Pi 在 Chat 中直接运行时需要 InProcess。ACP Agent 也支持 Distributed，但需要使用 FullAccess，并让各 Data Plane 副本在同一路径挂载 ACP Agent 的会话目录。详见[接入外部 Agent]({{< relref "/docs/guides/external-agents" >}})和[ACP 部署配置](https://github.com/zxyao145/agw/blob/main/docs/4.Deployment.md)。
+Control/Data Plane 部署使用 Distributed 执行模式。Claude Code、Codex 和 Pi 在 Chat 中直接运行时需要 InProcess。ACP Agent 与远程 A2A Agent 也支持 Distributed；Distributed 下的 ACP 需要使用 FullAccess，并让各 Data Plane 副本在同一路径挂载 ACP Agent 的会话目录。详见[接入外部 Agent]({{< relref "/docs/guides/external-agents" >}})与[Server 扩展与 ACP 主机配置]({{< relref "/docs/operations/extensions" >}})。
 
-分离部署要求两端使用 PostgreSQL 数据库、Distributed 执行和 PostgreSQL 锁。不能使用 SQLite 或内存锁替代跨节点协调。
+分离部署要求两端使用 PostgreSQL 数据库、Distributed 执行和 PostgreSQL 锁，并把 `Events:Transport:Provider` 设为 `Redis`，使 Control Plane 与 Data Plane 共享事件与通知传输。不能使用 SQLite、内存锁或 InProcess 事件传输替代跨节点协调。
 
 ```yaml
 Database__Provider: postgres

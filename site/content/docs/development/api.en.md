@@ -2,7 +2,7 @@
 title: "APIs and execution protocols"
 description: "Distinguish management JSON APIs, SignalR execution, and A2A."
 weight: 30
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/development/api
 ---
 
@@ -13,8 +13,10 @@ Prerequisites: access to a development Server and a valid authenticated identity
 | Interface | Purpose and contract |
 | --- | --- |
 | Management JSON APIs | Bens.Results `ApiResult` envelopes, unwrapped by typed client helpers |
-| `/api/hubs/exec` | SignalR execution commands, state, and events; mapped by Data Plane and Standalone only and accepts only the WebSocket transport. The official client connects with `skipNegotiation: true` |
-| `/api/agents/permission-capabilities` | Query supported permissions for a target |
+| `/api/hubs/exec` | SignalR execution commands (`SettingCommand`, `ExecCommand`, `SteerCommand`, `InterruptCommand`, `SetModeCommand`, `SetPermissionModeCommand`, `HumanResponseCommand`, `SubscribeTurnCommand`, `ResumeCheckpointCommand`), state, and events; mapped by Data Plane and Standalone only and accepts only the WebSocket transport. The official client connects with `skipNegotiation: true` |
+| `/api/agents/permission-capabilities` | Query supported permission modes for an Agent or Agentflow (accepts optional `agentflowRevision`) |
+| `/api/agents/input-capabilities` | Query whether a target supports `SteerCommand` (`supportsSteer`) |
+| `/api/events/*`, `/api/notifications/*`, `/api/extensions/*` | Event Center, Notification Center (including SSE stream), and Server extension management / Desktop catalog endpoints |
 | `/api/auth/oidc/providers` | Enabled sign-in providers, used to render the sign-in buttons |
 | `/api/auth/oidc/login` | Redirects to the provider; `client` is `web` or `desktop` |
 | `/api/auth/desktop/exchange` | Desktop exchanges a one-time code plus its verifier for an API Key |
@@ -27,7 +29,7 @@ Sign-in routes are served by Control Plane and Standalone. An API Key obtained b
 
 1. Use an API Key in the `Authorization: Bearer` header for automation. Browser requests using Cookies to make changes, such as POST, PUT, and DELETE, also need the existing CSRF protection flow to prevent another site from acting through the signed-in session.
 2. Read resources accessible to the current user through management APIs and retain their stable identifiers.
-3. Query target permission capabilities, then use the existing execution protocol to send commands and subscribe to events.
+3. Query target permission and input capabilities, then use the existing execution protocol to send commands (`ExecCommand`, `SteerCommand`, etc.) and subscribe to events.
 4. Restore conversation/execution state after reconnecting; disconnection is not completion.
 
 New endpoints default to query/body identifiers under repository rules. Consult current OpenAPI and Contracts for each endpoint’s routes and parameters.
@@ -44,13 +46,13 @@ An execution connection returns a stream of events. Retain conversation and exec
 
 Both response shapes include `resultFormat`, either `markdown` or `json`, derived from whether a schema is configured. Clients use it to decide how to render the final result without parsing the schema themselves.
 
-On update, an absent field keeps the current value, `null` or a whitespace-only string clears it, and any other string replaces it. The server requires valid JSON whose root is an object and otherwise returns an invalid-parameter error. Pi agents reject any schema with an invalid-parameter error. The schema is stored and forwarded as text only.
+On update, an absent field keeps the current value, `null` or a whitespace-only string clears it, and any other string replaces it. The server requires valid JSON whose root is an object and otherwise returns an invalid-parameter error. Pi, ACP, and A2A agents reject any schema with an invalid-parameter error. The schema is stored and forwarded as text only.
 
 ## Contract changes
 
 Keep DTOs in the owning module's Contracts. Expected application failures use `AgwException` and stable seven-digit ErrorCodes, mapped at boundaries. WebSocket, OAuth redirects, A2A, and static files retain their protocols.
 
-After backend contract changes, export the Development OpenAPI document to `src/clients/packages/api/openapi.json`, run `pnpm gen:api` from `src/clients`, and validate callers. `gen:api` converts only that local file; it does not fetch the latest document from Server. Do not hand-edit generated `openapi.d.ts` or log actual API Keys.
+After backend contract changes, export the Development OpenAPI document to `src/clients/packages/api/openapi.json`, run `pnpm gen:api` from `src`, and validate callers. `gen:api` converts only that local file; it does not fetch the latest document from Server. Do not hand-edit generated `openapi.d.ts` or log actual API Keys.
 
 ## Implementation and references
 

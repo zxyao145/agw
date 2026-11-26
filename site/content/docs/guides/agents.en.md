@@ -8,7 +8,7 @@ translationKey: docs/guides/agents
 
 An agent is a reusable assistant configuration. Its model interprets requests, its instructions define the task, and its tools determine which operations it can perform. For example, create separate agents for explaining code and reviewing documentation, then select one in Chat.
 
-Start with a working [Model Provider]({{< relref "/docs/guides/providers" >}}). This page covers custom agents run by AGW; see [External agents]({{< relref "/docs/guides/external-agents" >}}) for Claude Code, Codex, Pi, and ACP.
+Start with a working [Model Provider]({{< relref "/docs/guides/providers" >}}). This page covers custom agents run by AGW; see [External agents]({{< relref "/docs/guides/external-agents" >}}) for Claude Code, Codex, Pi, ACP, and remote A2A agents.
 
 ## Create an agent
 
@@ -44,7 +44,7 @@ When a program reads the result, paste a JSON Schema object into the Response Sc
 
 Saving requires valid JSON whose root is an object; an empty value turns structured output off. Anthropic models additionally require `type` set to `object`, `properties` as an object, and `required` as an array. The schema is passed to the model as the response format. When a custom agent also has “Generate Turn Summary” enabled, AGW requires exactly one JSON object or array in the last complete reply, or the turn fails; that JSON becomes the turn's Result directly, without calling the Summary Model Provider.
 
-Among external agents, Claude Code and Codex support this configuration. For Pi, the Response Schema tab is shown but disabled, and the Server rejects a schema. See [Structured responses with JSON Schema]({{< relref "/docs/features/structured-output" >}}) for details.
+Among external agents, Claude Code and Codex support this configuration. For Pi, the Response Schema tab is shown but disabled, and the Server rejects a schema; ACP and A2A do not use Response Schema. See [Structured responses with JSON Schema]({{< relref "/docs/features/structured-output" >}}) for details.
 
 ## Turn summaries
 
@@ -56,7 +56,7 @@ With the switch on, the agent's turns produce a Result, so **Only Stream Turn Re
 
 Definition changes take effect on the next turn while retaining the conversation identity. Active turns keep the configuration snapshot captured at their start, including permissions and directories.
 
-Use **Copy agent** in the Agents list to copy any agent. Copying an External Agent keeps its engine kind, Model Provider, environment variables, Extra Settings, and Response Schema; Instructions, Tools, Skills, MCP Tool Server, and Integrations are not copied. Check the copied model, capabilities, and project environment before running it.
+Use **Copy agent** in the Agents list to copy any agent. Copying an External Agent keeps its engine kind, Model Provider, environment variables, Extra Settings, and Response Schema; copying an A2A agent prefills its Agent Card URL and header names so you can enter new credential values. Instructions, Tools, Skills, MCP Tool Server, and Integrations are not copied. Check the copied model, capabilities, and project environment before running it.
 
 ## Verify
 

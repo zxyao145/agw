@@ -2,7 +2,7 @@
 title: "Scheduled jobs"
 description: "Schedule Agent or Agentflow runs with Events Timers and inspect delivery attempts."
 weight: 70
-lastmod: 2026-11-22
+lastmod: 2026-11-26
 translationKey: docs/guides/jobs
 ---
 
@@ -113,7 +113,7 @@ Create and update requests include `name`, `enabled`, `projectId`, `targetKind`,
 
 The Job response includes `dueAt`, `scheduleCompleted`, and `lastDelivery`. `dueAt` is `null` when the Timer schedule is inactive. `scheduleCompleted` identifies a completed schedule, which appears as **Ended** for Once Jobs. `lastDelivery.state` uses the Events delivery state values. Each run response includes `id`, `deliveryId`, `attempt`, `startedAt`, `endedAt`, `result`, `error`, and `conversationId`.
 
-[Configure tools and Skills]({{< relref "/docs/guides/tools-skills" >}}) · [Learn about memory]({{< relref "/docs/features/memory" >}}) · [Check execution status]({{< relref "/docs/guides/chat" >}})
+[Configure tools and Skills]({{< relref "/docs/guides/tools-skills" >}}) · [Events and Notifications]({{< relref "/docs/guides/events" >}}) · [Learn about memory]({{< relref "/docs/features/memory" >}}) · [Check execution status]({{< relref "/docs/guides/chat" >}})
 
 ## Implementation and references
 

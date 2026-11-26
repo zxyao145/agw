@@ -2,7 +2,7 @@
 title: "Projects, files, and workspaces"
 description: "Set primary and additional directories and understand file browsing versus the agent’s working directory."
 weight: 50
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/guides/projects
 ---
 
@@ -32,7 +32,7 @@ For Docker, mount the directories first. If the host’s `/home/me/app` is mount
 
 A custom agent's instructions list the primary directory and each additional directory, using the folder name as an alias. In conversation, refer to a directory by its alias, or to the primary directory as `default`.
 
-When a Project is created through the API without a workspace, the Server uses `~/.agw/projects/{projectId:N}`, where `{projectId:N}` is the Project ID without hyphens.
+When a Project is created through the API without a workspace, or when `Projects:Workspace:IsolationEnabled` is `true` in Server configuration, the Server assigns `~/.agw/projects/{projectId:N}`, where `{projectId:N}` is the Project ID without hyphens. With isolation enabled, selecting paths inside `~/.agw/projects/{projectId:N}` enforces that the target Project belongs to the current user.
 
 ## When changes apply
 

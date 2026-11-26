@@ -2,7 +2,7 @@
 title: "Development setup"
 description: "Install dependencies and run the backend, Web, Desktop, or Mobile independently."
 weight: 10
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/development/setup
 ---
 
@@ -26,7 +26,7 @@ Initialize at `http://localhost:30816/setup`. Replace `dotnet run` with `dotnet 
 Open another terminal and enter the workspace from the repository root:
 
 ```bash
-cd src/clients
+cd src
 pnpm install
 pnpm dev:web
 ```

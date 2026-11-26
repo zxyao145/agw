@@ -2,7 +2,7 @@
 title: "Configuration and authentication"
 description: "Understand configuration precedence, deployment defaults, and API Key behavior."
 weight: 30
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/operations/configuration
 ---
 
@@ -73,6 +73,7 @@ All fields below use the prefix `Execution:`.
 | --- | --- | --- |
 | `Provider` | InProcess | `InProcess`: execute in the current process. `Distributed`: coordinate durable execution through PostgreSQL, with workers claiming work. Distributed requires PostgreSQL for both the database and locks. |
 | `TurnBroadcastRetentionSeconds` | 300 | Seconds this Server keeps a finished turn's replay buffer in memory. Clients that reconnect, or retry the same accepted turn, within this window receive the full replay. |
+| `Steer:MaxPendingPerTurn` | 8 | Maximum pending steering inputs allowed per running turn; must be positive. |
 
 In InProcess mode, turns exist only inside the current Server process. When the Server restarts, running turns left by the previous process end as Interrupted and do not resume; use Distributed for recovery across restarts.
 
@@ -182,15 +183,69 @@ All fields below use the prefix `ConversationHistory:`.
 
 These settings control persistence timing, not whether live output is visible. Buffering reduces writes, but abnormal termination can lose unflushed data. Choose Immediate when prompt persistence matters.
 
-### Shell tool
-
-All fields below use the prefix `Agents:Shell:`.
+### Shell tool and Project workspaces
 
 | Setting | Default | Purpose and accepted values |
 | --- | --- | --- |
-| `Backend` | local | `local`: run commands in the project workspace on the execution host. `docker`: use the Docker Shell executor, mounting the primary workspace at `/workspace` and additional directories at `/project-directories/{id}`. It requires Docker; networking is currently disabled and timeout is 30 seconds. |
+| `Agents:Shell:Backend` | local | `local`: run commands in the project workspace on the execution host. `docker`: use the Docker Shell executor, mounting the primary workspace at `/workspace` and additional directories at `/project-directories/{id}`. It requires Docker; networking is currently disabled and timeout is 30 seconds. |
+| `Projects:Workspace:IsolationEnabled` | false | When `true`, new Projects with an empty workspace receive `~/.agw/projects/{ProjectId:N}` instead of `~/.agw/{normalizedName}`, and selecting paths inside `~/.agw/projects/{ProjectId:N}` enforces Project ownership. |
 
-This selects only the AGW Shell tool backend. It does not change Server deployment mode or install external Agent CLIs.
+`Agents:Shell:Backend` selects only the AGW Shell tool backend. It does not change Server deployment mode or install external Agent CLIs.
+
+### Server extensions
+
+All fields below use the prefix `Extensions:`. See [Server extensions and ACP hosts]({{< relref "/docs/operations/extensions" >}}) for installation steps.
+
+| Setting | Default | Purpose and accepted values |
+| --- | --- | --- |
+| `Directory` | `./Extensions` | Directory scanned once at startup for extension folders, resolved against the Server executable directory when relative. |
+| `PublicBaseUrl` | Empty | Public HTTPS base URL (loopback HTTP allowed in development) used by extensions such as Feishu to build callback and binding links. |
+| `DrainTimeout` | `00:01:00` | Maximum time waited for active work to finish before disabling an extension. |
+| `UnloadTimeout` | `00:00:30` | Timeout for unloading an extension generation after draining. |
+| `StatePollInterval` | `00:00:05` | Interval at which Hosts check shared extension enablement versions in `setting`. |
+
+### Events and Notifications
+
+All fields below use the prefix `Events:` or `Notifications:`.
+
+| Setting | Default | Purpose and accepted values |
+| --- | --- | --- |
+| `Events:Transport:Provider` | `InProcess` | `InProcess` for Standalone, or `Redis` (required for split Control/Data Plane deployments). |
+| `Events:Transport:Redis:ConnectionString` | Empty | Redis connection string when `Events:Transport:Provider` is `Redis`. |
+| `Events:Transport:Redis:StreamMaxLength` | `100000` | Approximate maximum Redis stream length for event transport. |
+| `Events:Outbox:Enabled` | `true` | Enables the outbox for staging and recovering unpublished events, deliveries, and notification dispatches. |
+| `Events:Outbox:StaleAfter` / `RecoveryInterval` | `00:05:00` / `00:00:30` | Age threshold and scan interval for recovering stale outbox entries. |
+| `Events:Dispatch:MaxHops` | `8` | Maximum chained event hops allowed before stopping dispatch. |
+| `Events:Payload:MaxBytes` | `262144` | Maximum accepted CloudEvent payload size in bytes. |
+| `Events:Delivery:MaxAttempts` | `10` | Maximum delivery attempts before a retryable delivery enters `Parked`. |
+| `Events:Delivery:BaseBackoff` / `MaxBackoff` | `00:00:30` / `00:30:00` | Initial and maximum retry backoff durations for failed deliveries. |
+| `Events:Delivery:RunningTimeout` | `00:10:00` | Duration after which a stalled running delivery can be recovered. |
+| `Events:HttpPoll:MinInterval` / `AllowPrivateNetworks` | `00:01:00` / `false` | Minimum HTTP poll interval and whether HTTP poll sources may target private networks (`MaxPages=20`, `MaxItems=5000`, `MaxResponseBytes=8388608`). |
+| `Notifications:Stream:PollInterval` | `00:00:01` | Poll interval for the Notification Center SSE stream. |
+| `Notifications:Dispatch:MaxAttempts` / `ClaimDuration` | `8` / `00:01:00` | Maximum channel dispatch attempts and claim lease duration. |
+
+### ACP and remote A2A agents
+
+`AcpAgents:` configures the ACP registry catalog, installer, and stdio agent lifecycle:
+
+| Setting | Default | Purpose and accepted values |
+| --- | --- | --- |
+| `AcpAgents:RegistryUrl` | `https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json` | Registry queried by the Agent form and `acp install`. Accepts HTTPS or loopback HTTP. |
+| `AcpAgents:RegistryRefreshInterval` / `RegistryFetchTimeout` / `RegistryMaxBytes` | `01:00:00` / `00:00:30` / `8388608` | Registry cache age, fetch timeout, and response byte limit. |
+| `AcpAgents:InstallRoot` | `{AgwDataDir}/acp-agents` | Installation root used by `acp install` and the execution host; explicit values must be absolute paths. |
+| `AcpAgents:AllowUnverifiedBinaries` | `false` | Whether to install binary distributions without a SHA-256 digest. |
+| `AcpAgents:DownloadTimeout` / `MaxDownloadBytes` | `00:10:00` / `1073741824` | Per-file download timeout and size limit in bytes. |
+| `AcpAgents:InitializeTimeout` / `RequestTimeout` / `CancelGracePeriod` | `00:02:00` / `00:01:00` / `00:00:05` | Process `initialize`, per-request, and `session/cancel` timeouts. |
+| `AcpAgents:StderrTailLines` | `20` | Maximum stderr lines included in ACP process errors. |
+
+`A2ARemoteAgents:` configures outbound calls to remote A2A agents:
+
+| Setting | Default | Purpose and accepted values |
+| --- | --- | --- |
+| `A2ARemoteAgents:AllowPrivateNetworks` | `true` | Whether remote A2A requests and card fetches may target private networks. |
+| `A2ARemoteAgents:CardFetchTimeout` / `CardMaxBytes` | `00:00:15` / `1048576` | Timeout and size limit when fetching an Agent Card. |
+| `A2ARemoteAgents:RequestTimeout` / `StreamIdleTimeout` | `00:01:00` / `00:05:00` | Request timeout and streaming idle timeout for remote A2A calls. |
+| `A2ARemoteAgents:PollInterval` / `ResubscribeAttempts` | `00:00:02` / `3` | Task polling interval and stream resubscribe attempts. |
 
 ### OpenTelemetry
 

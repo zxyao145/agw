@@ -2,7 +2,7 @@
 title: "Architecture and module boundaries"
 description: "Understand the modular monolith, data ownership, and client package responsibilities."
 weight: 20
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/development/architecture
 ---
 
@@ -32,19 +32,19 @@ Domain entities hold state. A Behavior handles rules within one Aggregate, while
 
 Each table has one owning module. Sharing entity types and a database does not permit direct access to another module’s tables; use that module’s published interfaces.
 
-Each module that owns tables declares its persistence interface `I<Module>DbContext` in `Application/Persistence`. The ten modules are Agents, Auth, Events, Integrations, Notifications, Projects, Providers, Settings, Skills, and Tools. Files, Setup, A2A, and Jobs own no tables and have no such interface. Within a request, one `AgwDbContext` instance implements these interfaces. Modules share database resources while limiting the data each can access. Cross-module calls use Contracts, and approved Infrastructure adapters handle cross-module transactions.
+Each module that owns tables declares its persistence interface `I<Module>DbContext` in `Application/Persistence`. The ten modules are Agents, Auth, Events, Integrations, Notifications, Projects, Providers, Settings, Skills, and Tools. Files, Setup, A2A, Jobs, and Extensions own no core `AgwDbContext` tables and have no such interface (Server extensions with their own databases use isolated `ExtensionDbContext` instances via `Agw.Extensions.Sdk.EntityFrameworkCore`). Within a request, one `AgwDbContext` instance implements these interfaces. Modules share database resources while limiting the data each can access. Cross-module calls use Contracts, and approved Infrastructure adapters handle cross-module transactions.
 
 `Agw.Agents.Execution → Agw.Agents` is one-way; both assemblies belong to the Agents module. Selective DDD for Agentflows does not extend to ordinary CRUD modules.
 
 ## Example: updating an Agentflow
 
-Api receives the request. Application checks access and loads the flow with all nodes and edges. Policy validates the proposed graph and returns a Decision. Behavior applies valid changes to the loaded objects, then Application saves them.
+Api receives the request. Application checks access and loads the flow with its revisions, nodes, and edges. Policy validates the proposed graph and returns a Decision. Behavior applies valid changes to the loaded objects, then Application saves them as an immutable revision.
 
 For edge rules, inspect the Agentflow Policy and Topology. For authorization or loading and saving order, inspect Application. For database implementation, inspect Infrastructure. This separates business rules from network and storage details and makes them easier to test independently.
 
 ## Clients
 
-Web and Desktop own independent route shells and builds. Business packages live in `src/clients/packages`. `chat-core` owns message semantics, `chat-runtime` owns execution connections and state, and `chat` owns DOM rendering. Mobile uses `chat-native` and RN-safe packages rather than DOM packages.
+Web and Desktop own independent route shells and builds under `src/clients/`. Business packages live in `src/clients/packages`, and bundled extensions live in `src/extensions/`, sharing one pnpm/Turborepo workspace rooted at `src`. `@agw/execution-types` and `@agw/execution-core` hold transport-neutral execution messages, commands, and stream merging; `chat-core` owns message semantics, `chat-runtime` owns execution connections and state (`ChatHttpClient`), and `chat` owns DOM rendering (`react-markdown` in Web; `@agw/chat/markdown-tiptap` in Desktop). `@agw/code-view` wraps Monaco for Files and diffs; `@agw/events`, `@agw/notifications`, and `@agw/server-extensions` supply Event Center, Notification Center, and Server extension management UIs. Desktop runs extensions out-of-process via `ExtensionHost` and `@agw/extension-sdk`. Mobile uses `chat-native` and RN-safe packages rather than DOM packages.
 
 Identify the owning module and public entry point before adding a feature. Run `pnpm test:boundaries` and the backend architecture tests, `dotnet test tests/Agw.Architecture.Tests`, after boundary changes.
 

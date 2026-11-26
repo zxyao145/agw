@@ -2,7 +2,7 @@
 title: "Standalone and Docker"
 description: "Run a Standalone Server with its bundled Web UI."
 weight: 10
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/operations/standalone
 ---
 
@@ -42,7 +42,9 @@ On Windows, use `agw-server.exe serve`. The default listener is `http://127.0.0.
 
 ## Storage and networking
 
-Docker uses `/data` for data. Logs default independently to `logs` under the working directory; persistent file logs need a separate mount for the configured log path. Project workspaces are also independent of the data volume.
+Docker uses `/data` for data. By default, `AgwLogDir` resolves to `<AgwDataDir>/logs` (`/data/logs` inside the container volume); if you configure a separate `AgwLogDir`, mount that path separately. Project workspaces are also independent of the data volume.
+
+Official container images omit external CLIs and Node.js/uv runtimes for ACP registry agents or the Feishu Server extension; install them in a derived image when needed. See [Server extensions and ACP hosts]({{< relref "/docs/operations/extensions" >}}).
 
 Remote hosting requires correct AllowedHosts, trusted proxies, HTTPS, and WebSocket forwarding. The repository Compose example includes domain and proxy settings; replace them with actual environment values. See [Backup and upgrades]({{< relref "/docs/operations/backup" >}}) for the complete persistence set.
 

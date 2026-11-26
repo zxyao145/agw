@@ -2,7 +2,7 @@
 title: "测试与贡献约定"
 description: "按影响范围验证改动，遵守格式、边界和迁移规则。"
 weight: 50
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/development/testing
 ---
 
@@ -18,17 +18,19 @@ dotnet test Agw.slnx
 dotnet csharpier check .
 ```
 
-测试项目使用 xUnit v3，并通过根目录 `global.json` 使用 Microsoft.Testing.Platform 运行。定位问题时先运行相关测试，例如 `dotnet test tests/Agw.Files.Tests`。单元和组合测试使用真实实现和纯选项辅助方法，不使用 mock 或 fake 实现。构造 `CodexAIAgent` 或 `ClaudeCodeAIAgent` 时会探测 CLI，这类测试作为真实 CLI 测试运行，需要显式启用并确认可执行文件可用，不放进默认测试套件。
+测试项目使用 xUnit v3，并通过根目录 `global.json` 使用 Microsoft.Testing.Platform 运行。定位问题时先运行相关测试，例如 `dotnet test tests/Agw.Files.Tests`。单元和组合测试使用真实实现和纯选项辅助方法，不使用 mock 或 fake 实现。运行后端 Agent 测试前，先安装固定版本的 Codex app-server 测试夹具（`npm ci --prefix tests/Agw.Agents.Tests/fixtures/codex-app-server --ignore-scripts --no-audit --no-fund`）。构造 `CodexAIAgent` 或 `ClaudeCodeAIAgent` 时会探测 CLI，真实 CLI 测试需要显式启用并确认可执行文件可用，不放进默认测试套件；ACP Agent 测试可执行 `dotnet test --project tests/Agw.Agents.Tests --filter-class "*Acp*"`。
+
+Server 扩展相关测试位于 `tests/Agw.Extensions.Tests`、`tests/Agw.Extensions.Runtime.Tests`、`tests/Agw.Extensions.Database.Tests` 与 `tests/Agw.Host.Tests`（`ExtensionStartupTests`）。
 
 修改错误码或异常规则后运行 `dotnet test tests/Agw.Shared.Tests`；修改模块依赖后运行后端架构测试 `dotnet test tests/Agw.Architecture.Tests`。
 
-持久化执行的 PostgreSQL 测试（租约保护、事件顺序、活动执行升级和调度容量）通过 `AGW_TEST_POSTGRES_CONNECTION_STRING` 连接独立的测试实例，测试用户需要创建数据库的权限；Redis 事件投影测试使用 `AGW_TEST_REDIS_CONNECTION_STRING`。没有设置这些变量时，对应测试会跳过。CI 使用 PostgreSQL 18 运行 PostgreSQL 测试，并检查 TRX 结果，确认必需的测试全部执行成功；完整命令见[开发文档](https://github.com/zxyao145/agw/blob/main/docs/1.Development.md)。
+持久化执行的 PostgreSQL 测试（租约保护、事件顺序、活动执行升级和调度容量）通过 `AGW_TEST_POSTGRES_CONNECTION_STRING` 连接独立的测试实例，测试用户需要创建数据库的权限。Jobs、Files、Events 与扩展的 PostgreSQL 测试从 `.scratch/postgres-tests.json` 读取 `ConnectionString`，Redis 相关测试从 `.scratch/redis-tests.json`（或 `AGW_TEST_REDIS_CONNECTION_STRING`）读取配置；未配置时对应测试会跳过。CI 使用 PostgreSQL 18 运行 PostgreSQL 测试，并检查 TRX 结果，确认必需的测试全部执行成功；完整命令见[开发文档](https://github.com/zxyao145/agw/blob/main/docs/1.Development.md)。
 
 改动登录相关代码时，运行 `dotnet test tests/Agw.Auth.Tests`。这些测试默认使用受控的提供商和各自独立的 SQLite 数据库。需要在 PostgreSQL 上验证时，把 `AGW_TEST_OIDC_POSTGRES` 设为测试服务器的管理连接字符串，该账号需要能够创建数据库；不要指向生产服务器。Desktop 主进程的登录与凭据存储测试使用 `pnpm --filter @agw/desktop test`。
 
 ## 客户端检查
 
-从 `src/clients` 运行：
+从 `src` 运行：
 
 ```bash
 pnpm lint
@@ -37,9 +39,13 @@ pnpm fmt:check
 pnpm build
 ```
 
-使用 oxlint/oxfmt，不是 ESLint/Prettier。修改包边界后必须通过 `pnpm test:boundaries`；改变 API 后先把 Development 环境的 OpenAPI 文档导出到 `src/clients/packages/api/openapi.json`，再运行 `pnpm gen:api` 重新生成 typed client，并验证调用方。
+使用 oxlint/oxfmt，不使用 ESLint/Prettier。修改包边界后必须通过 `pnpm test:boundaries`（已包含在 `pnpm test` 中）；改变 API 后先把 Development 环境的 OpenAPI 文档导出到 `src/clients/packages/api/openapi.json`，再运行 `pnpm gen:api` 重新生成 typed client，并验证调用方。
 
-组件渲染测试通过共享的 `@agw/test-harness` 建立 DOM 环境；需要 API 响应时，用其中的 `startApiServer` 启动真实的本地 HTTP 服务，让组件走自身的请求路径。Web 的浏览器测试先运行 `pnpm --filter @agw/web exec playwright install chromium`，再运行 `pnpm --filter @agw/web test:e2e`；Playwright 会在 `127.0.0.1:3101` 启动独立的 Web 服务，不需要后端。
+组件渲染测试通过共享的 `@agw/test-harness` 建立 DOM 环境；需要 API 响应时，用其中的 `startApiServer` 启动真实的本地 HTTP 服务，让组件走自身的请求路径。浏览器与 Electron 检查包括：
+
+- Web 浏览器端到端测试（`test:e2e`、`test:e2e:export`、`test:e2e:extensions`）：先在仓库根构建 `Agw.slnx` 或 `src/server/Agw.Standalone.Host`，安装 Chromium（`pnpm --filter @agw/web exec playwright install chromium`），再从 `src/clients` 运行对应脚本。
+- Code view 与 Files 浏览器测试：`pnpm --filter @agw/code-view test:browser` 与 `pnpm --filter @agw/projects test:browser`。
+- Desktop 扩展集成测试：`pnpm --filter @agw/desktop test:extensions`（每次运行前需经过用户确认）。
 
 ## 数据与提交
 

@@ -39,7 +39,7 @@ flowchart TD
     C --> E["拒绝：把结果交回 Agent"]
 ```
 
-Full access 不会跳过 Plan 的工具限制，也不会替你回答用户输入问题或工作流中的 HumanGate。Claude Code 支持原生工具审批桥接；当前 Codex 和 Pi 接入仅支持 Full access。ACP 在 InProcess 下支持三种模式，在 Distributed 下仅支持 Full access。权限下拉框始终列出三种模式，目标不支持的模式显示为不可选，并在下方说明原因。
+Full access 不会跳过 Plan 的工具限制，也不会替你回答用户输入问题或工作流中的 HumanGate。Claude Code 支持原生工具审批桥接；当前 Codex 和 Pi 接入仅支持 Full access，远程 A2A Agent 由远端自行执行工具，因此同样只适用 Full access。ACP 在 InProcess 下支持三种模式，在 Distributed 下仅支持 Full access。权限下拉框始终列出三种模式，目标不支持的模式显示为不可选，并在下方说明原因。
 
 在 Conversation Settings 中打开 **Only Stream Turn Result** 后，External Agent 和开启 Generate Turn Summary 的自定义 Agent 遇到需要人工确认的工具审批或提问时会被直接拒绝，界面不显示这些请求。Full access 以及已有授权的自动批准不受影响。需要逐次审批时，应关闭这个开关。
 

@@ -2,7 +2,7 @@
 title: "Extend tools and integrations"
 description: "Choose capability ownership and use generated tools and user connections."
 weight: 40
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/development/extensions
 ---
 
@@ -334,6 +334,13 @@ Follow GitHubConnectionNativeCapabilityProvider: functions bind the account and 
 
 There is currently no remote Marketplace download, signature, or automatic upgrade mechanism. Follow the [GitHub Native Provider](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/Tools/GitHub/GitHubConnectionNativeCapabilityProvider.cs), [GitHub Invoker](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/Tools/GitHub/GitHubConnectionInvoker.cs), and [capability-source definitions](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/Domain/Plugins/CapabilitySourceDefinition.cs).
 
+## Server and Desktop extension SDKs
+
+Beyond built-in Tools, ToolBlocks, and Integration plugins, AGW provides two extension SDKs for loadable extensions:
+
+- **Server extensions (`Agw.Extensions.Sdk`)**: implement `IServerExtension`, register HTTP endpoints, Skills (`IExtensionRegistration.RegisterSkill`), Tools (`IExtensionTool`), event handlers, notification channels, and source-generated `JsonSerializerContext` metadata (`RegisterJsonContext`). Extensions that own tables reference `Agw.Extensions.Sdk.EntityFrameworkCore` and register an `ExtensionDbContext` with generation-scoped migration and transaction locks.
+- **Desktop extensions (`@agw/extension-sdk`)**: author views (`defineView`), background scripts (`defineBackground`), file viewers (`fileViewers`), and JSON or CSS themes (`themes`) running in isolated `WebContentsView` sessions under Desktop's `ExtensionHost`. Combined Server/Desktop packages place Desktop assets under `desktop/` in the Server extension folder.
+
 ## Verify
 
 Cover successful invocation, invalid arguments, insufficient permissions, foreign Connections, and non-Ready Connections. Keep compile-time diagnostics effective. Tests use real implementations, never mocks or fake implementations; tests that depend on real accounts or external CLIs are opt-in and stay out of the default suite.
@@ -342,3 +349,7 @@ Cover successful invocation, invalid arguments, insufficient permissions, foreig
 
 - [Tool abstractions and examples](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Tools.Abstractions/README.md)
 - [Integrations](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/README.md)
+- [Server extension SDK](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Extensions.Sdk/README.md)
+- [Server extension EF Core SDK](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Extensions.Sdk.EntityFrameworkCore/README.md)
+- [Desktop extension SDK](https://github.com/zxyao145/agw/blob/main/src/clients/packages/extension-sdk/README.md)
+- [Desktop extension runtime](https://github.com/zxyao145/agw/blob/main/src/clients/desktop/README.md)

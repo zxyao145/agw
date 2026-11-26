@@ -18,9 +18,9 @@ This page assumes familiarity with containers, databases, and reverse proxies. P
 | Data Plane | SignalR Execution, A2A, Distributed execution workers |
 | Standalone | Both roles combined for a single-server setup |
 
-Split deployment uses Distributed execution. Claude Code, Codex, and Pi require InProcess execution when run directly in Chat. ACP agents also support Distributed execution with FullAccess; mount the ACP agent's session storage at the same path on every Data Plane replica. See [Connect external agents]({{< relref "/docs/guides/external-agents" >}}) and [ACP deployment configuration](https://github.com/zxyao145/agw/blob/main/docs/4.Deployment.md).
+Split deployment uses Distributed execution. Claude Code, Codex, and Pi require InProcess execution when run directly in Chat. ACP agents and remote A2A agents also support Distributed execution; Distributed ACP requires FullAccess and mounting the ACP agent's session storage at the same path on every Data Plane replica. See [Connect external agents]({{< relref "/docs/guides/external-agents" >}}) and [Server extensions and ACP hosts]({{< relref "/docs/operations/extensions" >}}).
 
-Split deployments require PostgreSQL for the database and locks, plus Distributed execution on both roles. SQLite or in-memory locks cannot replace cross-node coordination.
+Split deployments require PostgreSQL for the database and locks, Distributed execution on both roles, and Redis for `Events:Transport:Provider` so Control Plane workers and Data Plane publishers share Events and Notifications. SQLite, in-memory locks, or InProcess event transport cannot replace cross-node coordination.
 
 ```yaml
 Database__Provider: postgres

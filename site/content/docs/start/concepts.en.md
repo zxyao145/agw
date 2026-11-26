@@ -25,7 +25,7 @@ For example, you can link the same model to different Providers, then choose the
 An agent defines who performs a task, which instructions to follow, and which capabilities are available.
 
 - **Custom agent**: configure a model, instructions, tools, and Skills in AGW, which runs the agent.
-- **External agent**: connect a CLI such as Claude Code, Codex, or Pi, or an ACP agent installed and configured on the execution node.
+- **External agent**: connect a CLI such as Claude Code, Codex, or Pi, an ACP agent on the execution node, or a remote A2A agent by its Agent Card URL.
 
 An agent definition can serve many tasks; an execution is the process of handling a particular input. For example, “Code explainer” is an agent, while “Explain this function” is an input. See [Create a custom agent]({{< relref "/docs/guides/agents" >}}) and [Connect external agents]({{< relref "/docs/guides/external-agents" >}}).
 
@@ -41,7 +41,7 @@ These paths must be visible to Server or the execution node. See [Projects, file
 
 **Chat** is the interaction surface. A **conversation** holds the context and records of an ongoing exchange. An **execution** is an agent or agentflow processing input.
 
-You can send multiple messages within a conversation. During execution, inspect replies and tool activity, approve actions, or provide requested information. Losing the page connection does not mean execution has stopped; check its actual state after reconnecting. The icon beside each conversation in the list shows **Running**, **Last turn failed**, or **Last turn interrupted**.
+You can send multiple messages within a conversation. While a turn is running, new submissions wait in the client queue or, for custom agents running InProcess, can steer the active turn directly. During execution, inspect replies and tool activity, approve actions, or provide requested information. Losing the page connection does not mean execution has stopped; check its actual state after reconnecting. The icon beside each conversation in the list shows **Running**, **Last turn failed**, or **Last turn interrupted**.
 
 See [Chat and execution history]({{< relref "/docs/guides/chat" >}}).
 
@@ -94,6 +94,10 @@ An **Agentflow determines how steps work together**. It can combine agents with 
 A **Job determines when to run**. It triggers an agent or agentflow once, at an interval, or on a Cron schedule, recording the outcome of each attempt. A simple scheduled question can target an agent directly; select an agentflow when multiple steps are needed.
 
 They also work independently: run an agentflow manually in Chat, or schedule a single agent with a Job. See [Agentflows]({{< relref "/docs/guides/agentflows" >}}) and [Jobs]({{< relref "/docs/guides/jobs" >}}).
+
+## Events and Notifications
+
+**Events** routes incoming triggers—from Timers, Webhooks, HTTP polls, or extensions—through Subscriptions to Agents, Agentflows, or extension handlers, tracking deliveries and retries. **Notifications** collects messages and interactive prompts produced by runs and keeps Web and Desktop updated in real time. See [Events and Notifications]({{< relref "/docs/guides/events" >}}).
 
 ## Putting the concepts together
 

@@ -2,7 +2,7 @@
 title: "File browsing and Git change review"
 description: "Browse Project files in the Chat workspace, review Git diffs, stage changes, and send line comments back to the agent."
 weight: 55
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/features/files-git
 ---
 
@@ -17,7 +17,9 @@ After an agent edits code, you need to see which files changed and whether each 
 
 Turn on the **Diff** switch at the top of the file tree to show only files with Git changes, grouped into **Staged** and **Unstaged**. A file with both staged and unstaged edits appears once in each group. The letter next to a file name shows the change type: `A` added, `M` modified, `D` deleted, `U` untracked.
 
-Select a file to see its old and new content side by side. The Staged group compares `HEAD → Staged`; the Unstaged group compares `Staged → Working Tree`. Turn off Diff to browse the full directory tree and view each file's current content.
+Select a file to see its old and new content side by side in the Monaco diff editor. The Staged group compares `HEAD → Staged`; the Unstaged group compares `Staged → Working Tree`. In Diff mode, use the file toggle button at the right end of the title row to switch between the diff and the full file view (using the same viewers and **Source** view as when Diff mode is off). Turn off Diff to browse the full directory tree and open each file in **Source**—read-only in Web and editable in Desktop (`Cmd/Ctrl+S`, Format, Word wrap, and encoding options in the **More** menu or status bar).
+
+Desktop also ships bundled viewers for common file types: **Markdown** (**Mixed** block editor, **Preview**, and **Code**, with Mermaid diagrams, heading outline, and find/replace), **Excalidraw** (`*.excalidraw`), **Image Viewer**, and the **Bare Repository** sidebar for managing project Git checkouts, feature worktrees, branch file trees, and repository proxies.
 
 | Action | Where | Effect |
 | --- | --- | --- |

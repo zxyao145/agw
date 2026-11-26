@@ -1,8 +1,8 @@
 ---
 title: "Chat and execution history"
-description: "Run conversations, attach images, handle human input, and inspect execution state."
+description: "Run conversations, attach images, queue or steer turns, handle human input, and inspect execution state."
 weight: 40
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/guides/chat
 ---
 
@@ -17,7 +17,7 @@ Connect to the intended Server and prepare a working agent or agentflow. For an 
 3. Read streamed output and tool activity. Handle approval or user input requests in the conversation.
 4. Review the conversation history and final execution state.
 
-Web, Desktop, and Mobile accept text plus JPEG, PNG, GIF, or WebP images. Paste images in Web and Desktop; choose them from the photo library on Mobile. A message may contain up to five images, each at most 5 MB and at most 10 MB combined. Image understanding also depends on the model.
+Web, Desktop, and Mobile accept text plus JPEG, PNG, GIF, or WebP images. Paste images in Web and Desktop; choose them from the photo library on Mobile. A message may contain up to five images, each at most 5 MB and at most 10 MB combined. Image understanding also depends on the model. When Codex generates or views images, those images are saved in chat history and displayed in Web and Desktop chat.
 
 ![AGW Desktop chat: select a Project and Agent, then enter a message.](/images/screenshots/desktop-chat.png)
 {caption="AGW Desktop chat: select a Project and Agent, then enter a message."}
@@ -35,6 +35,13 @@ Web, Desktop, and Mobile accept text plus JPEG, PNG, GIF, or WebP images. Paste 
 | **Go to latest message** / **Go to first message** | Jump to the newest message, or load the full history and jump to the first message |
 
 The **Quick prompts** page has **My prompts** (entries of the current user) and **System prompts** (visible to all users, editable only by the administrator). Web opens it from the navigation; Desktop opens it from Settings.
+
+## Queue and steer while a turn runs
+
+While a turn is running, the composer stays editable in Web and Desktop so you can submit follow-up messages without waiting:
+
+- **Queue**: sends your message automatically after the current turn completes successfully. Queued items appear above the composer, where you can edit or remove them, or click **Resume** if a failed or interrupted turn pauses the queue. The queue lives in memory for the current client session and is cleared if you stop the run or reload the page.
+- **Steer**: delivers your message into the active turn after its current tool batch and before the next model call (up to 8 pending inputs by default). When a target supports steering—currently custom System agents running on the `InProcess` provider—use the split send button or `Alt+Enter` to choose between **Queue** and **Steer**. When a target does not support steering, submissions fall back to **Queue**.
 
 ## Understand progress
 
@@ -56,7 +63,7 @@ A successful execution still needs a result check. For a documentation edit, ins
 
 The top of the conversation list refreshes the list, deletes all history (**Delete All History**), and opens **Conversation Settings** through the Info button. Each conversation can be renamed or deleted.
 
-Conversation Settings shows the conversation ID, message count, and creation and update times, plus two settings:
+Conversation Settings shows the conversation ID, message count, and creation and update times, **Engine Sessions** (for listing and archiving External Agent provider sessions when the conversation is not running), and two execution settings:
 
 - **Only Stream Turn Result**: streams only each turn's Result and automatically declines questions and tool approvals that need a person; the full history is still saved. It applies only to external agents and to custom agents with Generate Turn Summary enabled, starting with the next turn.
 - **Environment Variables**: environment variables sent with each execution.
@@ -69,7 +76,7 @@ Closing a page or losing a connection usually does not cancel execution. In InPr
 
 When the connection drops, the UI shows “Reconnecting to Server…” and retries automatically; click **Retry now** to retry immediately. After reconnecting, the client restores execution state; check whether the task is running, awaiting input, or finished.
 
-Desktop gives each Server/Project/Conversation combination an independent execution connection. Switching Project tabs detaches the visible subscriber without automatically stopping background work. A status dot on each project tab shows background work, and closing a tab with a running task asks for confirmation first.
+Desktop gives each Server/Project/Conversation combination an independent execution connection. Switching Project tabs detaches the visible subscriber without automatically stopping background work. A status dot on each project tab shows background work, and closing a tab with a running task asks for confirmation first. Inside each Project, conversations, files, Jobs, and extension views open in Main Workspace tabs (single-clicking opens a preview tab; double-clicking, dragging, or editing keeps it open), alongside a separate **Floating Chat** panel that extensions can open with context.
 
 ## History
 

@@ -2,7 +2,7 @@
 title: "Projects、文件与工作目录"
 description: "设置主目录与附加目录，区分文件浏览目录与 Agent 默认工作目录。"
 weight: 50
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/guides/projects
 ---
 
@@ -32,7 +32,7 @@ Docker 中需要先把两个目录挂入容器。例如，主机的 `/home/me/ap
 
 自定义 Agent 的指令中会列出主目录和每个附加目录，并以目录名作为别名；对话时可以用别名指代某个目录，用 `default` 指代主目录。
 
-通过 API 创建 Project 时如果不提供工作目录，Server 使用 `~/.agw/projects/{projectId:N}`，其中 `{projectId:N}` 是项目 ID 去掉连字符后的值。
+通过 API 创建 Project 时如果不提供工作目录，或在服务端配置中开启 `Projects:Workspace:IsolationEnabled` 时，Server 使用 `~/.agw/projects/{projectId:N}`，其中 `{projectId:N}` 是项目 ID 去掉连字符后的值。开启隔离后，选择 `~/.agw/projects/{projectId:N}` 下的路径会校验目标 Project 归属当前用户。
 
 ## 修改何时生效
 

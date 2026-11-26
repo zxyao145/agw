@@ -2,7 +2,7 @@
 title: "单机与 Docker 部署"
 description: "在本机运行包含 Web 的 Standalone Server。"
 weight: 10
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/operations/standalone
 ---
 
@@ -42,7 +42,9 @@ Windows 使用 `agw-server.exe serve`。默认监听 `http://127.0.0.1:30816`，
 
 ## 持久化与网络
 
-Docker 数据目录为 `/data`，日志默认独立写入工作目录下的 `logs`；持久化文件日志需要另外挂载配置的日志路径。Project Workspace 也独立于数据卷。
+Docker 数据目录为 `/data`，`AgwLogDir` 默认位于 `<AgwDataDir>/logs`（容器内即 `/data/logs`）；如果单独配置了其他 `AgwLogDir` 路径，需要另外挂载。Project Workspace 也独立于数据卷。
+
+官方容器镜像默认不包含外部 Agent CLI，也不包含安装 ACP registry Agent 或运行飞书 Server 扩展所需的 Node.js / uv；需要时请在派生镜像中安装。参见 [Server 扩展与 ACP 主机配置]({{< relref "/docs/operations/extensions" >}})。
 
 远程部署需要正确配置 AllowedHosts、受信代理、HTTPS 和 WebSocket 转发。仓库 Compose 是带域名与代理配置的示例，使用前替换成真实环境值。完整持久化范围见[备份与升级]({{< relref "/docs/operations/backup" >}})。
 

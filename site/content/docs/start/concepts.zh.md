@@ -25,7 +25,7 @@ translationKey: docs/start/concepts
 Agent 定义任务由谁完成、遵循什么指令，以及可以使用哪些能力。
 
 - **自定义 Agent**：在 AGW 中配置模型、指令、工具和 Skills，由 AGW 运行。
-- **外部 Agent**：接入 Claude Code、Codex、Pi 等 CLI，或使用执行节点上已安装并配置好的 ACP Agent。
+- **外部 Agent**：接入 Claude Code、Codex、Pi 等 CLI、执行节点上的 ACP Agent，或通过 Agent Card URL 接入远程 A2A Agent。
 
 Agent 定义可以用于多次任务；一次执行则是它处理某次输入的过程。例如，“代码解释助手”是 Agent，“解释这个函数”是一次输入。参见[创建自定义 Agent]({{< relref "/docs/guides/agents" >}})与[接入外部 Agent]({{< relref "/docs/guides/external-agents" >}})。
 
@@ -41,7 +41,7 @@ Project 围绕一项工作组织目录、上下文与会话。例如，一个代
 
 **Chat** 是交互入口；**会话**保存连续交流的上下文与记录；**执行**是 Agent 或 Agentflow 处理输入的过程。
 
-在一次会话中，你可以连续发送多条消息。执行过程中可以查看回复和工具活动，处理审批或补充信息请求。页面断开连接不等于执行已经停止，重新连接后应查看实际状态：会话列表中的图标会显示 **Running**（运行中）、**Last turn failed**（上一轮失败）或 **Last turn interrupted**（上一轮被中断）。
+在一次会话中，你可以连续发送多条消息。一轮执行尚未结束时，新发送的消息可以加入队列，或者在 InProcess 模式下直接送入自定义 Agent 正在运行的回合。执行过程中可以查看回复和工具活动，处理审批或补充信息请求。页面断开连接不等于执行已经停止，重新连接后应查看实际状态：会话列表中的图标会显示 **Running**（运行中）、**Last turn failed**（上一轮失败）或 **Last turn interrupted**（上一轮被中断）。
 
 使用方法见[Chat 与执行记录]({{< relref "/docs/guides/chat" >}})。
 
@@ -94,6 +94,10 @@ Agent 选择具体的已配置集成，只有归属匹配且处于 Ready 状态�
 **Job 决定什么时候运行**。它按一次性、间隔或 Cron 触发一个 Agent 或 Agentflow，并记录每次尝试的结果。一个简单的定时问答任务可以直接选择 Agent；需要多个步骤时再选择 Agentflow。
 
 二者可以独立使用：Agentflow 可以在 Chat 中手动运行，Job 也可以只执行一个 Agent。参见[Agentflows]({{< relref "/docs/guides/agentflows" >}})与[Jobs]({{< relref "/docs/guides/jobs" >}})。
+
+## Events 与 Notifications
+
+**Events（事件中心）**接收来自 Timer、Webhook、HTTP 轮询或扩展的事件，通过 Subscription 转发给 Agent、Agentflow 或扩展处理器，并记录投递状态和重试过程。**Notifications（通知中心）**收集运行过程中产生的通知与交互请求，并实时同步到 Web 和 Desktop。参见[事件中心与通知]({{< relref "/docs/guides/events" >}})。
 
 ## 把概念串起来
 
