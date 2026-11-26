@@ -1,14 +1,16 @@
 ---
 title: "接入外部 Agent"
-description: "使用 Claude Code、Codex 或 Pi 执行任务，为不同用途分别配置 Agent。"
+description: "使用 Claude Code、Codex、Pi 或 ACP Agent 执行任务，为不同用途分别配置 Agent。"
 weight: 30
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/guides/external-agents
 ---
 
-接入外部 Agent 后，任务由 Claude Code、Codex 或 Pi 等外部工具实际执行，AGW 提供统一的配置、对话和工作流入口。你可以继续使用熟悉的外部工具，同时在 AGW 中管理它们的使用方式。
+接入外部 Agent 后，任务由 Claude Code、Codex、Pi 或 ACP Agent 等外部工具实际执行，AGW 提供统一的配置、对话和工作流入口。你可以继续使用熟悉的外部工具，同时在 AGW 中管理它们的使用方式。
 
 前提：对应 CLI 已安装在实际执行节点，并能在 Server 使用的账号与环境下工作。浏览器里安装 CLI 无效；容器执行需要容器内可用。
+
+ACP Agent 可以从 registry 安装，也可以通过 Server 可用的 command 启动。请在 **Extra Settings** 中选择已安装的 Agent，或配置 `command` 与可选的 `args`。安装说明见[ACP 部署文档](https://github.com/zxyao145/agw/blob/main/docs/4.Deployment.md)。
 
 ## 同一种外部 Agent，多份独立配置
 
@@ -30,7 +32,7 @@ translationKey: docs/guides/external-agents
 1. 先在执行节点验证 CLI 可用，并完成它所需的认证或模型配置。
 2. 在 **Agents** 中点击 **Create**，**Agent Type** 选择 `External`，再选择外部 Agent 类型。类型创建后不能修改。
 3. 选择 Project，并确认主工作目录对执行进程可见。
-4. 按需选择兼容的 Model Provider；留空时使用 Extra Settings 或外部工具自身配置。需要传给外部工具的其他选项，填写在 **Extra Settings** 标签的 JSON 对象中。
+4. Claude Code、Codex 或 Pi 可以按需选择兼容的 Model Provider；留空时使用 Extra Settings 或外部工具自身配置。ACP 使用 `configOptions`、`authMethodId` 和 `modeId`，在 **Extra Settings** 中配置模型、认证和运行模式。
 5. 发送一个简短任务，核对工作目录、输出和权限模式。
 
 Claude Code 和 Codex 通过各自 SDK 的目录选项获得 Project 的附加目录，Pi 通过每一回合的上下文获得目录清单；三者的默认工作目录都是主目录。
@@ -40,17 +42,17 @@ Claude Code 和 Codex 通过各自 SDK 的目录选项获得 Project 的附加�
 | Claude Code | Anthropic | 使用该目标声明的权限能力 |
 | Codex | OpenAI Responses | 当前仅支持 FullAccess |
 | Pi | 三种提供商协议均可 | 当前仅支持 FullAccess |
+| ACP | 通过 ACP Agent 设置模型与认证 | InProcess 支持三种模式；Distributed 仅支持 FullAccess |
 
-![AGW Desktop：External Agent 可选择 Claude Code、OpenAI Codex 或 Pi；对应 CLI 需在执行主机另行安装和配置。](/images/screenshots/external-agent-types.png)
-{caption="AGW Desktop：External Agent 可选择 Claude Code、OpenAI Codex 或 Pi；对应 CLI 需在执行主机另行安装和配置。"}
+使用 registry 中的 ACP Agent 时，需要在每个执行主机安装选定版本。Distributed 模式下，各 Data Plane 副本还需共用 ACP Agent 的会话目录。
 
 ## 配置生效与限制
 
-Chat 的权限下拉框始终列出三种模式，目标不支持的模式显示为不可选并说明原因；服务端也会验证能力。修改权限或 Agent 配置影响下一回合，当前回合保留开始时的配置快照。
+Chat 的权限下拉框始终列出三种模式，目标不支持的模式显示为不可选并说明原因；服务端也会验证能力。ACP 在 InProcess 下支持三种模式，在 Distributed 下仅支持 FullAccess。修改权限或 Agent 配置影响下一回合，当前回合保留开始时的配置快照。
 
-在 Chat 中直接运行 External Agent 需要 InProcess 执行模式。Distributed 模式（包括 Control/Data Plane 分离部署）下，这类回合会报错 “Distributed execution currently supports System Agents only.”。
+Claude Code、Codex 和 Pi 在 Chat 中直接运行时需要 InProcess。ACP Agent 支持 InProcess 与 Distributed；Distributed 需要使用 FullAccess，并让各副本共用 ACP Agent 的会话目录。详见[Control/Data Plane 部署]({{< relref "/docs/operations/split" >}})和[ACP 部署配置](https://github.com/zxyao145/agw/blob/main/docs/4.Deployment.md)。
 
-AGW 中的 Instructions、Tools、Skills、MCP Tool Server 和 Integrations 配置都不会交给任何 External Agent（包括 Pi），表单中的这些标签不可编辑；External Agent 只会读到已有的 User Memory 作为上下文。外部工具自身支持什么能力，需要在其环境中配置和验证。
+AGW 中的 Instructions、Tools、Skills、MCP Tool Server 和 Integrations 配置都不会交给任何 External Agent（包括 Pi 和 ACP），表单中的这些标签不可编辑；External Agent 只会读到已有的 User Memory 作为上下文。外部工具自身支持什么能力，需要在其环境中配置和验证。
 
 CLI 不可用时检查可执行文件、运行账号、环境变量及服务日志。例如，终端中可运行而 AGW 中无法启动时，先检查 Server 账号的程序搜索路径（PATH）是否包含该 CLI。
 

@@ -2,7 +2,7 @@
 title: "Install and configure Server"
 description: "Choose an installation, initialize Server, and connect clients."
 weight: 20
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/start/install
 aliases: ["/docs/start/setup/"]
 ---
@@ -41,7 +41,7 @@ Choose a deployment approach for your needs:
 
 Configure a domain, HTTPS, and a reverse proxy for shared or remote access.
 
-The Docker image does not include any external agents, such as Claude Code, Codex, or Pi. Install and configure them in the container yourself if needed.
+The Docker image does not include external agents such as Claude Code, Codex, Pi, or ACP registry agents. Install and configure them in the container yourself if needed.
 
 ## Source
 

@@ -2,7 +2,7 @@
 title: "Core concepts"
 description: "Understand how models, agents, projects, conversations, tools, agentflows, and jobs work together."
 weight: 15
-lastmod: 2026-09-25
+lastmod: 2026-11-26
 translationKey: docs/start/concepts
 ---
 
@@ -25,7 +25,7 @@ For example, you can link the same model to different Providers, then choose the
 An agent defines who performs a task, which instructions to follow, and which capabilities are available.
 
 - **Custom agent**: configure a model, instructions, tools, and Skills in AGW, which runs the agent.
-- **External agent**: connect a CLI such as Claude Code, Codex, or Pi using an environment installed and configured on the execution node.
+- **External agent**: connect a CLI such as Claude Code, Codex, or Pi, or an ACP agent installed and configured on the execution node.
 
 An agent definition can serve many tasks; an execution is the process of handling a particular input. For example, “Code explainer” is an agent, while “Explain this function” is an input. See [Create a custom agent]({{< relref "/docs/guides/agents" >}}) and [Connect external agents]({{< relref "/docs/guides/external-agents" >}}).
 

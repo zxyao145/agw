@@ -74,7 +74,7 @@ GET /api/agents/permission-capabilities?type=1&id={agentflowId}
 GET /api/agents/permission-capabilities?type=1&id={agentflowId}&agentflowRevision={revision}
 ```
 
-The endpoint returns a Bens.Results envelope. After unwrapping, `supportedPermissionModes` contains `fullAccess`, `alwaysAsk`, or `allowSameArguments`; `reason` explains a restriction when present. System Agents and Claude Code support all three. Codex and Pi support only `fullAccess`. Agentflows intersect the capabilities of their Agent and nested-Agentflow targets. Foreign/missing targets are unavailable; explicitly requesting an unsupported mode fails validation.
+The endpoint returns a Bens.Results envelope. After unwrapping, `supportedPermissionModes` contains `fullAccess`, `alwaysAsk`, or `allowSameArguments`; `reason` explains a restriction when present. System Agents and Claude Code support all three. Codex and Pi support only `fullAccess`. ACP supports all three with InProcess execution and only `fullAccess` with Distributed execution. Agentflows intersect the capabilities of their Agent and nested-Agentflow targets. Foreign/missing targets are unavailable; explicitly requesting an unsupported mode fails validation.
 
 An Agentflow lookup defaults to the published revision. The editor's Run panel supplies a positive `agentflowRevision` to query the same root revision it will run, including a saved draft.
 
