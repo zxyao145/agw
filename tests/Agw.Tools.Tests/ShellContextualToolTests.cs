@@ -10,6 +10,7 @@ using Microsoft.Agents.AI.Tools.Shell;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using static Agw.Tools.Tests.ZshTestEnvironment;
 
 namespace Agw.Tools.Tests;
 
@@ -90,6 +91,147 @@ public sealed class ShellContextualToolTests
     }
 
     public static bool UsesPosixShell => !OperatingSystem.IsWindows();
+
+    [Theory(Skip = RequiresZsh, SkipUnless = nameof(HasZsh), SkipType = typeof(ZshTestEnvironment))]
+    [InlineData("$ZDOTDIR/tools")]
+    [InlineData("~/tools")]
+    [InlineData("../zdotdir/tools")]
+    public async Task RunShell_LoginShellAddsDirectory_RunsCommandFromThatDirectory(string toolsPath)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var root = CreateWorkspace();
+        try
+        {
+            var directory = CreateLoginShellDirectory(
+                root,
+                $"""
+                export PATH="{toolsPath}:$PATH"
+                """
+            );
+            var environment = new Dictionary<string, string>
+            {
+                ["SHELL"] = "/bin/zsh",
+                ["HOME"] = directory,
+                ["ZDOTDIR"] = directory,
+            };
+            await using var contribution = await MaterializeAsync(Path.Combine(root, "workspace"), ct, environment);
+            var function = Assert.IsAssignableFrom<AIFunction>(Assert.Single(contribution.Tools));
+
+            var result = await RunAsync(function, "agw-shell-probe", ct);
+            var envResult = await RunAsync(function, "/usr/bin/env agw-shell-probe", ct);
+
+            Assert.Contains("agw-shell-probe-ok", result, StringComparison.Ordinal);
+            Assert.Contains("agw-shell-probe-ok", envResult, StringComparison.Ordinal);
+            Assert.DoesNotContain("PATH", environment.Keys);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact(Skip = RequiresZsh, SkipUnless = nameof(HasZsh), SkipType = typeof(ZshTestEnvironment))]
+    public async Task RunShell_DirectoriesMovedAfterLoginShellQuery_KeepsLoginShellPath()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var root = CreateWorkspace();
+        try
+        {
+            var directory = CreateLoginShellDirectory(
+                root,
+                """
+                echo q >> "$ZDOTDIR/queries"
+                export PATH="$ZDOTDIR/tools:$PATH"
+                """
+            );
+            var workspace = Path.Combine(root, "workspace");
+            var environment = new Dictionary<string, string> { ["SHELL"] = "/bin/zsh", ["ZDOTDIR"] = directory };
+            await using var contribution = await MaterializeAsync(workspace, ct, environment);
+            var function = Assert.IsAssignableFrom<AIFunction>(Assert.Single(contribution.Tools));
+
+            var before = await RunAsync(function, "agw-shell-probe", ct);
+            Directory.Move(workspace, Path.Combine(root, "workspace-backup"));
+            var after = await RunAsync(function, "agw-shell-probe", ct);
+
+            Assert.Contains("agw-shell-probe-ok", before, StringComparison.Ordinal);
+            Assert.Contains("agw-shell-probe-ok", after, StringComparison.Ordinal);
+            Assert.Equal("q", Assert.Single(await File.ReadAllLinesAsync(Path.Combine(directory, "queries"), ct)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact(Skip = RequiresZsh, SkipUnless = nameof(HasZsh), SkipType = typeof(ZshTestEnvironment))]
+    public async Task RunShell_EnvironmentVariablesContainPath_UsesThatPath()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var root = CreateWorkspace();
+        try
+        {
+            var directory = CreateLoginShellDirectory(root, "exit 7");
+            var environment = new Dictionary<string, string>
+            {
+                ["PATH"] = $"{directory}/tools:/usr/bin:/bin",
+                ["SHELL"] = "/bin/zsh",
+                ["ZDOTDIR"] = directory,
+            };
+            await using var contribution = await MaterializeAsync(Path.Combine(root, "workspace"), ct, environment);
+            var function = Assert.IsAssignableFrom<AIFunction>(Assert.Single(contribution.Tools));
+
+            var result = await RunAsync(function, "agw-shell-probe", ct);
+
+            Assert.Contains("agw-shell-probe-ok", result, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact(Skip = RequiresZsh, SkipUnless = nameof(HasZsh), SkipType = typeof(ZshTestEnvironment))]
+    public async Task Materialize_LoginShellQueryFails_ThrowsShellLoginPathUnavailable()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var root = CreateWorkspace();
+        try
+        {
+            var directory = CreateLoginShellDirectory(root, "exit 7");
+            var environment = new Dictionary<string, string> { ["SHELL"] = "/bin/zsh", ["ZDOTDIR"] = directory };
+            var workspace = Path.Combine(root, "workspace");
+
+            var exception = await Assert.ThrowsAsync<AgwException>(() => MaterializeAsync(workspace, ct, environment));
+
+            Assert.Equal(ErrorCodes.ShellLoginPathUnavailable.Code, exception.Code);
+            Assert.Contains("code 7", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CreateLocalEnvironmentAsync_UnsupportedLoginShell_LeavesPathUnset()
+    {
+        var context = new ToolMaterializationContext
+        {
+            Agent = new Agent { Id = Guid.CreateVersion7() },
+            Project = new Project { Id = Guid.CreateVersion7() },
+            Workspace = AppContext.BaseDirectory,
+            DefaultMode = "execute",
+            EnvironmentVariables = new Dictionary<string, string> { ["SHELL"] = "/usr/local/bin/fish" },
+        };
+
+        var environment = await ShellContextualTool.CreateLocalEnvironmentAsync(
+            context,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.DoesNotContain("PATH", environment.Keys);
+        Assert.Equal("/usr/local/bin/fish", environment["SHELL"]);
+    }
 
     [Fact(SkipUnless = nameof(UsesPosixShell), Skip = "The commands use POSIX shell syntax.")]
     public async Task RunShell_DirectoriesMovedBetweenCalls_RecreatesDirectoriesAndRestartsShell()
@@ -184,14 +326,18 @@ public sealed class ShellContextualToolTests
     private static async Task<string> RunAsync(AIFunction function, string command, CancellationToken ct) =>
         JsonSerializer.Serialize(await function.InvokeAsync(new AIFunctionArguments { ["command"] = command }, ct));
 
-    private static Task<ToolContribution> MaterializeAsync(string workspace, CancellationToken ct) =>
-        MaterializeAsync(workspace, [], backend: "local", ct);
+    private static Task<ToolContribution> MaterializeAsync(
+        string workspace,
+        CancellationToken ct,
+        IReadOnlyDictionary<string, string>? environmentVariables = null
+    ) => MaterializeAsync(workspace, [], backend: "local", ct, environmentVariables);
 
     private static async Task<ToolContribution> MaterializeAsync(
         string workspace,
         IReadOnlyList<ProjectWorkspaceDirectory> additionalDirectories,
         string backend,
-        CancellationToken ct
+        CancellationToken ct,
+        IReadOnlyDictionary<string, string>? environmentVariables = null
     )
     {
         var configuration = new ConfigurationBuilder()
@@ -211,10 +357,36 @@ public sealed class ShellContextualToolTests
             Workspace = workspace,
             WorkspaceSnapshot = ProjectWorkspacePaths.CreateSnapshot(projectId, workspace, additionalDirectories),
             DefaultMode = "execute",
+            EnvironmentVariables = environmentVariables ?? HostPath(),
         };
-        var contribution = await tool.MaterializeAsync(new RunShellToolDefinition(), context, ct);
-        contribution.AddResource(workspaceServices);
-        return contribution;
+        ToolContribution? contribution = null;
+        try
+        {
+            contribution = await tool.MaterializeAsync(new RunShellToolDefinition(), context, ct);
+            contribution.AddResource(workspaceServices);
+            return contribution;
+        }
+        finally
+        {
+            if (contribution is null)
+                await workspaceServices.DisposeAsync();
+        }
+    }
+
+    private static Dictionary<string, string> HostPath() =>
+        new() { ["PATH"] = Environment.GetEnvironmentVariable("PATH")! };
+
+    private static string CreateLoginShellDirectory(string root, string zshrc)
+    {
+        var directory = Path.Combine(root, "zdotdir");
+        var tools = Directory.CreateDirectory(Path.Combine(directory, "tools"));
+        var probe = Path.Combine(tools.FullName, "agw-shell-probe");
+        File.WriteAllText(Path.Combine(directory, ".zshrc"), zshrc.ReplaceLineEndings("\n"));
+        File.WriteAllText(probe, "#!/bin/sh\nprintf 'agw-shell-probe-ok'\n");
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(probe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+        return directory;
     }
 
     private static string CreateWorkspace() =>

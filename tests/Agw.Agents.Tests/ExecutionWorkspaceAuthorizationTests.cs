@@ -402,6 +402,10 @@ public sealed class ExecutionWorkspaceAuthorizationTests
             Workspace = workspace,
             WorkspaceSnapshot = ProjectWorkspacePaths.CreateSnapshot(project.Id, workspace, additionalDirectories),
             DefaultMode = "execute",
+            EnvironmentVariables = new Dictionary<string, string>
+            {
+                ["PATH"] = Environment.GetEnvironmentVariable("PATH")!,
+            },
         };
 
     private sealed class WorkspaceAuthorizationFixture : IAsyncDisposable

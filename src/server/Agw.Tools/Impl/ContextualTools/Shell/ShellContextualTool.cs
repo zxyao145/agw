@@ -62,7 +62,8 @@ public sealed class ShellContextualTool : IContextualTool
         var backend = _configuration["Agents:Shell:Backend"]?.Trim().ToLowerInvariant() ?? "local";
         Func<ShellExecutor> createExecutor = backend switch
         {
-            "local" => () => CreateLocalExecutor(context, workspace),
+            "local" => await CreateLocalExecutorFactoryAsync(context, workspace, cancellationToken)
+                .ConfigureAwait(false),
             "docker" => () => CreateDockerExecutor(context, workspace),
             _ => throw new AgwException(
                 ErrorCodes.InvalidParam,
@@ -94,28 +95,67 @@ public sealed class ShellContextualTool : IContextualTool
         return contribution;
     }
 
-    private static LocalShellExecutor CreateLocalExecutor(ToolMaterializationContext context, string workspace)
+    private static async Task<Func<ShellExecutor>> CreateLocalExecutorFactoryAsync(
+        ToolMaterializationContext context,
+        string workspace,
+        CancellationToken cancellationToken
+    )
+    {
+        var environment = await CreateLocalEnvironmentAsync(context, cancellationToken).ConfigureAwait(false);
+        return () => CreateLocalExecutor(workspace, environment);
+    }
+
+    internal static async Task<Dictionary<string, string?>> CreateLocalEnvironmentAsync(
+        ToolMaterializationContext context,
+        CancellationToken cancellationToken
+    )
     {
         var environment = context.EnvironmentVariables.ToDictionary(
             static pair => pair.Key,
             static pair => (string?)pair.Value,
             StringComparer.Ordinal
         );
-        return new LocalShellExecutor(
+        if (OperatingSystem.IsWindows() || environment.ContainsKey("PATH"))
+            return environment;
+
+        var queryEnvironment = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var name in new[] { "PATH", "HOME", "USER", "SHELL" })
+        {
+            if (Environment.GetEnvironmentVariable(name) is { } value)
+                queryEnvironment[name] = value;
+        }
+
+        foreach (var (name, value) in context.EnvironmentVariables)
+            queryEnvironment[name] = value;
+
+        if (LoginShellPathReader.HasLoginShell(queryEnvironment))
+        {
+            environment["PATH"] = await LoginShellPathReader
+                .ReadAsync(queryEnvironment, LoginShellPathReader.DefaultTimeout, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return environment;
+    }
+
+    private static LocalShellExecutor CreateLocalExecutor(
+        string workspace,
+        IReadOnlyDictionary<string, string?> environment
+    ) =>
+        new(
             new LocalShellExecutorOptions
             {
                 Mode = ShellMode.Persistent,
                 WorkingDirectory = workspace,
                 ConfineWorkingDirectory = true,
                 CleanEnvironment = true,
-                Environment = environment,
+                Environment = new Dictionary<string, string?>(environment, StringComparer.Ordinal),
                 Policy = ShellFileAccessPolicy.CreateShellPolicy(),
                 Timeout = LocalShellExecutor.DefaultTimeout,
                 // AgwToolMetadataBinding adds the approval wrapper from RequiredPermission.
                 AcknowledgeUnsafe = true,
             }
         );
-    }
 
     /// <summary>
     /// 生成附加目录的 Docker 挂载参数；挂载前创建缺失的目录。

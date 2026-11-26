@@ -412,7 +412,10 @@ public class ToolRegistryServiceTests : IClassFixture<ToolRuntimeFixture>
         return Assert.IsAssignableFrom<AIFunction>(registry.CreateAIFunction("diff"));
     }
 
-    private static ToolMaterializationContext CreateMaterializationContext(string workspace = "/workspace")
+    private static ToolMaterializationContext CreateMaterializationContext(
+        string workspace = "/workspace",
+        IReadOnlyDictionary<string, string>? environmentVariables = null
+    )
     {
         var project = new Project { Id = Guid.CreateVersion7(), Workspace = workspace };
         return new ToolMaterializationContext
@@ -421,6 +424,7 @@ public class ToolRegistryServiceTests : IClassFixture<ToolRuntimeFixture>
             Project = project,
             Workspace = project.Workspace,
             DefaultMode = "plan",
+            EnvironmentVariables = environmentVariables ?? new Dictionary<string, string>(),
         };
     }
 
@@ -466,7 +470,10 @@ public class ToolRegistryServiceTests : IClassFixture<ToolRuntimeFixture>
             "tool-registry",
             Guid.CreateVersion7().ToString("N")
         );
-        var context = CreateMaterializationContext(workspace);
+        var context = CreateMaterializationContext(
+            workspace,
+            new Dictionary<string, string> { ["PATH"] = Environment.GetEnvironmentVariable("PATH")! }
+        );
         try
         {
             // Act
