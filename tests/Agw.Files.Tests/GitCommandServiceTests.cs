@@ -287,6 +287,88 @@ public class GitCommandServiceTests
         Assert.Contains("index.lock", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("staged-and-unstaged")]
+    [InlineData("removed-from-index")]
+    public async Task ResetFileAsync_FileInHead_RestoresHeadContent(string state)
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("tracked.txt", "base\n");
+        repository.CommitAll();
+        if (state == "staged-and-unstaged")
+        {
+            repository.Write("tracked.txt", "staged\n");
+            repository.Git("add", "tracked.txt");
+            repository.Write("tracked.txt", "unstaged\n");
+        }
+        else
+        {
+            repository.Git("rm", "--cached", "--quiet", "tracked.txt");
+        }
+
+        var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
+
+        var result = await service.ResetFileAsync(
+            repository.GetPath("tracked.txt"),
+            TestContext.Current.CancellationToken
+        );
+        var changedFiles = await service.GetChangedFilesAsync(repository.Path, TestContext.Current.CancellationToken);
+
+        Assert.Equal(new GitResetResult(true, "File reset successfully", null, false), result);
+        Assert.Equal(
+            "base\n",
+            await File.ReadAllTextAsync(repository.GetPath("tracked.txt"), TestContext.Current.CancellationToken)
+        );
+        Assert.NotNull(changedFiles);
+        Assert.Empty(changedFiles.FileStatuses);
+    }
+
+    [Theory]
+    [InlineData("untracked")]
+    [InlineData("staged")]
+    [InlineData("staged-then-changed")]
+    public async Task ResetFileAsync_FileNotInHead_ReturnsClientErrorAndKeepsFile(string state)
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("tracked.txt", "base\n");
+        repository.CommitAll();
+        repository.Write("new.txt", "new\n");
+        if (state != "untracked")
+        {
+            repository.Git("add", "new.txt");
+        }
+
+        if (state == "staged-then-changed")
+        {
+            repository.Write("new.txt", "new\nchanged\n");
+        }
+
+        var filePath = repository.GetPath("new.txt");
+        var content = await File.ReadAllTextAsync(filePath, TestContext.Current.CancellationToken);
+        var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
+
+        var result = await service.ResetFileAsync(filePath, TestContext.Current.CancellationToken);
+
+        Assert.Equal(new GitResetResult(false, "File does not exist in HEAD", null, true), result);
+        Assert.Equal(content, await File.ReadAllTextAsync(filePath, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ResetFileAsync_RepositoryWithoutCommits_ReturnsClientError()
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("first.txt", "first\n");
+        repository.Git("add", "first.txt");
+        var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
+
+        var result = await service.ResetFileAsync(
+            repository.GetPath("first.txt"),
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(new GitResetResult(false, "File does not exist in HEAD", null, true), result);
+    }
+
     private static void AssertStatus(
         GitChangedFiles changedFiles,
         TempGitRepository repository,

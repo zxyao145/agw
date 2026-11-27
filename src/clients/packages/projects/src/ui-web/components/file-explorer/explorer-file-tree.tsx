@@ -332,6 +332,11 @@ function FileTreeNode({
   const isSelectable = selectedPath !== undefined;
   const isFile = item.type === FileItemType.File;
   const isSelected = isFile && item.path === selectedPath;
+  // 未跟踪或新暂存的文件在 HEAD 中没有可恢复的版本。An untracked or newly staged file has no HEAD version to restore.
+  const canResetToHead =
+    isFile &&
+    item.gitStagedStatus !== GitStatus.Added &&
+    item.gitUnstagedStatus !== GitStatus.Untracked;
 
   return (
     <div
@@ -441,7 +446,7 @@ function FileTreeNode({
             <Trash2 className="mr-2 h-4 w-4" />
             Delete
           </ContextMenuItem>
-          {item.type === FileItemType.File && (
+          {canResetToHead && (
             <>
               <ContextMenuSeparator />
               <ContextMenuItem onClick={handleReset}>
