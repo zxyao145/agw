@@ -161,6 +161,7 @@ function ServerExtensionsAdmin() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Extension</TableHead>
+                    <TableHead>Author</TableHead>
                     <TableHead>Targets</TableHead>
                     <TableHead>Version</TableHead>
                     <TableHead>Shared enablement</TableHead>
@@ -213,6 +214,7 @@ function ExtensionRow({
         <div className="font-medium">{extension.displayName}</div>
         <div className="text-xs text-muted-foreground">{extension.name}</div>
       </TableCell>
+      <TableCell>{extension.author || "—"}</TableCell>
       <TableCell>{formatTargets(extension.targets)}</TableCell>
       <TableCell>{extension.currentVersion || "—"}</TableCell>
       <TableCell>

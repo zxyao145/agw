@@ -31,6 +31,7 @@ const extensionType = "Agw.Extensions.Runtime.Tests.Fixture.TestExtension";
 const extensionId = uuidV7();
 const extensionName = "web-e2e-extension";
 const extensionDisplayName = "Web E2E Extension";
+const extensionAuthor = "Web E2E Author";
 const ports = { host: 30818, next: 3103, proxy: 3102 };
 const children = new Map();
 const hmrWebSocketServer = new WebSocketServer({ noServer: true });
@@ -96,6 +97,7 @@ async function writeInstalledExtension(directory, version, entryType) {
     id: extensionId,
     name: extensionName,
     displayName: extensionDisplayName,
+    author: extensionAuthor,
     version,
     targets: 1,
     server: {
@@ -434,7 +436,7 @@ async function main() {
   const adminPassword = randomBytes(24).toString("base64url");
   await writeFile(
     join(scratchDirectory, "credentials.json"),
-    `${JSON.stringify({ adminPassword, extensionId, extensionName, extensionDisplayName })}\n`,
+    `${JSON.stringify({ adminPassword, extensionId, extensionName, extensionDisplayName, extensionAuthor })}\n`,
     { mode: 0o600 },
   );
 

@@ -18,6 +18,7 @@ public sealed record ExtensionManifest
     public required string Id { get; init; }
     public required string Name { get; init; }
     public required string DisplayName { get; init; }
+    public string? Author { get; init; }
     public required string Version { get; init; }
     public ExtensionTarget Targets { get; init; }
     public ExtensionServerManifest? Server { get; init; }

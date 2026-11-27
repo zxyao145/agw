@@ -7,8 +7,15 @@ type Credentials = {
   extensionId: string;
   extensionName: string;
   extensionDisplayName: string;
+  extensionAuthor: string;
 };
-type ExtensionStatus = { id: string; currentVersion: string; isEnabled: boolean; state: string };
+type ExtensionStatus = {
+  id: string;
+  author: string;
+  currentVersion: string;
+  isEnabled: boolean;
+  state: string;
+};
 const scratchDirectory = resolve(__dirname, "../../../../.scratch/server-extension-web-e2e");
 
 async function readStatus(page: Page): Promise<ExtensionStatus> {
@@ -73,6 +80,10 @@ test("admin enables startup-discovered extensions through the real Web app and H
   ) as Credentials;
   await page.goto("/extensions");
   await expect(page).toHaveURL(/\/login\/?\?returnUrl=/u);
+  // 登录页 hydration 并加载完登录方式后才填写密码，否则输入会被 hydration 丢弃。
+  // Fill the password only after the login page hydrates and loads its sign-in options; hydration discards earlier input.
+  await expect(page.getByLabel("Administrator password")).toBeVisible();
+  await expect(page.getByText("Loading sign-in options…")).toBeHidden();
   await page.getByLabel("Administrator password").fill(credentials.adminPassword);
   const loginResponse = page.waitForResponse(
     (response) =>
@@ -91,8 +102,12 @@ test("admin enables startup-discovered extensions through the real Web app and H
   await expect(row).toContainText("1.0.0");
   await expect(row).toContainText("Server");
   await expect(row).toContainText("Disabled");
+  await expect(
+    row.getByRole("cell", { name: credentials.extensionAuthor, exact: true }),
+  ).toBeVisible();
   expect(await readStatus(page)).toMatchObject({
     id: credentials.extensionId,
+    author: credentials.extensionAuthor,
     currentVersion: "1.0.0",
     isEnabled: false,
     state: "Disabled",

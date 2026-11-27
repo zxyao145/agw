@@ -116,6 +116,7 @@ public sealed class ExtensionStartupTests
                 Assert.False(status.GetProperty("isEnabled").GetBoolean());
                 Assert.Equal("Disabled", status.GetProperty("state").GetString());
                 Assert.Equal("1.0.0", status.GetProperty("currentVersion").GetString());
+                Assert.Equal("Agw Tests", status.GetProperty("author").GetString());
                 Assert.Empty(await first.CatalogAsync());
                 await first.ToggleAsync(true);
                 await first.WaitForStateAsync("Active");
@@ -309,6 +310,7 @@ public sealed class ExtensionStartupTests
                 id = ExtensionId.ToString("D"),
                 name = "calendar",
                 displayName = "Calendar",
+                author = "Agw Tests",
                 version,
                 targets = 3,
                 server = new
