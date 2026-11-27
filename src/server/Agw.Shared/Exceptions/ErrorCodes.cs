@@ -887,6 +887,11 @@ public static class ErrorCodes
         "The ACP agent installation failed.",
         HttpStatusCode.InternalServerError
     );
+    public static readonly ErrorCode ShellLoginPathUnavailable = new(
+        500_0035,
+        "The login shell search path could not be read.",
+        HttpStatusCode.InternalServerError
+    );
 
     public static readonly ErrorCode UnsupportedTransportType = new(
         501_0001,

@@ -192,6 +192,8 @@ These settings control persistence timing, not whether live output is visible. B
 
 `Agents:Shell:Backend` selects only the AGW Shell tool backend. It does not change Server deployment mode or install external Agent CLIs.
 
+On macOS and Linux, the `local` backend uses the program search path (`PATH`) of the login shell of the account that runs the Server. The Server reads the startup configuration of the `sh`, `bash`, `zsh`, `dash`, or `ksh` named by the `SHELL` environment variable. When `PATH` is set in the environment variables of the Agent, the Project, or the execution request, that value is used. When `SHELL` is unset or names another shell, the Server process `PATH` is used. If reading the login shell `PATH` fails, the execution ends with error `5000035`.
+
 ### Server extensions
 
 All fields below use the prefix `Extensions:`. See [Server extensions and ACP hosts]({{< relref "/docs/operations/extensions" >}}) for installation steps.

@@ -196,6 +196,8 @@ Agent 执行时会不断产生回复和状态消息。系统保存这些消息�
 
 `Agents:Shell:Backend` 只选择 AGW Shell 工具的执行后端，不改变整个 Server 的部署模式，也不为外部 Agent 安装 CLI。
 
+在 macOS 和 Linux 上，`local` 后端使用运行 Server 的账号的 login shell 提供的程序搜索路径（`PATH`）。Server 读取环境变量 `SHELL` 指定的 `sh`、`bash`、`zsh`、`dash` 或 `ksh` 的启动配置。Agent、Project 或执行请求的环境变量中配置了 `PATH` 时，使用配置的值。`SHELL` 未设置或指向其他 shell 时，使用 Server 进程的 `PATH`。读取 login shell 的 `PATH` 失败时，本次执行以错误 `5000035` 结束。
+
 ### Server 扩展
 
 以下配置项均以 `Extensions:` 开头，安装步骤见 [Server 扩展与 ACP 主机配置]({{< relref "/docs/operations/extensions" >}})。
