@@ -140,8 +140,8 @@ test("ChatFilePane_DiffMode_RendersBothSidesWithMonacoWorker", async ({ page }) 
   const workers: string[] = [];
   page.on("worker", (worker) => workers.push(worker.url()));
   await openFiles(page);
-  await page.getByRole("switch").click();
-  await page.getByText("calc.ts", { exact: true }).first().click();
+  await page.getByRole("switch", { name: "Diff" }).click();
+  await changedFile(page, "Unstaged", "calc.ts").click();
 
   const diff = page.locator(DIFF);
   await expect(diff.locator(".monaco-diff-editor")).toBeVisible();

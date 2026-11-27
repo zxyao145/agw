@@ -591,6 +591,9 @@ agentflowTest.describe("Agentflow editor", () => {
         edges: definition.edges.slice(0, 1),
       });
       const dialog = await openEditor(page, flow.name);
+      await dialog.evaluate(async (element) => {
+        await Promise.all(element.getAnimations().map((animation) => animation.finished));
+      });
       const handle = canvasNode(dialog, "Draft").locator(".react-flow__handle.source");
       const anchor = await handle.evaluate((element) => {
         const { x, y, width, height } = element.getBoundingClientRect();

@@ -118,7 +118,8 @@ agentflowTest(
     await expect(name).toHaveValue("Submitted draft");
     await expect(dialog.getByText("Unsaved changes", { exact: true })).toBeVisible();
     await save.click();
-    await expect(dialog.getByText("v2", { exact: true })).toBeVisible();
+    const header = dialog.locator('[data-slot="dialog-header"]');
+    await expect(header.getByText("v2", { exact: true })).toBeVisible();
     await expect(dialog).toBeVisible();
     expect(writes).toBe(2);
   },
