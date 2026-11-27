@@ -184,6 +184,23 @@ internal sealed class HistoryTestFixture : DbTransactionInterceptor, IAsyncDispo
             structuredResult
         );
 
+    /// <summary>
+    /// 以 External Engine 节点的方式运行一次：historyScope 为空时是对话作用域，输入在第一段输出之前写入。
+    /// Runs once as an External Engine node: a null historyScope is the conversation scope, and the input is written before the first output.
+    /// </summary>
+    public async Task RunExternalAsync(string? historyScope, ChatMessage input)
+    {
+        var token = TestContext.Current.CancellationToken;
+        var history = CreateProvider(EngineKind.ACP);
+        var agent = Record(new HistoryNotifyingAgent(history), history);
+        var session = await agent.CreateSessionAsync(token);
+        if (historyScope == null)
+            SessionState.InitializeSessionState(session, ContextId, ProjectId);
+        else
+            SessionState.InitializeSessionState(session, ContextId, ProjectId, historyScope);
+        await foreach (var _ in agent.RunStreamingAsync([input.Clone()], session, cancellationToken: token)) { }
+    }
+
     public async Task<List<ChatMessage>> ReadMessagesAsync() =>
         (await ReadAsync()).Select(row => row.ToChatMessage()!).ToList();
 
@@ -196,15 +213,16 @@ internal sealed class HistoryTestFixture : DbTransactionInterceptor, IAsyncDispo
 
     /// <summary>
     /// 建立一个 Agent Turn 的执行作用域并绑定本对话的历史缓冲；方法同步执行，作用域留在调用方的异步上下文中。
-    /// ownershipLost 取消时表示本实例失去执行所属。
+    /// ownershipLost 取消时表示本实例失去执行所属；inputMessageId 是受理时已经写入的用户输入行。
     /// Pushes the execution scope of one Agent turn and binds this conversation's history buffer; the method is synchronous so the scope stays in the caller's async context.
-    /// Cancelling ownershipLost means this instance lost execution ownership.
+    /// Cancelling ownershipLost means this instance lost execution ownership; inputMessageId is the user input row written at acceptance.
     /// </summary>
     public HistoryTurn BeginTurn(
         int generation = 0,
         ITurnCheckpointStore? checkpoints = null,
         CancellationTokenSource? ownershipLost = null,
-        PendingInteractionSet? interactions = null
+        PendingInteractionSet? interactions = null,
+        Guid? inputMessageId = null
     )
     {
         var context = ExecutionTestScopes.Context(
@@ -219,7 +237,15 @@ internal sealed class HistoryTestFixture : DbTransactionInterceptor, IAsyncDispo
             Guid.CreateVersion7(),
             new InteractionTestSink(),
             interactions ?? new InMemoryPendingInteractionSet(context.PermissionMode),
-            checkpoints
+            checkpoints,
+            inputMessageId == null
+                ? null
+                : new TurnRecord(
+                    Services.GetRequiredService<IServiceScopeFactory>(),
+                    context.TurnId,
+                    inputMessageId,
+                    writeGuard: null
+                )
         );
         var pushed = scope.Push();
         var buffer = Store.BeginBuffer(Conversation(generation), ownershipLost?.Token ?? CancellationToken.None);

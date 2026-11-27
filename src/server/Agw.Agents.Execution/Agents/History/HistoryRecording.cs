@@ -142,8 +142,7 @@ internal sealed class HistoryRecording
             persisted.Contents = contents;
             persisted.RawRepresentation = null;
             if (isAcceptedInput)
-                persisted.MessageId = CreateDeterministicGuid($"{_scope.HistoryScope}:{acceptedInput!.Value:N}")
-                    .ToString("D");
+                persisted.MessageId = GetNodeInputRowId(_scope.HistoryScope!, acceptedInput!.Value).ToString("D");
             await PutAsync(persisted, stepIndex, cancellationToken).ConfigureAwait(false);
         }
     }
@@ -197,6 +196,13 @@ internal sealed class HistoryRecording
         await WriteAsync(stable, stepIndex, replaceStreamed: true, cancellationToken).ConfigureAwait(false);
         return stable;
     }
+
+    /// <summary>
+    /// 节点作用域中受理输入副本的行 Id：由作用域与输入消息 ID 生成，每个作用域各有一行。
+    /// The row Id of the accepted input's copy in a node scope: generated from the scope and the input message ID, one row per scope.
+    /// </summary>
+    internal static Guid GetNodeInputRowId(string historyScope, Guid inputMessageId) =>
+        CreateDeterministicGuid($"{historyScope}:{inputMessageId:N}");
 
     private static Guid CreateDeterministicGuid(string value)
     {

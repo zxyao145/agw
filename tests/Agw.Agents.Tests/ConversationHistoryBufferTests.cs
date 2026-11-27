@@ -151,6 +151,34 @@ public sealed class ConversationHistoryBufferTests : IDisposable
         Assert.Equal(1, fixture.CommitCount);
     }
 
+    /// <summary>
+    /// 两个节点写入同一条消息：无论两次写入是否在同一批中提交，行都属于第一个写入者，其余消息照常提交。
+    /// Two nodes write the same message: whether or not both writes commit in one batch, the row belongs to the first producer and the other messages commit as usual.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Flush_SameMessageFromTwoProducers_KeepsFirstProducerRow(bool commitBetween)
+    {
+        await using var fixture = await HistoryTestFixture.CreateAsync(ConversationHistoryWriteMode.TurnEnd);
+        var input = new ChatMessage(ChatRole.User, "shared input") { MessageId = Guid.CreateVersion7().ToString("D") };
+        await using (var turn = fixture.BeginTurn())
+        {
+            await fixture.RunExternalAsync("agentflow:flow:node:coding", input);
+            if (commitBetween)
+                await turn.Buffer.FlushAsync(Token);
+            await fixture.RunExternalAsync("agentflow:flow:node:review", input);
+        }
+
+        var rows = await fixture.ReadAsync();
+        var shared = Assert.Single(rows, row => row.Id == Guid.Parse(input.MessageId));
+        Assert.Equal("agentflow:flow:node:coding", shared.HistoryScope);
+        Assert.Equal(
+            ["agentflow:flow:node:coding", "agentflow:flow:node:review"],
+            rows.Where(row => row.GetText() == "answer").Select(row => row.HistoryScope)
+        );
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

@@ -4,14 +4,17 @@ using System.Reflection;
 using System.Text.Json;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Domain.ValueObjects;
+using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.Agentflows.Context;
 using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agentflows.Workflows.Builders;
+using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Summaries;
+using Agw.Projects.Application.History;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
 using Microsoft.Agents.AI;
@@ -551,6 +554,147 @@ public class AgentflowWorkflowCompilerTests : IDisposable
         var aIndex = events.ToList().FindIndex(evt => HasChatInput(evt, "a"));
         var cIndex = events.ToList().FindIndex(evt => HasChatInput(evt, "c"));
         Assert.True(aIndex >= 0 && aIndex < cIndex);
+    }
+
+    /// <summary>
+    /// Input 节点原样转发输入：下游收到的消息保留 MessageId、创建时间与附加属性（包括 handoff 标记）。
+    /// The Input node forwards input unchanged: downstream messages keep their MessageId, creation time and additional properties, including the handoff marker.
+    /// </summary>
+    [Fact]
+    public async Task Compile_InputNodeStreaming_KeepsMessageIdentityAndProperties()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "input-identity" };
+        var client = new CapturingChatClient("done");
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode
+            {
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent",
+            },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[] { Edge("input-agent", "input", "agent"), Edge("agent-output", "agent", "output") };
+        var workflow = CompileWorkflow(
+            agentflow,
+            nodes,
+            edges,
+            new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Agent", client) }
+        );
+        Assert.NotNull(workflow);
+        var handoff = new ChatMessage(ChatRole.User, "earlier request")
+        {
+            MessageId = Guid.CreateVersion7().ToString("D"),
+        };
+        ConversationHandoffMetadata.MarkHandoffMessage(handoff);
+        var createdAt = new DateTimeOffset(2026, 11, 27, 0, 49, 45, TimeSpan.Zero);
+        var input = new ChatMessage(ChatRole.User, "original request")
+        {
+            MessageId = Guid.CreateVersion7().ToString("D"),
+            CreatedAt = createdAt,
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["custom"] = "kept" },
+        };
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { handoff, input },
+            cancellationToken: cancellationToken
+        );
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+            Assert.IsNotType<WorkflowErrorEvent>(evt);
+
+        var receivedHandoff = Assert.Single(client.Messages, message => message.Text == "earlier request");
+        Assert.Equal(handoff.MessageId, receivedHandoff.MessageId);
+        Assert.True(ConversationHandoffMetadata.IsHandoffMessage(receivedHandoff));
+        var receivedInput = Assert.Single(client.Messages, message => message.Text == "original request");
+        Assert.Equal(input.MessageId, receivedInput.MessageId);
+        Assert.Equal(createdAt, receivedInput.CreatedAt);
+        Assert.Equal("kept", receivedInput.AdditionalProperties?["custom"]?.ToString());
+    }
+
+    /// <summary>
+    /// Input 之后的 GroupChat 由两个 External Engine 参与者组成，历史在 Turn 结束时一次提交：提交成功，每个参与者的节点作用域各有一行用户输入。
+    /// A GroupChat after the Input node has two External Engine participants and history commits once at turn end: the commit succeeds and each participant's node scope holds its own user input row.
+    /// </summary>
+    [Fact]
+    public async Task Compile_GroupChatAfterInputNode_CommitsInputRowPerParticipantScope()
+    {
+        using var owner = HistoryTestFixture.EnterUser();
+        await using var fixture = await HistoryTestFixture.CreateAsync(ConversationHistoryWriteMode.TurnEnd);
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "group-chat-history" };
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode
+            {
+                NodeId = "group",
+                Kind = AgentflowNodeKind.GroupChatBlock,
+                ConfigJson = AgentflowDefinitionJson.WriteOptions(new GroupChatBlockOptions(2)),
+            },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[] { Edge("input-group", "input", "group"), Edge("group-output", "group", "output") };
+        string[] memberIds = ["coding", "review"];
+        var members = memberIds
+            .Select(
+                (memberId, index) =>
+                    new AgentflowBlockMember
+                    {
+                        NodeId = "group",
+                        MemberId = memberId,
+                        Name = memberId,
+                        Kind = AgentflowNodeKind.Agent,
+                        SortOrder = index,
+                    }
+            )
+            .ToArray();
+        var agents = memberIds.ToDictionary(
+            memberId => AgentflowBlockMemberKey.Create("group", memberId),
+            AIAgent (_) =>
+            {
+                var history = fixture.CreateProvider(EngineKind.ACP);
+                return HistoryTestFixture.Record(new HistoryNotifyingAgent(history), history);
+            }
+        );
+        var sessionScope = new AgentflowAgentSessionScope(
+            fixture.SessionState,
+            fixture.ProjectId,
+            HistoryTestFixture.ContextId,
+            taskId: null,
+            conversationId: fixture.ConversationId
+        );
+        var workflow = CompileWorkflow(agentflow, nodes, edges, agents, sessionScope, members: members);
+        Assert.NotNull(workflow);
+        var inputId = Guid.CreateVersion7();
+        var input = new ChatMessage(ChatRole.User, "original request") { MessageId = inputId.ToString("D") };
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await using (fixture.BeginTurn(inputMessageId: inputId))
+        {
+            await using var run = await InProcessExecution.RunStreamingAsync(
+                workflow!,
+                new List<ChatMessage> { input },
+                cancellationToken: cancellationToken
+            );
+            await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+            await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+                Assert.IsNotType<WorkflowErrorEvent>(evt);
+        }
+
+        var scopes = memberIds.Select(memberId =>
+            $"agentflow:{agentflow.Id:N}:node:{AgentflowBlockMemberKey.Create("group", memberId)}"
+        );
+        Assert.Equal(
+            scopes.Select(scope => $"{scope}|{HistoryRecording.GetNodeInputRowId(scope, inputId)}").Order(),
+            (await fixture.ReadAsync())
+                .Where(row => row.GetText() == "original request")
+                .Select(row => $"{row.HistoryScope}|{row.Id}")
+                .Order()
+        );
     }
 
     [Fact]

@@ -318,7 +318,26 @@ public sealed partial class ConversationHistoryStore : IConversationHistoryStore
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         var existingById = existingRows.ToDictionary(record => record.Id);
-        var pending = records.Where(record => !existingById.ContainsKey(record.Id)).ToList();
+        // 同一批中同一行 Id 只由第一条记录写入，其他写入者的记录与已有行一样跳过，结果不取决于提交时机。
+        // Within one batch the first record writes a row Id and other producers' records are skipped as with an existing row, so the result does not depend on when commits happen.
+        var pending = new List<PendingHistoryRecord>();
+        var owners = new Dictionary<Guid, Guid>();
+        foreach (var record in records)
+        {
+            if (existingById.ContainsKey(record.Id))
+                continue;
+            if (owners.TryAdd(record.Id, record.ProducerId))
+            {
+                pending.Add(record);
+                continue;
+            }
+            _logger.LogWarning(
+                "Skipped history message {MessageId} written by producer {Producer}; the row belongs to {Owner}.",
+                record.Id,
+                record.ProducerId,
+                owners[record.Id]
+            );
+        }
         var updated = false;
         foreach (var record in records)
         {

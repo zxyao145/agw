@@ -1245,12 +1245,19 @@ public sealed class AgentflowWorkflowCompiler
             foreach (var message in messages)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                // 输入消息原样传给下游：受理时的输入行与执行时的输入消息共用 MessageId，handoff 等标记留在附加属性中。
+                // Input messages pass downstream unchanged: the accepted input row and the execution input message share the MessageId, and markers such as handoff stay in the additional properties.
                 yield return new AgentResponseUpdate
                 {
-                    MessageId = Guid.CreateVersion7().ToString("D"),
+                    MessageId = string.IsNullOrWhiteSpace(message.MessageId)
+                        ? Guid.CreateVersion7().ToString("D")
+                        : message.MessageId,
                     Role = message.Role,
                     AuthorName = message.AuthorName,
+                    CreatedAt = message.CreatedAt,
                     Contents = message.Contents,
+                    AdditionalProperties =
+                        message.AdditionalProperties == null ? null : new(message.AdditionalProperties),
                 };
             }
         }

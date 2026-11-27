@@ -136,10 +136,16 @@ internal sealed class AgwChatHistoryProvider : ChatHistoryProvider
         // 本次请求自带的消息（例如受理时已经写入的用户输入）只从请求进入模型，历史中的同一行不再重复。
         // Messages carried by this request (such as the user input written at acceptance) reach the model only through the request, without their history row.
         var requestRows = new Dictionary<Guid, ChatMessage>();
+        var acceptedInput = ExecutionScope.Current?.Turn?.InputMessageId;
         foreach (var message in context.RequestMessages)
         {
-            if (Guid.TryParse(message.MessageId, out var id) && id != Guid.Empty)
-                requestRows.TryAdd(id, message);
+            if (!Guid.TryParse(message.MessageId, out var id) || id == Guid.Empty)
+                continue;
+            requestRows.TryAdd(id, message);
+            // 节点作用域中受理输入的副本使用按作用域生成的行 Id；请求带着这条输入时，历史中的副本同样不再重复。
+            // The node-scope copy of the accepted input uses a row Id generated from the scope; when the request carries that input, the history copy is left out as well.
+            if (id == acceptedInput && state.HistoryScope is { } historyScope)
+                requestRows.TryAdd(HistoryRecording.GetNodeInputRowId(historyScope, id), message);
         }
         var messages = ReadModelHistory(_recordings.GetValueOrDefault(session), entries, requestRows);
 

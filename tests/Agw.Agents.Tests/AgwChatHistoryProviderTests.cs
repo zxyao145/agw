@@ -76,6 +76,66 @@ public sealed class AgwChatHistoryProviderTests : IDisposable
         Assert.Empty(await fixture.ReadMessagesAsync());
     }
 
+    /// <summary>
+    /// 受理输入进入多个节点：每个节点作用域按作用域生成自己的行，对话作用域不再写入，同一批提交没有冲突。
+    /// The accepted input reaches several nodes: each node scope writes its own row generated from the scope, the conversation scope writes nothing, and one batch commits without conflict.
+    /// </summary>
+    [Fact]
+    public async Task WriteMessagesAsync_AcceptedInputInTwoNodeScopes_WritesOneRowPerScope()
+    {
+        await using var fixture = await HistoryTestFixture.CreateAsync(ConversationHistoryWriteMode.TurnEnd);
+        var inputId = Guid.CreateVersion7();
+        var input = new ChatMessage(ChatRole.User, "original request") { MessageId = inputId.ToString("D") };
+        string[] scopes = ["agentflow:flow:node:coding", "agentflow:flow:node:review"];
+        await using (fixture.BeginTurn(inputMessageId: inputId))
+        {
+            foreach (var scope in scopes)
+                await fixture.RunExternalAsync(scope, input);
+            await fixture.RunExternalAsync(historyScope: null, input);
+        }
+
+        var inputRows = (await fixture.ReadAsync()).Where(row => row.GetText() == "original request");
+        Assert.Equal(
+            scopes.Select(scope => $"{scope}|{HistoryRecording.GetNodeInputRowId(scope, inputId)}").Order(),
+            inputRows.Select(row => $"{row.HistoryScope}|{row.Id}").Order()
+        );
+    }
+
+    /// <summary>
+    /// 节点会话再次收到受理输入时，历史中该节点的输入副本不再进入模型请求，用户输入只出现一次。
+    /// When a node session receives the accepted input again, the node's input copy in history stays out of the model request, so the user input appears once.
+    /// </summary>
+    [Fact]
+    public async Task ProvideChatHistoryAsync_RequestCarriesAcceptedInput_SkipsNodeCopy()
+    {
+        await using var fixture = await HistoryTestFixture.CreateAsync(ConversationHistoryWriteMode.Immediate);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string scope = "agentflow:flow:node:coding";
+        var inputId = Guid.CreateVersion7();
+        var input = new ChatMessage(ChatRole.User, "original request") { MessageId = inputId.ToString("D") };
+        var history = fixture.CreateProvider();
+        var agent = new HistoryNotifyingAgent(historyProvider: null);
+        var session = await agent.CreateSessionAsync(cancellationToken);
+        fixture.SessionState.InitializeSessionState(session, HistoryTestFixture.ContextId, fixture.ProjectId, scope);
+        await using var turn = fixture.BeginTurn(inputMessageId: inputId);
+        await HistoryTestFixture.RunSdkCallbacksAsync(
+            history,
+            agent,
+            session,
+            [input],
+            [new ChatMessage(ChatRole.Assistant, "first answer")]
+        );
+        Assert.Contains(await fixture.ReadAsync(), row => row.Id == HistoryRecording.GetNodeInputRowId(scope, inputId));
+
+        var messages = await history.InvokingAsync(
+            new ChatHistoryProvider.InvokingContext(agent, session, [input.Clone()]),
+            cancellationToken
+        );
+        await history.InvokedAsync(new ChatHistoryProvider.InvokedContext(agent, session, [], []), cancellationToken);
+
+        Assert.Equal(["first answer", "original request"], messages.Select(message => message.Text));
+    }
+
     [Fact]
     public async Task InvokingCoreAsync_ModeChangeNotice_IsRemoved()
     {
