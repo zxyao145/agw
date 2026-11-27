@@ -243,6 +243,23 @@ public class GitCommandService : IGitCommandService
             return new GitResetResult(false, "File has no modifications to reset", null, true);
         }
 
+        // 未跟踪或新暂存的文件在 HEAD 中没有可恢复的版本。An untracked or newly staged file has no HEAD version
+        // to restore.
+        var headResult = await RunGitAsync(
+            gitDirectory,
+            ["rev-parse", "--verify", "--quiet", $"HEAD:{relativePath}"],
+            cancellationToken
+        );
+        if (headResult.ExitCode == MissingObjectExitCode)
+        {
+            return new GitResetResult(false, "File does not exist in HEAD", null, true);
+        }
+
+        if (headResult.ExitCode != 0)
+        {
+            return new GitResetResult(false, "Failed to check HEAD", headResult.StandardError, false);
+        }
+
         var resetResult = await RunGitAsync(gitDirectory, ["checkout", "HEAD", "--", relativePath], cancellationToken);
         if (resetResult.ExitCode != 0)
         {

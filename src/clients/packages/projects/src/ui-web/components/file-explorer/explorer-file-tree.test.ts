@@ -15,6 +15,7 @@ Object.defineProperty(globalThis, "DOMRect", {
   value: environment.window.DOMRect,
 });
 const { ExplorerFileTree, ExplorerGitChangeTree } = await import("./explorer-file-tree.tsx");
+const { buildGitChangeGroups } = await import("./git-change-tree.ts");
 const { ProjectFileScopeContext } = await import("./project-file-scope.tsx");
 const { configureApiRuntime, resetApiRuntime } = await import("@agw/api");
 
@@ -142,9 +143,9 @@ test("a click on a file only highlights it and keeps the expansion", async (cont
   assert.equal(api.requests.length, requestCount);
 });
 
-async function openContextMenu(name: string) {
+async function openContextMenu(target: string | HTMLElement) {
   await act(async () => {
-    fireEvent.contextMenu(screen.getByText(name));
+    fireEvent.contextMenu(typeof target === "string" ? screen.getByText(target) : target);
   });
   return screen.findByRole("menu");
 }
@@ -256,4 +257,65 @@ test("the git change tree offers the same extension items outside a directory sc
   assert.deepEqual(selections, [
     { path: "src/app.ts", name: "app.ts", type: "file", directoryId: null },
   ]);
+});
+
+test("the git change tree offers Reset to HEAD only for files that exist in HEAD", async () => {
+  const groups = buildGitChangeGroups(
+    [
+      {
+        name: "changed.ts",
+        path: "changed.ts",
+        type: "file",
+        gitStatus: "modified",
+        gitStagedStatus: "modified",
+        gitUnstagedStatus: "modified",
+      },
+      {
+        name: "untracked.ts",
+        path: "untracked.ts",
+        type: "file",
+        gitStatus: "untracked",
+        gitStagedStatus: null,
+        gitUnstagedStatus: "untracked",
+      },
+      {
+        name: "added.ts",
+        path: "added.ts",
+        type: "file",
+        gitStatus: "modified",
+        gitStagedStatus: "added",
+        gitUnstagedStatus: "modified",
+      },
+    ],
+    "",
+  );
+  render(
+    React.createElement(ExplorerGitChangeTree, {
+      projectId: "project-1",
+      groups,
+      onFileSelect() {},
+      onFileDeleted() {},
+      onFileReset() {},
+      onGitScopeChanged() {},
+    }),
+  );
+
+  const menus: Record<string, string[][]> = {};
+  for (const name of ["changed.ts", "untracked.ts", "added.ts"]) {
+    menus[name] = [];
+    for (const row of screen.getAllByText(name)) {
+      const menu = await openContextMenu(row);
+      menus[name].push(menuEntries(menu));
+      await closeMenu(menu);
+    }
+  }
+
+  assert.deepEqual(menus, {
+    "changed.ts": [
+      ["Delete", "---", "Reset to HEAD"],
+      ["Delete", "---", "Reset to HEAD"],
+    ],
+    "untracked.ts": [["Delete"]],
+    "added.ts": [["Delete"], ["Delete"]],
+  });
 });
