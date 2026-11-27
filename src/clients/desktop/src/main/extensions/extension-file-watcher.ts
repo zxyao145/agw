@@ -138,11 +138,12 @@ export class ExtensionFileWatcher {
   /**
    * `rename` 按文件是否存在转换为 created 或 deleted，`change` 转换为 changed。macOS 上修改文件也可能报告
    * `rename`，因此 Agw 刚替换的文件、已知存在的路径（包括被 rename 替换为新 inode 的文件）或监听开始前就存在的文件
-   * 报告为 changed。`statPath` 是检查是否存在的、经过 realpath 解析的路径，`uriPath` 是事件中报告的路径。
+   * 报告为 changed。Linux 的普通路径依据事件和路径状态判断，文件时间可能早于 `Date.now()`。
+   * `statPath` 是检查是否存在的、经过 realpath 解析的路径，`uriPath` 是事件中报告的路径。
    * `rename` becomes created or deleted by existence and `change` becomes changed. On macOS edits may also report
    * `rename`, so a file Agw just replaced, a path known to exist (including a file replaced by a rename with a new inode)
-   * or a file that predates the watcher reports changed. `statPath` is the resolved path checked for existence; `uriPath`
-   * is the path reported.
+   * or a file that predates the watcher reports changed. On Linux, ordinary paths use the event and path state because
+   * file timestamps can lag `Date.now()`. `statPath` is the resolved path checked for existence; `uriPath` is reported.
    */
   private async translate(
     owner: ResourceOwner,
@@ -157,11 +158,10 @@ export class ExtensionFileWatcher {
       const info = await lstat(statPath);
       const replaced = await this.takeReplacement(statPath, state);
       const createdAt = info.birthtimeMs > 0 ? info.birthtimeMs : info.ctimeMs;
+      const predatesWatch =
+        (process.platform !== "linux" || info.isSymbolicLink()) && createdAt < state.startedAt;
       type =
-        eventType === "change" ||
-        replaced ||
-        state.existing.has(statPath) ||
-        createdAt < state.startedAt
+        eventType === "change" || replaced || state.existing.has(statPath) || predatesWatch
           ? "changed"
           : "created";
       state.existing.add(statPath);

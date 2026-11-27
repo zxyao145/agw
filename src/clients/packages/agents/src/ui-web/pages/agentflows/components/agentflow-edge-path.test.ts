@@ -73,6 +73,25 @@ test("a blocked forward edge passes above", () => {
   assert.ok(route.points.some((point) => point.y < 0));
 });
 
+test("a blocked forward edge stays near its row when another card is far above", () => {
+  const blocker = { ...source, id: "commit", x: 640 };
+  const output = { ...target, x: 960 };
+  const upperCard = { id: "group-chat", x: 320, y: -740, width: 240, height: 158 };
+  const localRoute = routed([source, output, blocker], "source", "target");
+  const route = routed([source, output, blocker, upperCard], "source", "target");
+
+  assert.deepEqual(route.points, localRoute.points);
+});
+
+test("a forward detour uses the shorter side when it can finish level with the target", () => {
+  const lowerTarget = { ...target, y: 100 };
+  const blocker = { id: "blocker", x: 280, y: -130, width: 80, height: 228 };
+  const route = routed([source, lowerTarget, blocker], "source", "target");
+
+  assert.equal(route.points[2].y, lowerTarget.y + lowerTarget.height / 2);
+  assert.doesNotMatch(route.path, /NaN/);
+});
+
 test("edges sharing a corridor are offset", () => {
   const routes = routeAgentflowEdges(
     [source, target],
@@ -85,6 +104,20 @@ test("edges sharing a corridor are offset", () => {
   const firstCorridor = routes["edge-a"].points[2].y;
   const secondCorridor = routes["edge-b"].points[2].y;
   assert.notEqual(firstCorridor, secondCorridor);
+});
+
+test("offsets keep shared detours outside a blocker", () => {
+  const blocker = { id: "blocker", x: 280, y: 0, width: 80, height: 64 };
+  const targets = [400, 720, 1040, 1360].map((x) => ({ ...target, id: `target-${x}`, x }));
+  const routes = routeAgentflowEdges(
+    [source, blocker, ...targets],
+    targets.map(({ id }) => ({ edgeId: id, sourceNodeId: source.id, targetNodeId: id })),
+  );
+
+  for (const route of Object.values(routes)) {
+    const channelY = route.points[2].y;
+    assert.ok(channelY < blocker.y || channelY > blocker.y + blocker.height);
+  }
 });
 
 test("no segment crosses a node other than its endpoints", () => {

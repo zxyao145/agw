@@ -840,6 +840,28 @@ test("directory watches report created before changed for new files", async () =
   }
 });
 
+test(
+  "a Linux directory watch reports a file moved into the directory as created",
+  { skip: process.platform !== "linux" },
+  async () => {
+    const { storage, outside, replacedFiles, dispose } = await createHarness();
+    const events: FileChange[] = [];
+    const watcher = new ExtensionFileWatcher((event) => events.push(event), replacedFiles);
+    try {
+      const source = join(outside, "moved.txt");
+      const destination = join(storage, "moved.txt");
+      await writeFile(source, "before the watch");
+      await settle(100);
+      await watcher.add(WATCH_OWNER, "w1", storage, true);
+      await rename(source, destination);
+      await untilEvent(events, 0, "created", destination);
+    } finally {
+      watcher.releaseAll();
+      await dispose();
+    }
+  },
+);
+
 test("replacements by other programs, and a delete and create after an Agw replacement, still report created", async () => {
   const { storage, fileSystem, context, replacedFiles, dispose } = await createHarness();
   const events: FileChange[] = [];
@@ -851,10 +873,6 @@ test("replacements by other programs, and a delete and create after an Agw repla
     await writeFile(recreated, "before");
     await settle(200);
     await watcher.add(WATCH_OWNER, "w1", storage, false);
-    // Linux 的文件时间按内核时钟节拍更新，比 Date.now() 晚几毫秒；监听开始后立即新建的文件会被当作监听前就存在。
-    // Linux file times come from a coarse clock a few ms behind Date.now(); a file created right after the watch started
-    // would look older than the watch.
-    await settle(100);
 
     // 其他程序的原子保存不经过 Agw，保持原来的判断。Another program's atomic save bypasses Agw and keeps the usual rule.
     let from = events.length;
