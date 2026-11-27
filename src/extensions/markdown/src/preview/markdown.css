@@ -31,12 +31,11 @@ body {
   color: var(--muted-foreground);
 }
 
+/* 间距全部在大纲与内容列之间，大纲贴着页面右边。The whole gutter lies between the outline and the document column,
+   and the outline touches the page's right side. */
 .preview-layout {
   --document-column-width: 980px;
-}
-
-.preview-layout > .outline {
-  margin-left: var(--outline-gutter);
+  --outline-gap: var(--outline-gutter);
 }
 
 .markdown-body {

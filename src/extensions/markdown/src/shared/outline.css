@@ -1,55 +1,54 @@
 :root {
   --outline-min-width: 240px;
   --outline-max-width: 400px;
+  /* 大纲旁边的间距：其中 --outline-gap 在内容列一侧，其余在页面右边一侧。The gutter beside the outline:
+     --outline-gap of it on the document column's side, the rest on the page's right side. */
   --outline-gutter: 16px;
+  --outline-gap: 0px;
   --outline-heading-offset: 16px;
   /* 用户宽度下内容列至少保留的宽度。The width the document column keeps at least under a user width. */
   --document-min-width: 480px;
-  --outline-width-limit: var(--outline-max-width);
 }
 
-/* 用户宽度（shared/outline-width.ts 写在 html 上）。The user width, set on html by shared/outline-width.ts. */
-:root[data-outline-width] {
-  --outline-width-limit: var(--outline-user-width);
-}
-
+/* 四列：左侧空白、内容列、大纲前的空白、大纲列。两段空白平分内容列与大纲以外的宽度，内容列在大纲左边的区域中居中；
+   没有大纲时大纲列为 0，内容列在整个页面中居中。
+   Four columns: the left space, the document column, the space before the outline, and the outline column. The two
+   spaces share the width the document column and the outline leave, so the document column is centered in the area
+   left of the outline; without an outline that column is 0 and the document column is centered in the page. */
 .outline-layout {
-  --outline-side-track: minmax(0, 1fr);
+  --outline-gap-min: 0px;
+  --outline-track: 0px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, var(--document-column-width)) var(
-      --outline-side-track
-    );
+  grid-template-columns:
+    minmax(0, 1fr) minmax(0, var(--document-column-width)) minmax(var(--outline-gap-min), 1fr)
+    var(--outline-track);
 }
 
-/* 正文列达到最大宽度后，多出的宽度由大纲列与左侧列平分；大纲达到最大宽度后左侧列继续变宽，直到两侧对称。
-   Once the document column reaches its maximum width, the outline column and the left column share the extra width;
-   after the outline reaches its maximum width the left column keeps growing until both sides match. */
+/* 大纲靠页面右边，大纲列为大纲宽度加上右边一侧的间距。--outline-width 中的 100% 是网格宽度，只能用在网格的列定义中。
+   自动宽度：内容列先达到最大宽度，之后大纲增加多出宽度的一半，直到最大宽度。
+   The outline sits at the page's right side, and its column is the outline width plus the gutter on that side. The
+   100% in --outline-width is the grid's width, so it is used only in the grid's columns. The automatic width: the
+   document column reaches its maximum width first, then the outline grows by half of the extra width up to its
+   maximum. */
 .outline-layout[data-outline] {
-  --outline-min-track: calc(var(--outline-min-width) + var(--outline-gutter));
-  --outline-side-track: minmax(
-    clamp(
-      var(--outline-min-track),
-      (100% - var(--document-column-width) + var(--outline-min-track)) / 2,
-      var(--outline-max-width) + var(--outline-gutter)
-    ),
-    1fr
+  --outline-width: clamp(
+    var(--outline-min-width),
+    (100% - var(--document-column-width) + var(--outline-min-width) - var(--outline-gutter)) / 2,
+    var(--outline-max-width)
   );
+  --outline-gap-min: var(--outline-gap);
+  --outline-track: calc(var(--outline-width) + var(--outline-gutter) - var(--outline-gap));
 }
 
-/* 第 3 列至少为用户宽度加间距；页面变窄时内容列先变窄，到 --document-min-width 后大纲变窄，大纲不小于最小宽度。
-   The third column is at least the user width plus the gutter; on a narrowing page the document column gives way
-   first, then the outline below --document-min-width, never under its minimum width. */
+/* 用户宽度（shared/outline-width.ts 写在 html 上）：页面变窄时内容列先变窄，到 --document-min-width 后大纲变窄，大纲
+   不小于最小宽度。
+   The user width, set on html by shared/outline-width.ts: on a narrowing page the document column gives way first,
+   then the outline below --document-min-width, never under its minimum width. */
 :root[data-outline-width] .outline-layout[data-outline] {
-  --outline-side-track: minmax(
-    calc(
-      clamp(
-          var(--outline-min-width),
-          var(--outline-user-width),
-          100% - var(--outline-gutter) - var(--document-min-width)
-        ) +
-        var(--outline-gutter)
-    ),
-    1fr
+  --outline-width: clamp(
+    var(--outline-min-width),
+    var(--outline-user-width),
+    100% - var(--outline-gutter) - var(--document-min-width)
   );
 }
 
@@ -62,7 +61,7 @@
 }
 
 .outline-layout > .outline {
-  grid-column: 3;
+  grid-column: 4;
   grid-row: 1;
 }
 
@@ -76,7 +75,8 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  width: min(100% - var(--outline-gutter), var(--outline-width-limit));
+  /* 大纲列减去右边一侧的间距。The outline column minus the gutter on the right side. */
+  width: calc(100% - var(--outline-gutter) + var(--outline-gap));
   max-height: 100vh;
 }
 
@@ -216,9 +216,9 @@
 }
 
 @media (width < 960px) {
-  .outline-layout[data-outline],
-  :root[data-outline-width] .outline-layout[data-outline] {
-    --outline-side-track: minmax(0, 1fr);
+  .outline-layout[data-outline] {
+    --outline-gap-min: 0px;
+    --outline-track: 0px;
   }
 
   .outline {
