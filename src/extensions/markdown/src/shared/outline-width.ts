@@ -1,7 +1,7 @@
 // 用户调整的大纲宽度（Markdown 大纲宽度调整设计第 3 节）。Mixed 与 Preview 的页面同源，共用 localStorage；宽度写在 html
-// 上，outline.css 据此改变网格的第 3 列与大纲宽度。
+// 上，outline.css 据此改变网格的大纲列与大纲宽度。
 // The outline width the user sets (Markdown outline width design, section 3). Mixed and Preview pages share an origin
-// and so localStorage; the width goes on html, and outline.css changes the third grid column and the outline width
+// and so localStorage; the width goes on html, and outline.css changes the grid's outline column and the outline width
 // from it.
 
 export const OUTLINE_WIDTH_KEY = "markdown.outlineWidth";

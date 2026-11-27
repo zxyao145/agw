@@ -5620,25 +5620,28 @@ function outlineItem(label: string): string {
 }
 
 /**
- * 正文列先达到最大宽度；之后大纲列与左侧列平分多出的宽度，大纲列达到最大宽度后左侧列继续变宽，直到两侧对称。
- * The document column reaches its maximum width first; then the outline column and the left column share the extra
- * width, and once the outline column is at its maximum the left column keeps growing until both sides match.
+ * 大纲靠页面右边。正文列先达到最大宽度，之后大纲增加多出宽度的一半，直到最大宽度；正文列在大纲左边的区域中居中，与大纲
+ * 之间至少保留 gap。
+ * The outline sits at the page's right side. The document column reaches its maximum width first, then the outline
+ * grows by half of the extra width up to its maximum; the document column is centered in the area left of the outline,
+ * keeping at least the gap before it.
  */
 function visibleOutlineLayout(viewer: OutlineViewer): string {
   const { maxWidth, gap } = OUTLINE_LAYOUTS[viewer];
   return outlineLayoutCheck(
     viewer,
     `innerWidth >= ${OUTLINE_BREAKPOINT} && visible && (() => {
-      const columnWidth = Math.min(${maxWidth}, layout.width - ${OUTLINE_MIN_TRACK});
-      const sharedTrack = (layout.width - ${maxWidth} + ${OUTLINE_MIN_TRACK}) / 2;
-      const outlineTrack = Math.max(
-        Math.min(Math.max(${OUTLINE_MIN_TRACK}, sharedTrack), ${OUTLINE_MAX_TRACK}),
-        (layout.width - columnWidth) / 2,
+      const outlineWidth = Math.min(
+        Math.max(${OUTLINE_MIN_WIDTH}, (layout.width - ${maxWidth} + ${OUTLINE_MIN_WIDTH - OUTLINE_GUTTER}) / 2),
+        ${OUTLINE_MAX_WIDTH},
       );
-      return Math.abs(documentColumn.width - columnWidth) <= 1
-        && Math.abs(documentColumn.left - layout.left - (layout.width - columnWidth - outlineTrack)) <= 1
-        && Math.abs(outlineBox.width - Math.min(outlineTrack - ${OUTLINE_GUTTER}, ${OUTLINE_MAX_WIDTH})) <= 1
-        && Math.abs(outlineBox.left - documentColumn.right - ${gap}) <= 1;
+      const columnWidth = Math.min(${maxWidth}, layout.width - outlineWidth - ${OUTLINE_GUTTER});
+      const leftSpace = documentColumn.left - layout.left;
+      const outlineSpace = outlineBox.left - documentColumn.right;
+      return Math.abs(outlineBox.width - outlineWidth) <= 1
+        && Math.abs(layout.right - outlineBox.right - ${OUTLINE_GUTTER - gap}) <= 1
+        && Math.abs(documentColumn.width - columnWidth) <= 1
+        && Math.abs(outlineSpace - Math.max(${gap}, leftSpace)) <= 1;
     })()`,
   );
 }
@@ -5933,14 +5936,14 @@ async function checkWideOutline(): Promise<void> {
   );
   await checkOutlineWidths(mixed, "mixed");
   pass(
-    "Preview and Mixed widen the outline up to 400px from the extra width, then center the content",
+    "Preview and Mixed widen the outline up to 400px from the extra width and center the content left of the outline",
   );
 }
 
 /**
- * 缩小页面得到窗口达不到的 CSS 宽度：先进入大纲变宽的区间，再进入两侧对称的区间。
+ * 缩小页面得到窗口达不到的 CSS 宽度：先进入大纲变宽的区间，再进入大纲为最大宽度的区间。
  * Zooming out the page gives CSS widths the window cannot reach: first the range where the outline widens, then the
- * range where both sides match.
+ * range where the outline is at its maximum width.
  */
 async function checkOutlineWidths(frame: FrameHandle, viewer: OutlineViewer): Promise<void> {
   const { maxWidth } = OUTLINE_LAYOUTS[viewer];
@@ -5954,7 +5957,7 @@ async function checkOutlineWidths(frame: FrameHandle, viewer: OutlineViewer): Pr
       width: maxWidth + 2 * OUTLINE_MAX_TRACK + 200,
       label: "centered",
       assertion: `Math.abs(outlineBox.width - ${OUTLINE_MAX_WIDTH}) <= 1
-        && Math.abs((documentColumn.left - layout.left) - (layout.right - documentColumn.right)) <= 1`,
+        && Math.abs((documentColumn.left - layout.left) - (outlineBox.left - documentColumn.right)) <= 1`,
     },
   ];
   const contents = frame.view.webContents;
