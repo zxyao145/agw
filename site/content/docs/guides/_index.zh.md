@@ -11,5 +11,5 @@ icon: fa-solid fa-book-open
 
 - 日常对话：从[模型提供商]({{< relref "/docs/guides/providers" >}})、[Agent]({{< relref "/docs/guides/agents" >}})和 [Chat]({{< relref "/docs/guides/chat" >}})开始。
 - 处理项目资料：配置[工作目录]({{< relref "/docs/guides/projects" >}})，再添加[工具与 Skills]({{< relref "/docs/guides/tools-skills" >}})。
-- 接入外部能力：按需求选择[外部 Agent]({{< relref "/docs/guides/external-agents" >}})、[MCP]({{< relref "/docs/guides/mcp" >}})或[集成账号]({{< relref "/docs/guides/integrations" >}})。
+- 接入外部能力：按需求选择[外部 Agent]({{< relref "/docs/guides/external-agents" >}})（含 ACP 与 A2A）、[MCP]({{< relref "/docs/guides/mcp" >}})、[集成账号]({{< relref "/docs/guides/integrations" >}})或[扩展]({{< relref "/docs/guides/extensions" >}})。
 - 自动化：先验证任务，再用[Agentflow]({{< relref "/docs/guides/agentflows" >}})组织步骤，用[Job]({{< relref "/docs/guides/jobs" >}})安排时间，并在[事件中心与通知]({{< relref "/docs/guides/events" >}})管理触发器、订阅与通知。

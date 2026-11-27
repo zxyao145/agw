@@ -50,6 +50,65 @@ Claude Code and Codex receive the Project's additional directories through their
 
 For ACP registry agents, install the selected version on each execution host. In Distributed mode, share the ACP agent's session storage across Data Plane replicas.
 
+## Use an ACP external agent
+
+ACP (Agent Client Protocol) runs external agents over stdio JSON-RPC. AGW supports any ACP-compatible program (such as Gemini CLI, OpenCode, Goose, or Codex ACP), launched either from the official ACP registry or through a custom command on the execution host.
+
+### Option 1: select from the ACP Registry
+
+1. Install the agent on each execution host (`Standalone` or `Data Plane`) under the same operating-system account and `AgwDataDir` (or `AcpAgents:InstallRoot`) used by the running Server:
+
+```bash
+./agw-server acp install goose codex-acp
+```
+
+For container deployments, install registry agents while building a derived execution image; see [Server extensions and ACP hosts]({{< relref "/docs/operations/extensions" >}}). The Server never downloads agent binaries at runtime.
+
+2. In **Agents → Create**, set **Agent Type** to `External` and choose `ACP`.
+3. Search and pick the installed agent in the **ACP Registry** selector (click **Refresh** to reload the catalog). Selecting an entry writes `registry` into **Extra Settings** and removes `command` / `args`. If **Extra Settings** contains invalid JSON, fix it before using the selector.
+
+### Option 2: launch a custom command
+
+When an ACP-compatible CLI is already installed on the host, skip the registry and set `command` and optional `args` in **Extra Settings**:
+
+```json
+{
+  "command": "gemini",
+  "args": ["--acp"],
+  "configOptions": {
+    "model": "gemini-2.5-pro"
+  }
+}
+```
+
+### ACP Extra Settings fields
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `registry` | object, optional | `{ "agentId": "<registry id>", "version": "<major.minor.patch>" }`. When `version` is omitted, AGW selects the highest installed version in the install root |
+| `command` | string, optional | Executable name or path for a custom command |
+| `args` | string[], optional | Command arguments; valid only together with `command` |
+| `authMethodId` | string, optional | Authentication method ID passed to `authenticate` after initialization |
+| `modeId` | string, optional | Target mode ID applied after session creation |
+| `configOptions` | object, optional | Key-value map applied after session creation; values are strings or booleans (for example selecting a model) |
+
+Provide either `registry` or `command`, never both. Example using a registry entry with `configOptions`:
+
+```json
+{
+  "registry": { "agentId": "goose" },
+  "configOptions": {
+    "model": "claude-sonnet-4-5"
+  }
+}
+```
+
+### Session continuity, credentials, and replicas
+
+- **Session continuity**: AGW stores and reuses the ACP `sessionId` across turns in the same conversation, restoring it with `session/resume` or `session/load` after process restarts, runtime rebuilds, or switching Data Plane replicas.
+- **Credentials and environment**: ACP processes run under the Server's operating-system account. Supply API keys or state paths (such as `CODEX_HOME`) through Agent or Project environment variables, or sign in to the CLI under the Server account.
+- **Permissions and Distributed mode**: InProcess supports `AlwaysAsk`, `AllowSameArguments`, and `FullAccess`, routing ACP permission requests through AGW's approval flow. Distributed mode supports `FullAccess` only and requires identical agent versions plus shared session storage mounted at the same path across all Data Plane replicas.
+
 ## Changes and limitations
 
 The Chat permission menu always lists all three modes and disables those the target does not support, with the reason shown; the server also validates them. ACP supports all three modes in InProcess and FullAccess in Distributed. Permission or definition edits affect the next turn. Active turns keep the configuration snapshot captured at their start.
