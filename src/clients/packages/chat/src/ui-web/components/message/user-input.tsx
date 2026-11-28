@@ -263,7 +263,7 @@ function UserInputRoot({
           {/* Action button - comment mode or regular send */}
           <div className="absolute left-2 right-2 bottom-2 h-7 flex justify-between">
             <div className="flex min-w-0 items-center">{bottomLeft}</div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1">
               {expandButton}
               {submitState && submitState.action === "split" ? (
                 <SplitSendButton
@@ -285,7 +285,7 @@ function UserInputRoot({
                   {isStopAction && sender.length > 0 ? (
                     <>{sender}</>
                   ) : (
-                    <ArrowUp className="size-5" />
+                    <ArrowUp className="size-4" />
                   )}
                 </Button>
               )}

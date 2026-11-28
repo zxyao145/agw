@@ -339,7 +339,7 @@ export function ChatInput({
               size="sm"
               title={canResume ? "Resume from the latest checkpoint" : "No checkpoint available"}
             >
-              <RotateCcw width={16} />
+              <RotateCcw className="size-4" />
               Resume
             </Button>
             <Separator orientation="vertical" />
@@ -353,7 +353,7 @@ export function ChatInput({
           variant="ghost"
           size="sm"
         >
-          <Eraser width={16} />
+          <Eraser className="size-4" />
         </Button>
         <Separator orientation="vertical" />
         <Button
@@ -365,7 +365,7 @@ export function ChatInput({
           variant="ghost"
           size="sm"
         >
-          <ArrowDown width={16} />
+          <ArrowDown className="size-4" />
         </Button>
         <Separator className="data-[orientation=vertical]:h-[60%]" orientation="vertical" />
         <Button
@@ -382,13 +382,13 @@ export function ChatInput({
           {isLoadingHistory ? (
             <LoaderCircle className="animate-spin" width={16} />
           ) : (
-            <ArrowUp width={16} />
+            <ArrowUp className="size-4" />
           )}
         </Button>
       </UserInput.TopRight>
       {isExecuting && !isTransitioning ? (
         <UserInput.Sender>
-          <Square fill="currentColor" size={14} />
+          <Square fill="currentColor" className="size-3.5" />
         </UserInput.Sender>
       ) : null}
     </UserInput>

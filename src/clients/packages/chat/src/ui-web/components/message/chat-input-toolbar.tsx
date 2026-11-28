@@ -78,7 +78,7 @@ export function ChatInputToolbar({
     supportsMode || skills.length > 0 || tools.length > 0 || composerActions.length > 0;
 
   return (
-    <div className="flex min-w-0 items-center gap-1">
+    <div className="flex min-w-0 items-center gap-0">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -88,7 +88,7 @@ export function ChatInputToolbar({
             className="size-7 shrink-0 rounded-full hover:bg-muted"
             aria-label="Add"
           >
-            <Plus className="size-5" />
+            <Plus className="size-4.5" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -166,13 +166,13 @@ export function ChatInputToolbar({
         <SelectTrigger
           size="sm"
           className={cn(
-            "data-[size=sm]:h-7 w-auto max-w-52 gap-1.5 border-0 bg-transparent px-2 shadow-none focus-visible:ring-0 rounded-full hover:bg-muted focus-within:bg-muted",
+            "data-[size=sm]:h-7 w-auto max-w-52 gap-1 border-0 bg-transparent px-2 shadow-none focus-visible:ring-0 rounded-full hover:bg-muted focus-within:bg-muted",
             permissionMode === "fullAccess" &&
               "text-orange-600 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-400",
           )}
           aria-label="Tool permission mode"
         >
-          <ShieldAlert className="size-4 shrink-0" />
+          <ShieldAlert className="size-3.5 shrink-0" />
           <SelectValue>{permissionLabels[permissionMode]}</SelectValue>
         </SelectTrigger>
         <SelectContent position="popper" align="start" className="max-w-80">
