@@ -16,42 +16,6 @@ public sealed class ExtensionStartupTests
     private static readonly Guid ExtensionId = Guid.CreateVersion7();
 
     [Fact]
-    public async Task Tools_EnabledCompiledExtension_ListsRegisteredTools()
-    {
-        var root = Path.Combine(AppContext.BaseDirectory, "test-data", Guid.CreateVersion7().ToString("N"));
-        var installed = Path.Combine(root, "installed");
-        try
-        {
-            await WriteExtensionAsync(installed, "1.0.0");
-            await using var host = await RunningHost.StartAsync(root, installed);
-            await host.ToggleAsync(true);
-            await host.WaitForStateAsync("Active");
-
-            using var response = await host.Client.GetAsync("/api/tools", TestContext.Current.CancellationToken);
-            response.EnsureSuccessStatusCode();
-            using var document = JsonDocument.Parse(
-                await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)
-            );
-            var tools = document
-                .RootElement.GetProperty("data")
-                .EnumerateArray()
-                .Where(tool =>
-                    tool.TryGetProperty("extensionId", out var id) && id.GetString() == ExtensionId.ToString()
-                )
-                .Select(tool => tool.GetProperty("extensionToolId").GetString())
-                .Order()
-                .ToArray();
-
-            Assert.Equal(new[] { "calendar-admin", "calendar-lookup" }, tools);
-        }
-        finally
-        {
-            if (Directory.Exists(root))
-                Directory.Delete(root, recursive: true);
-        }
-    }
-
-    [Fact]
     public async Task OpenApi_EnabledCompiledExtension_ExposesValidatedRequestAndResponseSchemas()
     {
         var root = Path.Combine(AppContext.BaseDirectory, "test-data", Guid.CreateVersion7().ToString("N"));
@@ -120,6 +84,23 @@ public sealed class ExtensionStartupTests
                 Assert.Empty(await first.CatalogAsync());
                 await first.ToggleAsync(true);
                 await first.WaitForStateAsync("Active");
+
+                using var response = await first.Client.GetAsync("/api/tools", TestContext.Current.CancellationToken);
+                response.EnsureSuccessStatusCode();
+                using var document = JsonDocument.Parse(
+                    await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)
+                );
+                var tools = document
+                    .RootElement.GetProperty("data")
+                    .EnumerateArray()
+                    .Where(tool =>
+                        tool.TryGetProperty("extensionId", out var id) && id.GetString() == ExtensionId.ToString()
+                    )
+                    .Select(tool => tool.GetProperty("extensionToolId").GetString())
+                    .Order()
+                    .ToArray();
+                Assert.Equal(new[] { "calendar-admin", "calendar-lookup" }, tools);
+
                 var release = Assert.Single(await first.CatalogAsync());
                 await first.AssertPackageAsync(release);
                 await WriteExtensionAsync(installed, "1.0.1");

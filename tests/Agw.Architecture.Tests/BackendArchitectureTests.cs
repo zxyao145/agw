@@ -581,16 +581,22 @@ public sealed partial class BackendArchitectureTests
         foreach (var line in File.ReadLines(sourceFile))
         {
             lineNumber++;
-            foreach (Match match in ImplementationTypeReferenceRegex().Matches(line))
+            if (
+                line.Contains("AppService", StringComparison.Ordinal)
+                || line.Contains("RuntimeService", StringComparison.Ordinal)
+            )
             {
-                var type = match.Groups["type"].Value;
-                if (
-                    implementationOwners.TryGetValue(type, out var owners)
-                    && !owners.Contains(owningProject)
-                    && owners.Any(owner => owner is "Agw.Agents" or "Agw.Projects" or "Agw.Jobs")
-                )
+                foreach (Match match in ImplementationTypeReferenceRegex().Matches(line))
                 {
-                    yield return $"{relativePath}:{lineNumber}: {owningProject} references concrete {type}";
+                    var type = match.Groups["type"].Value;
+                    if (
+                        implementationOwners.TryGetValue(type, out var owners)
+                        && !owners.Contains(owningProject)
+                        && owners.Any(owner => owner is "Agw.Agents" or "Agw.Projects" or "Agw.Jobs")
+                    )
+                    {
+                        yield return $"{relativePath}:{lineNumber}: {owningProject} references concrete {type}";
+                    }
                 }
             }
 
@@ -766,15 +772,22 @@ public sealed partial class BackendArchitectureTests
         IReadOnlyDictionary<string, IReadOnlySet<string>> namespaceOwners
     )
     {
-        var matchingNamespace = namespaceOwners
-            .Keys.Where(declared =>
-                string.Equals(importedNamespace, declared, StringComparison.Ordinal)
-                || importedNamespace.StartsWith($"{declared}.", StringComparison.Ordinal)
-            )
-            .OrderByDescending(static declared => declared.Length)
-            .FirstOrDefault();
+        var candidateNamespace = importedNamespace;
+        while (true)
+        {
+            if (namespaceOwners.TryGetValue(candidateNamespace, out var owners))
+            {
+                return owners;
+            }
 
-        return matchingNamespace == null ? Set() : namespaceOwners[matchingNamespace];
+            var separatorIndex = candidateNamespace.LastIndexOf('.');
+            if (separatorIndex < 0)
+            {
+                return Set();
+            }
+
+            candidateNamespace = candidateNamespace[..separatorIndex];
+        }
     }
 
     private static IEnumerable<string> FindMatches(string serverRoot, string sourceFile, Regex pattern)

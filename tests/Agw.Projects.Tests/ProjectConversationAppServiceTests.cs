@@ -17,8 +17,15 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Tests;
 
-public class ProjectConversationAppServiceTests
+public class ProjectConversationAppServiceTests : IClassFixture<ProjectConversationAppServiceTests.SqliteSchemaFixture>
 {
+    private readonly SqliteSchemaFixture _databaseFixture;
+
+    public ProjectConversationAppServiceTests(SqliteSchemaFixture databaseFixture)
+    {
+        _databaseFixture = databaseFixture;
+    }
+
     [Fact]
     public async Task GetMessagePageAsync_AgentflowInputCopies_ReturnsEachTurnInputOnceAcrossPages()
     {
@@ -26,7 +33,7 @@ public class ProjectConversationAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
@@ -205,7 +212,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var conversationIds = Enumerable
@@ -268,7 +275,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
@@ -309,7 +316,7 @@ public class ProjectConversationAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(TestContext.Current.CancellationToken);
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, TestContext.Current.CancellationToken);
+        _databaseFixture.CopySchemaTo(connection, TestContext.Current.CancellationToken);
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
 
@@ -328,7 +335,7 @@ public class ProjectConversationAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(TestContext.Current.CancellationToken);
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, TestContext.Current.CancellationToken);
+        _databaseFixture.CopySchemaTo(connection, TestContext.Current.CancellationToken);
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
         using var cancellation = new CancellationTokenSource();
@@ -346,7 +353,7 @@ public class ProjectConversationAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
 
@@ -384,7 +391,7 @@ public class ProjectConversationAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
         var lowerTaskId = Guid.Parse("00000000-0000-0000-0000-000000000001");
@@ -418,7 +425,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
         var commandCounter = new CommandCounterInterceptor();
         var options = CreateOptions(connection, commandCounter);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
 
         await using (var seedContext = new AgwDbContext(options))
@@ -476,7 +483,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var contextId = Guid.CreateVersion7();
@@ -525,7 +532,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var interactiveContextId = Guid.CreateVersion7();
@@ -615,7 +622,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var contextId = Guid.CreateVersion7();
@@ -687,7 +694,7 @@ public class ProjectConversationAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
         var otherConversationId = Guid.CreateVersion7();
@@ -747,7 +754,7 @@ public class ProjectConversationAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
         var interrupted = CreateTurn(
@@ -792,7 +799,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
@@ -826,7 +833,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var contextId = Guid.CreateVersion7();
@@ -874,7 +881,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
@@ -931,7 +938,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var contextId = Guid.CreateVersion7();
@@ -975,7 +982,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
@@ -1051,7 +1058,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
@@ -1118,7 +1125,7 @@ public class ProjectConversationAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
@@ -1211,7 +1218,7 @@ public class ProjectConversationAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
@@ -1309,7 +1316,7 @@ public class ProjectConversationAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
         var turnId = Guid.CreateVersion7();
@@ -1452,7 +1459,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var contextId = Guid.CreateVersion7();
@@ -1495,7 +1502,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var contextId = Guid.CreateVersion7();
@@ -1524,7 +1531,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var firstContextId = Guid.CreateVersion7();
@@ -1562,7 +1569,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var contextId = Guid.CreateVersion7();
@@ -1629,7 +1636,7 @@ public class ProjectConversationAppServiceTests
         await connection.OpenAsync(cancellationToken);
 
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var contextId = Guid.CreateVersion7();
@@ -1668,7 +1675,7 @@ public class ProjectConversationAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
         var hostConversationId = Guid.CreateVersion7();
         var extensionConversationId = Guid.CreateVersion7();
@@ -1721,7 +1728,7 @@ public class ProjectConversationAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
@@ -1757,7 +1764,7 @@ public class ProjectConversationAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
+        _databaseFixture.CopySchemaTo(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
@@ -1787,15 +1794,6 @@ public class ProjectConversationAppServiceTests
             .UseSnakeCaseNamingConvention()
             .AddInterceptors(interceptors)
             .Options;
-
-    private static async Task EnsureCreatedAsync(
-        DbContextOptions<AgwDbContext> options,
-        CancellationToken cancellationToken
-    )
-    {
-        await using var setupContext = new AgwDbContext(options);
-        await setupContext.Database.EnsureCreatedAsync(cancellationToken);
-    }
 
     private static Project CreateProject(Guid projectId, string name) =>
         new()
@@ -1981,5 +1979,29 @@ public class ProjectConversationAppServiceTests
             Commands.Add(command.CommandText);
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
+    }
+
+    public sealed class SqliteSchemaFixture : IAsyncLifetime
+    {
+        private readonly SqliteConnection _templateConnection = new("Data Source=:memory:");
+
+        public async ValueTask InitializeAsync()
+        {
+            var cancellationToken = TestContext.Current.CancellationToken;
+            await _templateConnection.OpenAsync(cancellationToken);
+            await using var context = new AgwDbContext(
+                ProjectConversationAppServiceTests.CreateOptions(_templateConnection)
+            );
+            await context.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        public void CopySchemaTo(SqliteConnection destination, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _templateConnection.BackupDatabase(destination);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        public ValueTask DisposeAsync() => _templateConnection.DisposeAsync();
     }
 }

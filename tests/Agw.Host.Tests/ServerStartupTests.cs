@@ -24,19 +24,25 @@ public sealed class ServerStartupTests : IDisposable
     private readonly List<ServerProcess> _processes = [];
 
     [Fact]
-    public async Task Start_RootWorkingDirectory_UsesDataRootLogs()
+    public async Task Start_RootWorkingDirectory_UsesDefaultLogsAndSqliteWal()
     {
         if (OperatingSystem.IsWindows())
             return;
 
         var data = Path.Combine(_directory, "data");
+        var database = Path.Combine(data, "database", "agw.db");
         var server = Start(Path.GetPathRoot(AppContext.BaseDirectory)!, "serve", $"--AgwDataDir={data}");
 
         await server.WaitUntilReadyAsync(Path.Combine(data, "runtime", "server.json"));
+        Assert.True(File.Exists(database));
+        Assert.Equal("wal", ExecuteScalar(database, "PRAGMA journal_mode"));
+        Assert.False(await server.IsInitializedAsync());
         await server.StopAsync();
 
         Assert.Equal(0, server.ExitCode);
-        Assert.Contains("Agw Host configured successfully", ReadLogs(Path.Combine(data, "logs"), "agw-info-*.log"));
+        var infoLogs = ReadLogs(Path.Combine(data, "logs"), "agw-info-*.log");
+        Assert.Contains("Agw Host configured successfully", infoLogs);
+        Assert.Contains($"SQLite database {database} uses WAL journal mode", infoLogs);
         Assert.Contains(
             "Agw Host configured successfully",
             ReadLogs(Path.Combine(data, "logs"), "application-standalone-*.log")
@@ -140,29 +146,6 @@ public sealed class ServerStartupTests : IDisposable
             Assert.Contains("failed to start during", fatal);
             Assert.Contains("Deployment", fatal);
         }
-    }
-
-    [Fact]
-    public async Task Start_DefaultSqlite_UsesWalJournalMode()
-    {
-        if (OperatingSystem.IsWindows())
-            return;
-
-        var data = Path.Combine(_directory, "data");
-        var database = Path.Combine(data, "database", "agw.db");
-        var server = Start(_directory, "serve", $"--AgwDataDir={data}");
-
-        await server.WaitUntilReadyAsync(Path.Combine(data, "runtime", "server.json"));
-        Assert.True(File.Exists(database));
-        Assert.Equal("wal", ExecuteScalar(database, "PRAGMA journal_mode"));
-        Assert.False(await server.IsInitializedAsync());
-        await server.StopAsync();
-
-        Assert.Equal(0, server.ExitCode);
-        Assert.Contains(
-            $"SQLite database {database} uses WAL journal mode",
-            ReadLogs(Path.Combine(data, "logs"), "agw-info-*.log")
-        );
     }
 
     [Fact]

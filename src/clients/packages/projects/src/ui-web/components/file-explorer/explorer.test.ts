@@ -51,7 +51,7 @@ async function toggle(name: string) {
 
 test("Explorer_RefreshSignalChanges_ReloadsRootAndExpandedDirectories", async () => {
   srcChildren = [{ name: "a.ts", path: "src/a.ts", type: "file", size: 1 }];
-  const view = render(explorer(0));
+  const view = render(explorer(5));
   await screen.findByText("src");
   await toggle("src");
   await screen.findByText("a.ts");
@@ -59,13 +59,13 @@ test("Explorer_RefreshSignalChanges_ReloadsRootAndExpandedDirectories", async ()
   assert.equal(listRequests("src"), 1);
 
   // 第一次的值之外没有变化时不读取。An unchanged signal reads nothing.
-  view.rerender(explorer(0));
+  view.rerender(explorer(5));
   await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
   assert.equal(listRequests(null), 1);
   assert.equal(listRequests("src"), 1);
 
   srcChildren = [{ name: "b.ts", path: "src/b.ts", type: "file", size: 1 }];
-  view.rerender(explorer(1));
+  view.rerender(explorer(6));
   await waitFor(() => assert.ok(screen.queryByText("b.ts")));
   assert.equal(screen.queryByText("a.ts"), null);
   await waitFor(() => assert.equal(listRequests(null), 2));
@@ -92,15 +92,4 @@ test("Explorer_RefreshSignalChanges_CollapsedDirectoryReadsOnNextExpand", async 
   await screen.findByText("b.ts");
   assert.equal(screen.queryByText("a.ts"), null);
   assert.equal(listRequests("src"), srcReads + 1);
-});
-
-test("Explorer_FirstRefreshSignal_DoesNotReload", async () => {
-  const view = render(explorer(5));
-  await screen.findByText("src");
-  const rootReads = listRequests(null);
-
-  view.rerender(explorer(5));
-  await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
-
-  assert.equal(listRequests(null), rootReads);
 });

@@ -13,12 +13,19 @@ namespace Agw.Host.Tests;
 /// <para>验证 OpenAPI schema 中的必填属性和可空类型。</para>
 /// <para>Verifies required properties and nullable values in the OpenAPI schema.</para>
 /// </summary>
-public sealed class OpenApiSchemaTransformerTests
+public sealed class OpenApiSchemaTransformerTests : IClassFixture<OpenApiDocumentFixture>
 {
-    [Fact]
-    public async Task NotificationAnswerRequest_TextOnlyAnswer_OptionSchemaAllowsNull()
+    private readonly OpenApiDocumentFixture _fixture;
+
+    public OpenApiSchemaTransformerTests(OpenApiDocumentFixture fixture)
     {
-        var schemas = await GenerateSchemasAsync();
+        _fixture = fixture;
+    }
+
+    [Fact]
+    public void NotificationAnswerRequest_TextOnlyAnswer_OptionSchemaAllowsNull()
+    {
+        var schemas = _fixture.Schemas;
         var answer = schemas.GetProperty("NotificationAnswerRequest");
         var types = answer
             .GetProperty("properties")
@@ -33,17 +40,17 @@ public sealed class OpenApiSchemaTransformerTests
     }
 
     [Fact]
-    public async Task AgentUpdateRequest_AllPropertiesNullable_HasNoRequiredProperties()
+    public void AgentUpdateRequest_AllPropertiesNullable_HasNoRequiredProperties()
     {
-        var schemas = await GenerateSchemasAsync();
+        var schemas = _fixture.Schemas;
 
         Assert.False(schemas.GetProperty("AgentUpdateRequest").TryGetProperty("required", out _));
     }
 
     [Fact]
-    public async Task A2AOriginCredentialsRequest_HeaderValues_AllowNull()
+    public void A2AOriginCredentialsRequest_HeaderValues_AllowNull()
     {
-        var schemas = await GenerateSchemasAsync();
+        var schemas = _fixture.Schemas;
 
         var types = schemas
             .GetProperty("A2AOriginCredentialsRequest")
@@ -64,9 +71,9 @@ public sealed class OpenApiSchemaTransformerTests
     }
 
     [Fact]
-    public async Task AgentCreateRequest_RequiredFollowsDeclaredNullability()
+    public void AgentCreateRequest_RequiredFollowsDeclaredNullability()
     {
-        var schemas = await GenerateSchemasAsync();
+        var schemas = _fixture.Schemas;
 
         var required = schemas
             .GetProperty("AgentCreateRequest")
@@ -83,9 +90,9 @@ public sealed class OpenApiSchemaTransformerTests
     }
 
     [Fact]
-    public async Task AgentflowNodeDto_PolymorphicVariants_RequireTheirKind()
+    public void AgentflowNodeDto_PolymorphicVariants_RequireTheirKind()
     {
-        var schemas = await GenerateSchemasAsync();
+        var schemas = _fixture.Schemas;
         var discriminator = schemas.GetProperty("AgentflowNodeDto").GetProperty("discriminator");
         Assert.Equal("kind", discriminator.GetProperty("propertyName").GetString());
         var variants = discriminator.GetProperty("mapping").EnumerateObject().ToArray();
@@ -100,9 +107,9 @@ public sealed class OpenApiSchemaTransformerTests
     }
 
     [Fact]
-    public async Task AgentflowTraceDto_NodeKind_KeepsItsNumericSchema()
+    public void AgentflowTraceDto_NodeKind_KeepsItsNumericSchema()
     {
-        var schemas = await GenerateSchemasAsync();
+        var schemas = _fixture.Schemas;
         var trace = schemas.GetProperty("AgentflowTraceDto");
         var nodeKind = trace.GetProperty("properties").GetProperty("nodeKind");
 
@@ -111,9 +118,9 @@ public sealed class OpenApiSchemaTransformerTests
     }
 
     [Fact]
-    public async Task AgentflowBlockMemberDto_Kind_AllowsOnlyAgentAndWorkflow()
+    public void AgentflowBlockMemberDto_Kind_AllowsOnlyAgentAndWorkflow()
     {
-        var schemas = await GenerateSchemasAsync();
+        var schemas = _fixture.Schemas;
         var member = schemas.GetProperty("AgentflowBlockMemberDto");
         var kind = member.GetProperty("properties").GetProperty("kind");
 
@@ -123,9 +130,9 @@ public sealed class OpenApiSchemaTransformerTests
     }
 
     [Fact]
-    public async Task AgentflowConditionRuleDto_Field_EnumeratesTheSupportedRuleFields()
+    public void AgentflowConditionRuleDto_Field_EnumeratesTheSupportedRuleFields()
     {
-        var schemas = await GenerateSchemasAsync();
+        var schemas = _fixture.Schemas;
         var field = schemas.GetProperty("AgentflowConditionRuleDto").GetProperty("properties").GetProperty("field");
         var values = schemas.GetProperty("AgentflowConditionField").GetProperty("enum").EnumerateArray();
 
@@ -137,9 +144,9 @@ public sealed class OpenApiSchemaTransformerTests
     }
 
     [Fact]
-    public async Task ExecutionPermissionCapabilities_AgentflowRevision_IsAnOptionalQueryParameter()
+    public void ExecutionPermissionCapabilities_AgentflowRevision_IsAnOptionalQueryParameter()
     {
-        var document = await GenerateDocumentAsync();
+        var document = _fixture.Document;
         var parameters = document
             .GetProperty("paths")
             .GetProperty("/api/agents/permission-capabilities")
@@ -151,15 +158,17 @@ public sealed class OpenApiSchemaTransformerTests
         Assert.Equal("query", revision.GetProperty("in").GetString());
         Assert.False(revision.TryGetProperty("required", out var required) && required.GetBoolean());
     }
+}
 
-    private static async Task<JsonElement> GenerateSchemasAsync()
-    {
-        var document = await GenerateDocumentAsync();
-        return document.GetProperty("components").GetProperty("schemas");
-    }
+public sealed class OpenApiDocumentFixture : IAsyncLifetime
+{
+    public JsonElement Document { get; private set; }
 
-    private static async Task<JsonElement> GenerateDocumentAsync()
+    public JsonElement Schemas => Document.GetProperty("components").GetProperty("schemas");
+
+    public async ValueTask InitializeAsync()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(AgentsController).Assembly);
@@ -173,16 +182,18 @@ public sealed class OpenApiSchemaTransformerTests
         app.MapControllers();
         app.MapPost("/notification-answer", (NotificationAnswerRequest request) => request);
         app.MapOpenApi();
-        await app.StartAsync(TestContext.Current.CancellationToken);
+        await app.StartAsync(cancellationToken);
         using var client = app.GetTestClient();
 
-        using var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+        using var response = await client.GetAsync("/openapi/v1.json", cancellationToken);
         response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken);
-        using var document = await JsonDocument.ParseAsync(
-            stream,
-            cancellationToken: TestContext.Current.CancellationToken
-        );
-        return document.RootElement.Clone();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        Document = document.RootElement.Clone();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
     }
 }
