@@ -1,18 +1,6 @@
 name: Desktop Build
 
 on:
-  pull_request:
-    paths:
-      - "src/clients/desktop/**"
-      - "src/clients/packages/**"
-      - "src/extensions/**"
-      - "src/package.json"
-      - "src/pnpm-workspace.yaml"
-      - "src/pnpm-lock.yaml"
-      - "src/turbo.json"
-      - ".github/workflows/build-desktop.yml"
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       version:
@@ -21,6 +9,10 @@ on:
         type: string
   workflow_call:
     inputs:
+      smoke-only:
+        description: Build the Linux x64 client installer
+        type: boolean
+        default: false
       version:
         description: Desktop build version
         required: false
@@ -34,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      installers: ${{ steps.matrix.outputs.installers }}
     steps:
       - name: Resolve build version
         id: version
@@ -51,22 +44,27 @@ jobs:
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Select installers
+        id: matrix
+        run: |
+          installers=$(jq -cn --argjson smoke '${{ toJSON(inputs.smoke-only || false) }}' '[
+            {platform: "linux",   runner: "ubuntu-latest", arch: "x64"},
+            {platform: "windows", runner: "windows-latest", arch: "x64"},
+            {platform: "macos",   runner: "macos-15-intel", arch: "x64"},
+            {platform: "macos",   runner: "macos-15", arch: "arm64"}
+          ] | [.[] + {flavor: ("client", "full")} |
+               select($smoke == false or (.platform == "linux" and .flavor == "client"))]')
+          echo "installers=$installers" >> "$GITHUB_OUTPUT"
+
   desktop-test:
-    name: test
+    name: Desktop tests
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: src/clients
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          package_json_file: src/package.json
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: src/pnpm-lock.yaml
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:boundaries
       - run: pnpm exec turbo run test --filter=@agw/desktop
@@ -77,53 +75,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: windows
-            runner: windows-latest
-            arch: x64
-            flavor: full
-          - platform: windows
-            runner: windows-latest
-            arch: x64
-            flavor: client
-          - platform: macos
-            runner: macos-15-intel
-            arch: x64
-            flavor: full
-          - platform: macos
-            runner: macos-15
-            arch: arm64
-            flavor: full
-          - platform: macos
-            runner: macos-15-intel
-            arch: x64
-            flavor: client
-          - platform: macos
-            runner: macos-15
-            arch: arm64
-            flavor: client
-          - platform: linux
-            runner: ubuntu-latest
-            arch: x64
-            flavor: full
-          - platform: linux
-            runner: ubuntu-latest
-            arch: x64
-            flavor: client
+        include: ${{ fromJSON(needs.metadata.outputs.installers) }}
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
         working-directory: src/clients
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          package_json_file: src/package.json
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: src/pnpm-lock.yaml
+      - uses: ./.github/actions/setup-pnpm
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
@@ -148,4 +107,5 @@ jobs:
           name: agw-desktop-${{ matrix.flavor }}-${{ matrix.platform }}-${{ matrix.arch }}
           path: src/clients/desktop/release-artifacts/*
           if-no-files-found: error
+          compression-level: 0
           retention-days: 7

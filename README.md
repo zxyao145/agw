@@ -271,7 +271,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Prereleases use `vX.Y.Z-preview.N`, `vX.Y.Z-alpha.N`, or `vX.Y.Z-beta.N`. The [release workflow](.github/workflows/release.yml) publishes Linux amd64/arm64 images to GHCR and creates a GitHub Release containing all Desktop assets for supported tags or a manually supplied `release_tag`. The [Desktop build workflow](.github/workflows/build-desktop.yml) builds temporary Desktop assets for relevant pull requests, pushes to `main`, and manual runs. The [site workflow](.github/workflows/site.yml) builds and validates both sites in [`site/`](site/README.md), publishes the documentation mirror to GitHub Pages on pushes to `main`, and deploys both sites to Cloudflare Pages when run manually on `main`.
+Prereleases use `vX.Y.Z-preview.N`, `vX.Y.Z-alpha.N`, or `vX.Y.Z-beta.N`. The [release workflow](.github/workflows/release.yml) publishes Linux amd64/arm64 images to GHCR and creates a GitHub Release containing all Desktop assets for supported tags or a manually supplied `release_tag`. On pull requests and pushes to `main`, [CI](.github/workflows/ci.yml) selects Desktop installers by changed path. Run [Desktop Build](.github/workflows/build-desktop.yml) manually to build all installers for a revision. The [site workflow](.github/workflows/site.yml) builds and validates both sites in [`site/`](site/README.md), publishes the documentation mirror to GitHub Pages on pushes to `main`, and deploys both sites to Cloudflare Pages when run manually on `main`.
 
 ## Architecture
 

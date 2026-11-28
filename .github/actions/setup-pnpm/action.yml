@@ -1,0 +1,13 @@
+name: Set up pnpm and Node.js
+description: Use the workspace's pnpm version and cache its store with Node.js 24.
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v6
+      with:
+        package_json_file: src/package.json
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 24
+        cache: pnpm
+        cache-dependency-path: src/pnpm-lock.yaml

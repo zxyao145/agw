@@ -1,0 +1,78 @@
+workspace: &workspace
+  - .github/workflows/ci.yml
+  - .github/ci-paths.yml
+  - .github/actions/setup-pnpm/**
+  - .gitattributes
+  - src/package.json
+  - src/pnpm-lock.yaml
+  - src/pnpm-workspace.yaml
+  - src/clients/patches/**
+
+shared_clients: &shared_clients
+  - *workspace
+  - .editorconfig
+  - src/turbo.json
+  - src/clients/packages/**
+  - src/clients/tools/**
+  - src/clients/tsconfig*.json
+  - src/clients/.dependency-cruiser.cjs
+  - src/clients/.oxfmtrc.json
+  - src/clients/.oxlintrc.json
+
+server_source: &server_source
+  - global.json
+  - src/server/**
+  - src/sdks/**
+
+server:
+  - *workspace
+  - *server_source
+  - .editorconfig
+  - Agw.slnx
+  - tests/**
+  - src/extensions/{feishu,taskpilot}/**
+  - src/clients/packages/extension-sdk/**
+  - src/clients/tsconfig.json
+  - .github/postgres-tests.json
+  - .github/scripts/verify-postgres-tests.py
+
+docker:
+  - *workspace
+  - *server_source
+  - Dockerfile
+  - .dockerignore
+  - src/turbo.json
+  - src/clients/tsconfig*.json
+  - src/clients/web/**
+  - src/clients/packages/**
+
+web_packages: &web_packages
+  - *shared_clients
+  - .github/workflows/build-web.yml
+  - src/clients/web/**
+
+boundaries:
+  - *web_packages
+  - src/clients/mobile/**
+
+web:
+  - *web_packages
+  - *server_source
+
+installers: &installers
+  - *workspace
+  - .github/workflows/build-desktop.yml
+  - .github/workflows/release.yml
+  - src/clients/desktop/{assets,scripts}/**
+  - src/clients/desktop/src/main/{local-skills,update}/**
+  - src/clients/desktop/forge.config.cjs
+  - src/clients/desktop/package.json
+  - src/server/Agw.Standalone.Host/*.csproj
+  - src/server/Directory.*.props
+  - global.json
+
+desktop:
+  - *shared_clients
+  - *installers
+  - src/clients/desktop/**
+  - src/extensions/**
