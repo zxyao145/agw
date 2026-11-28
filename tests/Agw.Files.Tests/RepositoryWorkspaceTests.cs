@@ -12,9 +12,18 @@ using CliWrap.Buffered;
 
 namespace Agw.Files.Tests;
 
-public sealed class RepositoryWorkspaceTests
+public sealed class RepositoryWorkspaceTests : IClassFixture<RepositoryWorkspaceTests.RepositoryWorkspaceClassFixture>
 {
     private const string Feature = "261127-add-extensions";
+
+    private readonly RepositoryWorkspaceClassFixture _classFixture;
+
+    public RepositoryWorkspaceTests(RepositoryWorkspaceClassFixture classFixture)
+    {
+        _classFixture = classFixture;
+    }
+
+    private Task<WorkspaceFixture> CreateFixtureAsync() => WorkspaceFixture.CreateAsync(_classFixture);
 
     public static bool IsUnix => !OperatingSystem.IsWindows();
 
@@ -23,7 +32,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task ReadAsync_ProjectRootRepository_DiscoversSingleCheckout()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         File.Delete(Path.Combine(fixture.Root, ".gitignore"));
         await WorkspaceFixture.GitAsync(fixture.Root, "clone", "--", fixture.Url, ".");
         await WorkspaceFixture.GitAsync(fixture.Root, "clone", "--", fixture.Url, "nested");
@@ -39,7 +48,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task CreateFeatureAsync_ProjectRootRepository_CreatesFlatWorktreeAndMerges()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneRootAsync();
         await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["project"], false, Token);
         var worktree = Path.Combine(fixture.Root, ".worktrees", Feature);
@@ -72,7 +81,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task ListTreeAsync_ProjectRootRepository_UsesRootCheckoutAndReadsCommittedBranches()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneRootAsync();
         Directory.CreateDirectory(Path.Combine(fixture.Root, "src"));
         await File.WriteAllTextAsync(Path.Combine(fixture.Root, "src", "new.txt"), "local", Token);
@@ -96,7 +105,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task CloneAsync_IntoRoot_CreatesRootCheckout()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         File.Delete(Path.Combine(fixture.Root, ".gitignore"));
 
         await fixture.Service.CloneAsync(fixture.Root, fixture.Url, null, Token, intoRoot: true);
@@ -113,7 +122,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task PublishRootClone_PublicationCollision_PreservesRepositoryAndUserFilesForRecovery()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         var staging = await fixture.CloneRootStagingAsync();
         var collision = Directory.CreateDirectory(Path.Combine(fixture.Root, "20-conflict")).FullName;
         await File.WriteAllTextAsync(Path.Combine(collision, "user.txt"), "concurrent collision", Token);
@@ -162,7 +171,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task CloneAsync_NonemptyRoot_RejectsWithoutChangingFiles()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
 
         var failure = await Assert.ThrowsAsync<AgwException>(() =>
             fixture.Service.CloneAsync(fixture.Root, fixture.Url, null, Token, intoRoot: true)
@@ -176,7 +185,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task CloneAsync_IntoRootWithName_RejectsBeforeCloning()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         File.Delete(Path.Combine(fixture.Root, ".gitignore"));
         var failure = await Assert.ThrowsAsync<AgwException>(() =>
             fixture.Service.CloneAsync(fixture.Root, fixture.Url, "alpha", Token, intoRoot: true)
@@ -190,7 +199,7 @@ public sealed class RepositoryWorkspaceTests
     [InlineData(true)]
     public async Task CloneAsync_ExistingRootRepository_RejectsAdditionalClone(bool intoRoot)
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneRootAsync();
         var before = await File.ReadAllBytesAsync(Path.Combine(fixture.Root, "README.md"), Token);
         var failure = await Assert.ThrowsAsync<AgwException>(() =>
@@ -204,7 +213,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task SyncAsync_ProjectRootRepository_FastForwardsAndRestoresDefaultBranch()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneRootAsync();
         await WorkspaceFixture.GitAsync(fixture.Root, "switch", "-c", "alternate");
         await Assert.ThrowsAsync<AgwException>(() => fixture.Service.SyncAsync(fixture.Root, "project", Token));
@@ -221,7 +230,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task DeleteFeatureAsync_ProjectRootRepository_ProtectsChangesAndRemovesCleanWorktree()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneRootAsync();
         await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["project"], false, Token);
         var worktree = Path.Combine(fixture.Root, ".worktrees", Feature);
@@ -241,7 +250,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task CreateFeatureAsync_LinkedProjectRootWithSpaces_ValidatesCommonDirectory()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneRootAsync();
         var root = Path.Combine(Path.GetDirectoryName(fixture.Root)!, "linked project");
         await WorkspaceFixture.GitAsync(fixture.Root, "worktree", "add", "-b", "linked", root);
@@ -264,7 +273,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task SwitchBranchAsync_ForeignFlatWorktree_RejectsRepositoryMismatch()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneRootAsync();
         var worktree = Path.Combine(fixture.Root, ".worktrees", Feature);
         await WorkspaceFixture.GitAsync(fixture.Seed, "worktree", "add", "-b", Feature, worktree);
@@ -282,7 +291,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task CreateFeatureAsync_TwoRepositories_CreatesWorktreesSwitchesAndMergesWithTwoParents()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await fixture.CloneAsync("beta");
         await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["alpha", "beta"], false, Token);
@@ -319,7 +328,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task ReadAsync_ManualLayout_DiscoversRepositoriesAndReportsUnmanagedWorktrees()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await WorkspaceFixture.GitAsync(fixture.Root, "clone", "--", fixture.Url, "manual");
         Directory.CreateDirectory(Path.Combine(fixture.Root, "notes"));
         Directory.CreateDirectory(Path.Combine(fixture.Root, ".worktrees", Feature, "missing"));
@@ -337,7 +346,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task CloneAsync_NameOmitted_DerivesNameFromUrl()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await WorkspaceFixture.GitAsync(fixture.Seed, "clone", "--bare", "--", ".", "../module-alpha.git");
         await fixture.Service.CloneAsync(fixture.Root, fixture.Url.Replace("/seed", "/module-alpha.git"), null, Token);
         Assert.Equal("module-alpha", Assert.Single((await fixture.ReadAsync()).Repositories).Name);
@@ -348,7 +357,7 @@ public sealed class RepositoryWorkspaceTests
     [InlineData(true)]
     public async Task CloneAsync_CanceledDuringTransfer_RemovesPartialDirectoryAndAllowsRetry(bool intoRoot)
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         if (intoRoot)
             File.Delete(Path.Combine(fixture.Root, ".gitignore"));
         const int transferBytes = 16 * 1024 * 1024;
@@ -412,7 +421,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task ReadAsync_RootOffDefaultBranch_ReportsStateAndRestoreSwitchesBack()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["alpha"], false, Token);
         var main = Path.Combine(fixture.Root, "alpha");
@@ -432,7 +441,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task SwitchBranchAsync_DirtyWorktree_RejectsSwitchAndMergeWithoutLosingChanges()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["alpha"], false, Token);
         var worktree = fixture.Worktree(Feature, "alpha");
@@ -449,7 +458,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task DeleteFeatureAsync_TwoRepositories_RemovesDirectoriesAndRegistrationsAndPreservesBranches()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await fixture.CloneAsync("beta");
         await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["alpha", "beta"], false, Token);
@@ -494,7 +503,7 @@ public sealed class RepositoryWorkspaceTests
     [InlineData("untracked.txt")]
     public async Task DeleteFeatureAsync_OneDirtyWorktree_RejectsBeforeRemovingAnyWorktree(string fileName)
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await fixture.CloneAsync("beta");
         await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["alpha", "beta"], false, Token);
@@ -515,7 +524,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task DeleteFeatureAsync_OneLockedWorktree_RejectsBeforeRemovingAnyWorktree()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await fixture.CloneAsync("beta");
         await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["alpha", "beta"], false, Token);
@@ -538,7 +547,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task DeleteFeatureAsync_FileOutsideWorktrees_RejectsBeforeRemovingAnyWorktree()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["alpha"], false, Token);
         var file = Path.Combine(fixture.Root, ".worktrees", Feature, "notes.txt");
@@ -556,7 +565,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task DeleteFeatureAsync_EmptyFeature_RemovesFeatureDirectory()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         var path = Path.Combine(fixture.Root, ".worktrees", Feature);
         Directory.CreateDirectory(path);
 
@@ -569,7 +578,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task DeleteFeatureAsync_IgnoredArtifacts_RemovesWorktreeDirectory()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await File.WriteAllTextAsync(Path.Combine(fixture.Seed, ".gitignore"), "build/\n", Token);
         await WorkspaceFixture.GitAsync(fixture.Seed, "add", ".gitignore");
         await WorkspaceFixture.GitAsync(fixture.Seed, "commit", "-m", "Ignore build artifacts");
@@ -587,7 +596,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task DeleteFeatureAsync_WorktreeFromAnotherRepository_RejectsBeforeRemovingAnyWorktree()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await fixture.CloneAsync("beta");
         await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["alpha"], false, Token);
@@ -613,7 +622,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task DeleteFeatureAsync_UninitializedSubmodule_RemovesWorktree()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await WorkspaceFixture.GitAsync(fixture.Seed, "submodule", "add", "--", fixture.Url, "module");
         await WorkspaceFixture.GitAsync(fixture.Seed, "commit", "-am", "Add submodule");
         await fixture.CloneAsync("alpha");
@@ -628,7 +637,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task DeleteFeatureAsync_InitializedSubmodule_RejectsBeforeRemovingAnyWorktree()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await WorkspaceFixture.GitAsync(fixture.Seed, "submodule", "add", "--", fixture.Url, "module");
         await WorkspaceFixture.GitAsync(fixture.Seed, "commit", "-am", "Add submodule");
         await fixture.CloneAsync("alpha");
@@ -652,7 +661,7 @@ public sealed class RepositoryWorkspaceTests
     [InlineData("../alpha", 400_0001)]
     public async Task DeleteFeatureAsync_InvalidFeature_RejectsWithoutChangingRepositories(string feature, int code)
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
 
         var failure = await Assert.ThrowsAsync<AgwException>(() =>
@@ -666,7 +675,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact(SkipUnless = nameof(IsUnix), Skip = "Symbolic link creation requires Unix in this test.")]
     public async Task DeleteFeatureAsync_FeatureSymlink_RejectsWithoutRemovingTarget()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["alpha"], false, Token);
         var path = Path.Combine(fixture.Root, ".worktrees", Feature);
@@ -685,7 +694,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task CreateFeatureAsync_InvalidOrDuplicateTargets_DoesNotCreatePartialFeature()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await Assert.ThrowsAsync<AgwException>(() =>
             fixture.Service.CloneAsync(fixture.Root, fixture.Url, "../escape", Token)
@@ -717,7 +726,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task MergeAsync_Conflict_AbortsAndKeepsRootCheckoutClean()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         foreach (var feature in new[] { "261127-first", "261127-second" })
         {
@@ -741,7 +750,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task SyncAsync_RemoteAdvanced_FastForwardsDefaultBranch()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await File.WriteAllTextAsync(Path.Combine(fixture.Seed, "README.md"), "remote change\n", Token);
         await WorkspaceFixture.GitAsync(fixture.Seed, "commit", "-am", "Remote change");
@@ -758,7 +767,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task SyncAsync_HttpProxyConfigured_TransfersThroughProxyWithoutPersistingGitSettings()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await WorkspaceFixture.GitAsync(fixture.Seed, "update-server-info");
         await using var proxy = await RepositoryProxyServer.StartAsync(fixture.Seed, Token);
@@ -791,7 +800,7 @@ public sealed class RepositoryWorkspaceTests
     [InlineData("http://")]
     public async Task CloneAsync_InvalidProxy_RejectsBeforeCreatingDirectory(string proxyUrl)
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             fixture.Service.CloneAsync(fixture.Root, fixture.Url, "alpha", Token, proxyUrl)
@@ -804,7 +813,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task CreateFeatureAsync_UnicodeName_CreatesBranchAndWorktree()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("docs");
         await fixture.Service.CreateFeatureAsync(fixture.Root, "261128-新增扩展", ["docs"], false, Token);
         var feature = Assert.Single((await fixture.ReadAsync()).Features);
@@ -815,7 +824,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task ListTreeAsync_CheckedOutAndCommittedBranches_ListsDiskOrCommitEntries()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["alpha"], false, Token);
         var worktree = fixture.Worktree(Feature, "alpha");
@@ -865,7 +874,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact]
     public async Task ListChangesAsync_CheckedOutBranch_ReportsUncommittedChanges()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["alpha"], false, Token);
         var worktree = fixture.Worktree(Feature, "alpha");
@@ -883,7 +892,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact(SkipUnless = nameof(IsUnix), Skip = "Symbolic link creation requires Unix in this test.")]
     public async Task ReadAsync_RepositoryReplacedWithSymlink_IgnoresLinkAndRejectsOperations()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         var main = Path.Combine(fixture.Root, "alpha");
         var moved = Path.Combine(fixture.Root, "moved");
@@ -899,7 +908,7 @@ public sealed class RepositoryWorkspaceTests
     [Fact(SkipUnless = nameof(IsUnix), Skip = "Symbolic link creation requires Unix in this test.")]
     public async Task CreateFeatureAsync_DanglingIgnoreSymlink_RejectsBeforeWritingOutsideWorkspace()
     {
-        using var fixture = await WorkspaceFixture.CreateAsync();
+        using var fixture = await CreateFixtureAsync();
         await fixture.CloneAsync("alpha");
         var ignore = Path.Combine(fixture.Root, ".gitignore");
         File.Delete(ignore);
@@ -914,65 +923,31 @@ public sealed class RepositoryWorkspaceTests
 
     private sealed class WorkspaceFixture : IDisposable
     {
-        private readonly string _directory = TestDirectoryHelper.Create("repository-workspaces");
-        private Process? _daemon;
+        private readonly string _directory;
+
         public string Root => Path.Combine(_directory, "project");
         public string Seed => Path.Combine(_directory, "seed");
-        public string Url { get; private set; } = "";
+        public string Url { get; }
         public RepositoryWorkspace Service { get; } = new(new FilePathLocks(new InMemoryApplicationLock()));
 
-        public static async Task<WorkspaceFixture> CreateAsync()
+        private WorkspaceFixture(string directory, string url)
         {
-            var fixture = new WorkspaceFixture();
+            _directory = directory;
+            Url = url;
+        }
+
+        public static async Task<WorkspaceFixture> CreateAsync(RepositoryWorkspaceClassFixture classFixture)
+        {
+            var caseId = Guid.CreateVersion7().ToString("N");
+            var fixture = new WorkspaceFixture(
+                Path.Combine(classFixture.ExportRoot, caseId),
+                classFixture.UrlFor(caseId)
+            );
             try
             {
                 Directory.CreateDirectory(fixture.Root);
                 await File.WriteAllTextAsync(Path.Combine(fixture.Root, ".gitignore"), "existing-rule\n", Token);
-                Directory.CreateDirectory(fixture.Seed);
-                await GitAsync(fixture.Seed, "init", "-b", "trunk");
-                await File.WriteAllTextAsync(Path.Combine(fixture.Seed, "README.md"), "base\n", Token);
-                await GitAsync(fixture.Seed, "add", ".");
-                await GitAsync(fixture.Seed, "commit", "-m", "Initial");
-                var listener = new TcpListener(IPAddress.Loopback, 0);
-                listener.Start();
-                var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-                listener.Stop();
-                var start = new ProcessStartInfo("git")
-                {
-                    UseShellExecute = false,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true,
-                };
-                foreach (
-                    var argument in new[]
-                    {
-                        "daemon",
-                        "--reuseaddr",
-                        "--export-all",
-                        "--listen=127.0.0.1",
-                        $"--port={port}",
-                        $"--base-path={fixture._directory}",
-                        fixture._directory,
-                    }
-                )
-                    start.ArgumentList.Add(argument);
-                fixture._daemon = Process.Start(start)!;
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Token);
-                timeout.CancelAfter(TimeSpan.FromSeconds(10));
-                while (true)
-                {
-                    try
-                    {
-                        using var client = new TcpClient();
-                        await client.ConnectAsync(IPAddress.Loopback, port, timeout.Token);
-                        break;
-                    }
-                    catch (SocketException)
-                    {
-                        await Task.Delay(25, timeout.Token);
-                    }
-                }
-                fixture.Url = $"git://127.0.0.1:{port}/seed";
+                CopyDirectory(classFixture.PristineSeed, fixture.Seed);
                 return fixture;
             }
             catch
@@ -1016,6 +991,19 @@ public sealed class RepositoryWorkspaceTests
 
         public string Worktree(string feature, string name) => Path.Combine(Root, ".worktrees", feature, name);
 
+        private static void CopyDirectory(string source, string destination)
+        {
+            Directory.CreateDirectory(destination);
+            foreach (var file in Directory.EnumerateFiles(source))
+            {
+                File.Copy(file, Path.Combine(destination, Path.GetFileName(file)));
+            }
+            foreach (var directory in Directory.EnumerateDirectories(source))
+            {
+                CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
+            }
+        }
+
         public static async Task<string> GitAsync(string directory, params string[] arguments)
         {
             var result = await Cli.Wrap("git")
@@ -1037,6 +1025,80 @@ public sealed class RepositoryWorkspaceTests
 
         public void Dispose()
         {
+            TestDirectoryHelper.Delete(_directory);
+        }
+    }
+
+    public sealed class RepositoryWorkspaceClassFixture : IAsyncLifetime
+    {
+        private readonly string _directory = TestDirectoryHelper.Create("repository-workspaces");
+        private Process? _daemon;
+        private int _port;
+        private bool _disposed;
+
+        public string ExportRoot => _directory;
+        public string PristineSeed => Path.Combine(_directory, "pristine-seed");
+
+        public async ValueTask InitializeAsync()
+        {
+            try
+            {
+                Directory.CreateDirectory(PristineSeed);
+                await WorkspaceFixture.GitAsync(PristineSeed, "init", "-b", "trunk");
+                await File.WriteAllTextAsync(Path.Combine(PristineSeed, "README.md"), "base\n", Token);
+                await WorkspaceFixture.GitAsync(PristineSeed, "add", ".");
+                await WorkspaceFixture.GitAsync(PristineSeed, "commit", "-m", "Initial");
+                var listener = new TcpListener(IPAddress.Loopback, 0);
+                listener.Start();
+                _port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                listener.Stop();
+                var start = new ProcessStartInfo("git") { UseShellExecute = false };
+                foreach (
+                    var argument in new[]
+                    {
+                        "daemon",
+                        "--reuseaddr",
+                        "--export-all",
+                        "--listen=127.0.0.1",
+                        $"--port={_port}",
+                        $"--base-path={ExportRoot}",
+                        ExportRoot,
+                    }
+                )
+                    start.ArgumentList.Add(argument);
+                _daemon = Process.Start(start)!;
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Token);
+                timeout.CancelAfter(TimeSpan.FromSeconds(10));
+                while (true)
+                {
+                    try
+                    {
+                        using var client = new TcpClient();
+                        await client.ConnectAsync(IPAddress.Loopback, _port, timeout.Token);
+                        break;
+                    }
+                    catch (SocketException)
+                    {
+                        await Task.Delay(25, timeout.Token);
+                    }
+                }
+            }
+            catch
+            {
+                await DisposeAsync();
+                throw;
+            }
+        }
+
+        public string UrlFor(string caseId) => $"git://127.0.0.1:{_port}/{caseId}/seed";
+
+        public ValueTask DisposeAsync()
+        {
+            if (_disposed)
+            {
+                return ValueTask.CompletedTask;
+            }
+            _disposed = true;
             if (_daemon is { HasExited: false })
             {
                 _daemon.Kill(true);
@@ -1044,6 +1106,7 @@ public sealed class RepositoryWorkspaceTests
             }
             _daemon?.Dispose();
             TestDirectoryHelper.Delete(_directory);
+            return ValueTask.CompletedTask;
         }
     }
 }
