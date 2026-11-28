@@ -16,6 +16,7 @@
   "dependencies": {
     "@agw/api": "workspace:*",
     "@agw/chat": "workspace:*",
+    "@agw/chat-core": "workspace:*",
     "@agw/components": "workspace:*",
     "@agw/execution-core": "workspace:*",
     "@agw/integrations": "workspace:*",

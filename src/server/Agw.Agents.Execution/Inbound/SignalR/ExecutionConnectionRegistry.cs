@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Inbound.Connections;
@@ -141,6 +142,27 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
             }
         }
         return null;
+    }
+
+    public async Task<AgentflowNodeStatusSnapshot?> GetInProcessAgentflowNodeStatusesAsync(
+        Guid projectId,
+        Guid conversationId,
+        string userId,
+        string callerConnectionId,
+        CancellationToken cancellationToken
+    )
+    {
+        var connectionId = await FindInProcessExecutionAsync(
+            projectId,
+            conversationId,
+            userId,
+            callerConnectionId,
+            cancellationToken
+        );
+        if (connectionId is null || !_connections.TryGetValue(connectionId, out var connection))
+            return null;
+
+        return await connection.ReadAgentflowNodeStatusesAsync(projectId, conversationId, cancellationToken);
     }
 
     public Task<bool> RecoverInProcessExecutionAsync(

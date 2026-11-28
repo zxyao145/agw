@@ -1,5 +1,6 @@
 using System.Data;
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Contracts.Messages;
 using Agw.Auth.Contracts;
 using Agw.Extensions.Contracts;
 using Agw.Infrastructure.Data;
@@ -288,6 +289,7 @@ public sealed class TurnAcceptanceWriter : ITurnAcceptanceWriter
             TurnSequence = 1,
             LeaseEpoch = record.LeaseEpoch,
             SegmentIndex = 0,
+            MessageType = AgwMessageTypes.TurnStart,
             PayloadJson = registration.StartEventPayloadJson,
             CreateBy = registration.UserId,
             UpdateBy = registration.UserId,

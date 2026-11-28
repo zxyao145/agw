@@ -118,7 +118,13 @@ test("a remounted draft attaches to its running session and reports acceptance",
       messageId: "start",
       role: "system",
       contents: [],
-      additionalProperties: { type: "agw-turn-start", conversationId: id, turnId: command.turnId },
+      additionalProperties: {
+        type: "agw-turn-start",
+        conversationId: id,
+        turnId: command.turnId,
+        agentId: "agent-1",
+        agentType: "agent",
+      },
     }),
   );
   await waitFor(() => assert.deepEqual(accepted, [id]));
@@ -207,7 +213,14 @@ test("recovering a finished detached turn displays server history without replay
     messageId: type,
     role: type === "answer" ? "assistant" : "system",
     contents: text ? [{ type: "TextContent", content: text }] : [],
-    additionalProperties: { type, turnId, conversationId: id, status: "completed" },
+    additionalProperties: {
+      type,
+      turnId,
+      conversationId: id,
+      status: "completed",
+      agentId: "agent-1",
+      agentType: "agent",
+    },
   });
   hubs[0]!.receive(incoming("agw-turn-start"));
   for (let n = 0; n < 220; n++) hubs[0]!.receive(incoming("answer", String(n)));

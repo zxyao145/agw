@@ -207,7 +207,15 @@ async function checkConversationSession(kind: string, strictMode = false) {
       type,
       conversationId: execution.conversationId,
       turnId: execution.turnId,
-      ...(type === "agw-turn-finished" ? { status: "completed" } : {}),
+      ...(type === "agw-turn-finished"
+        ? { status: "completed" }
+        : execution.agentType === 1
+          ? {
+              agentId: execution.agentId,
+              agentType: "agentflow",
+              agentflowRevision: execution.agentflowRevision ?? 1,
+            }
+          : { agentId: execution.agentId, agentType: "agent" }),
     },
   });
   let finishHistory!: () => void;
@@ -402,6 +410,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
         subscribeQueue: manager.subscribeQueue,
         getQueueVersion: manager.getQueueVersion,
         getQueue: (key: chatRuntime.ExecutionSessionKey) => manager.getQueue(key),
+        subscribeAgentflowNodeRuns: manager.subscribeAgentflowNodeRuns,
+        getAgentflowNodeRunVersion: manager.getAgentflowNodeRunVersion,
+        getAgentflowNodeRun: (key: chatRuntime.ExecutionSessionKey) =>
+          manager.getAgentflowNodeRun(key),
         has: (key: chatRuntime.ExecutionSessionKey) => manager.has(key),
         attach: (key: chatRuntime.ExecutionSessionKey, handlers: ExecutionHubHandlers) => {
           reconnectHandlers = handlers;
@@ -447,6 +459,9 @@ async function checkConversationSession(kind: string, strictMode = false) {
     });
     return moduleRef.exports;
   }
+  modules["../../use-agentflows-query"] = await loadComponent(
+    new URL("../../use-agentflows-query.ts", import.meta.url),
+  );
   const { Chat } = await loadComponent<ChatProps>(
     new URL("../../components/message/chat.tsx", import.meta.url),
     {

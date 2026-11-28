@@ -32,6 +32,7 @@ import {
   getTurnPosition,
   isTurnStartMessage,
   isUserTurnMessage,
+  parseAgentflowNodeSnapshot,
   scopeStreamingMessage,
   type AgentMode,
   type ExecutionHubMethod,
@@ -1056,18 +1057,22 @@ export class ExecutionSession {
     if (!connectionId) throw new Error("Cannot confirm the previous execution's state.");
     this.clearRecoveryTimer();
     const revision = ++this.recoveryRevision;
+    const isCurrentRecovery = () =>
+      !this.disposed && revision === this.recoveryRevision && this.activeTurnId === turnId;
     let active: boolean;
     try {
       active = await this.invoke<boolean>("RecoverInProcessExecution", connectionId, interrupt);
+      if (isCurrentRecovery() && active === true && !interrupt) {
+        await this.restoreAgentflowNodeStatuses(turnId, connectionId);
+      }
     } catch (error) {
-      if (this.disposed || revision !== this.recoveryRevision || this.activeTurnId !== turnId)
-        return;
+      if (!isCurrentRecovery()) return;
       // 服务端拒绝停止（例如只读的 extension 会话）时执行仍在运行，继续查询直到它结束。
       // A stop the server refuses (such as from a read-only extension session) leaves the execution running, so polling continues until it ends.
       if (interrupt && isServerRejection(error)) this.scheduleRecoveryPoll();
       throw error;
     }
-    if (this.disposed || revision !== this.recoveryRevision || this.activeTurnId !== turnId) return;
+    if (!isCurrentRecovery()) return;
     if (typeof active !== "boolean")
       throw new Error("Cannot confirm the previous execution's state.");
     if (!active) {
@@ -1113,6 +1118,7 @@ export class ExecutionSession {
     turnId: string,
     cursor: string | null,
   ): Promise<DurableRestoreResult> {
+    if (cursor !== null) await this.restoreAgentflowNodeStatuses(turnId);
     try {
       await this.invoke("DispatchCommand", buildSubscribeTurnCommand(turnId, cursor));
       return this.hasRunningTurn() ? "active" : "finished";
@@ -1126,6 +1132,39 @@ export class ExecutionSession {
       }
       throw normalized;
     }
+  }
+
+  private async restoreAgentflowNodeStatuses(
+    expectedTurnId: string | null,
+    expectedInProcessConnectionId?: string,
+  ): Promise<void> {
+    const setting = this.setting;
+    if (!setting) return;
+    const revision = this.recoveryRevision;
+    const result = await this.invoke<unknown>(
+      "GetAgentflowNodeStatuses",
+      setting.projectId,
+      setting.conversationId,
+      expectedInProcessConnectionId ? null : expectedTurnId,
+    );
+    if (result === null || revision !== this.recoveryRevision) return;
+    const snapshot = parseAgentflowNodeSnapshot(result);
+    if (expectedTurnId !== null && snapshot.turnId !== expectedTurnId) return;
+    if (expectedTurnId === null && expectedInProcessConnectionId) {
+      // 重新载入时只有原连接的 ID；确认对话仍对应原连接，再交出快照。
+      // Reload only knows the original connection ID. Verify that the conversation still matches it.
+      const currentConnectionId = await this.invoke<string | null>(
+        "FindInProcessExecution",
+        setting.projectId,
+        setting.conversationId,
+      );
+      if (
+        currentConnectionId !== expectedInProcessConnectionId ||
+        revision !== this.recoveryRevision
+      )
+        return;
+    }
+    this.handlers.onStatus?.(snapshot);
   }
 
   /** 读取当前服务端的执行提供程序；失败交由连接错误流程处理。 */

@@ -9,13 +9,32 @@ namespace Agw.Agents.Execution.Turns;
 /// 一个 Turn 的身份：开始与结束消息的字段来源。StreamingScopeId 是 TurnId 的字符串形式，客户端用它把实时消息与按 turnId 划分的历史记录放在同一轮下。
 /// The identity of one turn: the source of the start and finish message fields. StreamingScopeId is the TurnId as a string, which clients use to place live messages and turnId-scoped history in the same turn.
 /// </summary>
-internal sealed record TurnEnvelope(
-    Guid TurnId,
-    Guid ConversationId,
-    Guid AgentId,
-    AgentRuntimeType AgentType,
-    string StreamingScopeId
-);
+internal sealed record TurnEnvelope
+{
+    public TurnEnvelope(
+        Guid turnId,
+        Guid conversationId,
+        Guid agentId,
+        AgentRuntimeType agentType,
+        string streamingScopeId,
+        int agentflowRevision
+    )
+    {
+        TurnId = turnId;
+        ConversationId = conversationId;
+        AgentId = agentId;
+        AgentType = agentType;
+        StreamingScopeId = streamingScopeId;
+        AgentflowRevision = agentflowRevision;
+    }
+
+    public Guid TurnId { get; init; }
+    public Guid ConversationId { get; init; }
+    public Guid AgentId { get; init; }
+    public AgentRuntimeType AgentType { get; init; }
+    public string StreamingScopeId { get; init; }
+    public int AgentflowRevision { get; init; }
+}
 
 /// <summary>
 /// 创建 Turn 生命周期控制消息，并定义 Turn 内消息携带的标识字段。
@@ -23,7 +42,6 @@ internal sealed record TurnEnvelope(
 /// </summary>
 internal static class TurnMessageFactory
 {
-    public const string TurnIdKey = "turnId";
     public const string TurnSequenceKey = "turnSequence";
     public const string StepIndexKey = "stepIndex";
     public const string SupersededKey = "superseded";
@@ -73,15 +91,23 @@ internal static class TurnMessageFactory
         : failure is AgwException exception ? exception.Code.ToString(CultureInfo.InvariantCulture)
         : ErrorCodes.AgentExecutionFailed.Code.ToString(CultureInfo.InvariantCulture);
 
-    private static AdditionalPropertiesDictionary CreateTurnProperties(TurnEnvelope envelope) =>
-        new()
+    private static AdditionalPropertiesDictionary CreateTurnProperties(TurnEnvelope envelope)
+    {
+        var properties = new AdditionalPropertiesDictionary
         {
-            [TurnIdKey] = envelope.TurnId.ToString("D"),
-            ["conversationId"] = envelope.ConversationId.ToString("D"),
-            ["agentId"] = envelope.AgentId.ToString("D"),
-            ["agentType"] = envelope.AgentType == AgentRuntimeType.Agentflow ? "agentflow" : "agent",
-            ["streamingScopeId"] = envelope.StreamingScopeId,
+            [AgwMessageClassifier.TurnIdKey] = envelope.TurnId.ToString("D"),
+            [AgwMessageClassifier.ConversationIdKey] = envelope.ConversationId.ToString("D"),
+            [AgwMessageClassifier.AgentIdKey] = envelope.AgentId.ToString("D"),
+            [AgwMessageClassifier.AgentTypeKey] =
+                envelope.AgentType == AgentRuntimeType.Agentflow
+                    ? AgwMessageClassifier.AgentflowTypeValue
+                    : AgwMessageClassifier.AgentTypeValue,
+            [AgwMessageClassifier.StreamingScopeIdKey] = envelope.StreamingScopeId,
         };
+        if (envelope.AgentType == AgentRuntimeType.Agentflow)
+            properties[AgwMessageClassifier.AgentflowRevisionKey] = envelope.AgentflowRevision;
+        return properties;
+    }
 
     private static AgwMessage Create(string type, AdditionalPropertiesDictionary properties)
     {

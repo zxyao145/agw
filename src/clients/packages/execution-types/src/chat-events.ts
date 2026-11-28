@@ -20,6 +20,7 @@ export type ExecutionHubMethod =
   | "DispatchCommand"
   | "GetExecutionProvider"
   | "GetAgentflowCheckpoints"
+  | "GetAgentflowNodeStatuses"
   | "FindInProcessExecution"
   | "RecoverInProcessExecution";
 

@@ -54,7 +54,7 @@ export interface ModelProviderDto {
   modelName: string;
 }
 
-export type AgentflowNodeKind = AgentflowNode["kind"];
+export type { AgentflowNodeKind } from "@agw/chat-core";
 export type AgentflowRoutingStrategy = Schemas["AgentflowRoutingStrategy"];
 export type AgentflowConditionRule = Schemas["AgentflowConditionRuleDto"];
 export type AgentflowPosition = { x: number; y: number };

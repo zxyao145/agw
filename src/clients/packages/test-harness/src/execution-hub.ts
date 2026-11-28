@@ -131,6 +131,7 @@ function defaultResult(method: string, provider: TestHubOptions["provider"]): un
     case "GetExecutionProvider":
       return provider;
     case "FindInProcessExecution":
+    case "GetAgentflowNodeStatuses":
       return null;
     case "RecoverInProcessExecution":
       return false;

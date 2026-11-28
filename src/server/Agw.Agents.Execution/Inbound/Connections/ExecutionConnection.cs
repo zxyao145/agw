@@ -1,4 +1,5 @@
 using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Shared.Exceptions;
@@ -97,10 +98,7 @@ internal sealed class ExecutionConnection : IAsyncDisposable
         await _commandGate.WaitAsync(cancellationToken);
         try
         {
-            return Volatile.Read(ref _disposed) == 0
-                && _context.ProjectId == projectId
-                && _context.ConversationId == conversationId
-                && !_context.WhenIdleAsync().IsCompleted
+            return MatchesActiveConversation(projectId, conversationId)
                 && !(queriedBySelf && _context.HasWrittenTurnFinish);
         }
         finally
@@ -108,6 +106,29 @@ internal sealed class ExecutionConnection : IAsyncDisposable
             _commandGate.Release();
         }
     }
+
+    internal async Task<AgentflowNodeStatusSnapshot?> ReadAgentflowNodeStatusesAsync(
+        Guid projectId,
+        Guid conversationId,
+        CancellationToken cancellationToken
+    )
+    {
+        await _commandGate.WaitAsync(cancellationToken);
+        try
+        {
+            return MatchesActiveConversation(projectId, conversationId) ? _context.ReadAgentflowNodeStatuses() : null;
+        }
+        finally
+        {
+            _commandGate.Release();
+        }
+    }
+
+    private bool MatchesActiveConversation(Guid projectId, Guid conversationId) =>
+        Volatile.Read(ref _disposed) == 0
+        && _context.ProjectId == projectId
+        && _context.ConversationId == conversationId
+        && !_context.WhenIdleAsync().IsCompleted;
 
     /// <summary>
     /// 确认旧连接执行是否仍在运行，并允许同一用户在重连后请求停止；停止按发出请求的连接的请求方检查。

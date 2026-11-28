@@ -349,7 +349,8 @@ internal sealed class TurnAcceptanceService
             request.ConversationId,
             request.Target.AgentId,
             request.Target.AgentType,
-            resolved.TurnId.ToString("D")
+            resolved.TurnId.ToString("D"),
+            snapshot?.RootRevision ?? 0
         );
         var settings = request.Settings.WithExtensionCapabilities(extensionPins, extensionCapabilities);
         var executionRequest = new ExecutionRequest(
@@ -418,7 +419,8 @@ internal sealed class TurnAcceptanceService
             existing.ConversationId,
             existing.TargetId,
             target.AgentType,
-            existing.TurnId.ToString("D")
+            existing.TurnId.ToString("D"),
+            existing.AgentflowRevision
         );
         var replay = new ExecutionRequest(
             existing.TurnId,

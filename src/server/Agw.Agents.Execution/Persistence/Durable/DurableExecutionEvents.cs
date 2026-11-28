@@ -123,6 +123,7 @@ internal static class DurableExecutionEvents
                         TurnSequence = next,
                         LeaseEpoch = leaseEpoch,
                         SegmentIndex = segmentIndex,
+                        MessageType = AgwMessageClassifier.GetMessageType(item.Message),
                         PayloadJson = item.PayloadJson,
                     }
                 );
@@ -157,6 +158,22 @@ internal static class DurableExecutionEvents
             .Where(item => item.TurnId == turnId && item.TurnSequence > afterSequence)
             .OrderBy(item => item.TurnSequence)
             .Take(limit)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return records.Select(ToEntry).ToArray();
+    }
+
+    public static async Task<IReadOnlyList<TurnBroadcastEntry>> ReadByTypesAsync(
+        IAgentsDbContext dbContext,
+        Guid turnId,
+        IReadOnlyCollection<string> messageTypes,
+        CancellationToken cancellationToken
+    )
+    {
+        var records = await dbContext
+            .DurableExecutionEvents.AsNoTracking()
+            .Where(item => item.TurnId == turnId && item.MessageType != null && messageTypes.Contains(item.MessageType))
+            .OrderBy(item => item.TurnSequence)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return records.Select(ToEntry).ToArray();

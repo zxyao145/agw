@@ -22,12 +22,77 @@ import {
   getTurnFinishedStatus,
   getTurnIdentity,
   getTurnPosition,
+  getTurnTarget,
   isSteerUserMessage,
   isSupersededTurnMessage,
   isTurnStartMessage,
   TURN_FINISHED_MESSAGE_TYPE,
   TURN_START_MESSAGE_TYPE,
 } from "./protocol";
+
+const flowTurnStart = {
+  messageId: "start",
+  contents: [],
+  additionalProperties: {
+    type: TURN_START_MESSAGE_TYPE,
+    turnId: "turn-1",
+    agentId: "flow-1",
+    agentType: "agentflow",
+    agentflowRevision: 3,
+  },
+};
+
+test("getTurnTarget reads an Agentflow turn start", () => {
+  assert.deepEqual(getTurnTarget(flowTurnStart), {
+    turnId: "turn-1",
+    agentId: "flow-1",
+    agentType: "agentflow",
+    agentflowRevision: 3,
+  });
+});
+
+test("getTurnTarget reads an Agent turn start", () => {
+  assert.deepEqual(
+    getTurnTarget({
+      ...flowTurnStart,
+      additionalProperties: { ...flowTurnStart.additionalProperties, agentType: "agent" },
+    }),
+    { turnId: "turn-1", agentId: "flow-1", agentType: "agent", agentflowRevision: null },
+  );
+});
+
+test("getTurnTarget returns null for a finish message", () => {
+  assert.equal(
+    getTurnTarget({ ...flowTurnStart, additionalProperties: { type: TURN_FINISHED_MESSAGE_TYPE } }),
+    null,
+  );
+});
+
+test("getTurnTarget throws when an Agentflow turn start lacks agentflowRevision", () => {
+  for (const agentflowRevision of [undefined, 0, 1.5, "3"]) {
+    assert.throws(
+      () =>
+        getTurnTarget({
+          ...flowTurnStart,
+          additionalProperties: { ...flowTurnStart.additionalProperties, agentflowRevision },
+        }),
+      TypeError,
+    );
+  }
+});
+
+test("getTurnTarget throws when a turn start lacks agentId", () => {
+  for (const invalid of [{ agentId: undefined }, { turnId: "" }, { agentType: "workflow" }]) {
+    assert.throws(
+      () =>
+        getTurnTarget({
+          ...flowTurnStart,
+          additionalProperties: { ...flowTurnStart.additionalProperties, ...invalid },
+        }),
+      TypeError,
+    );
+  }
+});
 
 const interactionResponses: InteractionResponse[] = [
   ...(["Once", "AlwaysTool", "AlwaysArguments"] as const).map((scope) => ({

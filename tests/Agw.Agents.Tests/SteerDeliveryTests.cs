@@ -178,7 +178,8 @@ public class SteerDeliveryTests
             scope.ProjectConversationId,
             scope.Context.AgentId!.Value,
             AgentRuntimeType.Agent,
-            scope.Context.TurnId.ToString("D")
+            scope.Context.TurnId.ToString("D"),
+            0
         );
 
         await TurnPipeline.RunAsync(

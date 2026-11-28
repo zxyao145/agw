@@ -59,7 +59,7 @@ namespace Agw.Agents.Tests;
 /// 受理事务：输入行、Turn 行与 Durable 记录在一个事务中提交，turnId 幂等且只对所属用户与对话可见。
 /// The acceptance transaction: the input row, turn row and durable record commit in one transaction, and turnIds are idempotent and visible only to their owner and conversation.
 /// </summary>
-public sealed class TurnAcceptanceTests : IAsyncLifetime
+public sealed partial class TurnAcceptanceTests : IAsyncLifetime
 {
     private const string UserId = TurnPersistenceTestKit.UserId;
 
@@ -129,12 +129,14 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
         Assert.Equal(0, record.LeaseEpoch);
         Assert.Null(record.WorkerId);
         Assert.Equal(1, record.LastEventSequence);
-        var start = DurableExecutionEvents.ToEntry(Assert.Single(await _kit.ReadEventsAsync(turnId)));
+        var startRecord = Assert.Single(await _kit.ReadEventsAsync(turnId));
+        Assert.Equal(AgwMessageTypes.TurnStart, startRecord.MessageType);
+        var start = DurableExecutionEvents.ToEntry(startRecord);
         Assert.Equal(1, start.Sequence);
         Assert.True(AgwMessageClassifier.IsTurnStart(start.Message));
         Assert.Equal(
             turnId.ToString("D"),
-            start.Message.AdditionalProperties?[TurnMessageFactory.TurnIdKey]?.ToString()
+            start.Message.AdditionalProperties?[AgwMessageClassifier.TurnIdKey]?.ToString()
         );
         Assert.Equal(ProjectConversationTurnStatus.Accepted, (await _kit.ReadTurnAsync(turnId)).Status);
     }
@@ -160,6 +162,7 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
         );
 
         Assert.Equal(1, accepted.Request.Target.AgentflowRevision);
+        Assert.Equal(1, accepted.Start.AdditionalProperties?[AgwMessageClassifier.AgentflowRevisionKey]);
         Assert.Equal(1, turn.Extra.AgentflowRevision);
         Assert.Empty(turn.Extra.AgentflowDependencies!);
         Assert.Equal(turn.Extra.AgentflowRevision, manifest.AgentflowRevision);
@@ -209,6 +212,7 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
         );
 
         Assert.Equal(2, accepted.Request.Target.AgentflowRevision);
+        Assert.Equal(2, accepted.Start.AdditionalProperties?[AgwMessageClassifier.AgentflowRevisionKey]);
         Assert.Equal(2, turn.Extra.AgentflowRevision);
         Assert.Equal(turn.Extra.AgentflowRevision, manifest.AgentflowRevision);
         Assert.Empty(turn.Extra.AgentflowDependencies!);
@@ -257,6 +261,7 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
 
         Assert.False(repeated.Created);
         Assert.Equal(1, repeated.Request.Target.AgentflowRevision);
+        Assert.Equal(1, repeated.Start.AdditionalProperties?[AgwMessageClassifier.AgentflowRevisionKey]);
         Assert.Equal(1, (await _kit.ReadTurnAsync(first.Request.TurnId)).Extra.AgentflowRevision);
     }
 

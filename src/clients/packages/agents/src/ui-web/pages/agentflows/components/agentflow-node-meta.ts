@@ -1,3 +1,4 @@
+import { AGENTFLOW_NODE_LABELS } from "@agw/chat-core";
 import {
   ArrowLeftRight,
   Bot,
@@ -21,7 +22,6 @@ import type {
   AgentflowNodeKind,
   ModelProviderDto,
 } from "../../../../types/agentflow";
-import { AGENTFLOW_NODE_LABELS } from "./agentflow-node-labels";
 
 export type AgentflowNodeMeta = {
   kind: AgentflowNodeKind;

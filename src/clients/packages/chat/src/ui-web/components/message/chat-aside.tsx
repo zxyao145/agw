@@ -12,13 +12,17 @@ import {
 import { formatTokenCount, type TokenUsage } from "@agw/api";
 import type { TodoPresentationItem } from "@agw/chat-core";
 import { Badge, cn, Tooltip, TooltipContent, TooltipTrigger } from "@agw/components";
+import type { AsideAgentflow } from "./aside-agentflow";
+import { ChatAgentflowNodes } from "./chat-agentflow-nodes";
 
 export interface ChatAsideProps {
   usage: TokenUsage;
   todos: readonly TodoPresentationItem[];
+  /** 侧栏显示的 Agentflow。The Agentflow shown in the sidebar. */
+  agentflow: AsideAgentflow | null;
 }
 
-export function ChatAside({ usage, todos }: ChatAsideProps) {
+export function ChatAside({ usage, todos, agentflow }: ChatAsideProps) {
   return (
     <aside
       className="sticky top-0 right-2 hidden w-75 shrink-0 self-start border-border py-10 @min-[64rem]:block"
@@ -64,6 +68,7 @@ export function ChatAside({ usage, todos }: ChatAsideProps) {
           </div>
         </dl>
       </div>
+      {agentflow && <ChatAgentflowNodes {...agentflow} />}
       {todos.length > 0 ? (
         <section
           className="mt-4 rounded-2xl border border-border bg-background/50 px-3 py-3 shadow-xs"

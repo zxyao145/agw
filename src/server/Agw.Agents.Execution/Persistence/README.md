@@ -329,6 +329,7 @@ Manifest、checkpoint、pending、response 和错误使用实体上的 `[Encrypt
 
 事件实现位于 [`Messaging/Durable`](../Messaging/Durable/)，默认使用 PostgreSQL 的 `execution_stream_entry` 表，也可配置 Redis Stream。
 
+- `execution_stream_entry.message_type` 明文保存消息类型，未指定类型时为空值。索引 `(turn_id, message_type, turn_sequence)` 用于恢复节点状态时读取 `agw-turn-start` 和 `agentflow-node-status`。消息载荷仍然加密保存。
 - 默认按 250 毫秒或 100 条普通事件批量提交，达到任一条件即刷新；写入间隔设为 0 时逐次写入。
 - 同一消息相邻的流式文本增量在同一批次内合并成一条事件，合并规则与客户端的追加规则一致。批次第一次提交后载荷固定，重试沿用原事件 ID 与载荷。
 - 事件序号用一条 `UPDATE ... RETURNING` 在锁定执行行的事务中预留。

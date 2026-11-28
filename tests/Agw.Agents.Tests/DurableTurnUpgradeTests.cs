@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
+using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
@@ -246,8 +248,11 @@ public sealed class DurableTurnUpgradeTests
         }
     }
 
-    [Fact]
-    public async Task UpgradeAsync_ManifestWithSnapshot_CopiesRevisionAndDependencies()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("turn-start")]
+    [InlineData(AgwMessageTypes.TurnStart)]
+    public async Task UpgradeAsync_ManifestWithSnapshot_CopiesRevisionAndDependencies(string? startType)
     {
         var token = TestContext.Current.CancellationToken;
         using var owner = TurnPersistenceTestKit.EnterUser();
@@ -274,6 +279,25 @@ public sealed class DurableTurnUpgradeTests
                     CreateTime = kit.Clock.GetUtcNow(),
                 }
             );
+            if (startType is not null)
+            {
+                var start = new AgwMessage(
+                    Guid.CreateVersion7().ToString("D"),
+                    "system",
+                    AiRole.System,
+                    [],
+                    new AdditionalPropertiesDictionary { [AgwMessageClassifier.TypeKey] = startType }
+                );
+                db.DurableExecutionEvents.Add(
+                    new DurableExecutionEventRecord
+                    {
+                        Id = Guid.CreateVersion7(),
+                        TurnId = turnId,
+                        TurnSequence = 1,
+                        PayloadJson = JsonUtil.Serialize(start),
+                    }
+                );
+            }
             await db.SaveChangesAsync(token);
         }
 
@@ -292,6 +316,13 @@ public sealed class DurableTurnUpgradeTests
             new ProjectConversationTurnAgentflowDependency(rootId, 3, "review", "reviewer", nestedId, 2),
             Assert.Single(turn.Extra.AgentflowDependencies!)
         );
+        var startRecord = Assert.Single(await kit.ReadEventsAsync(turnId));
+        Assert.Equal(AgwMessageTypes.TurnStart, startRecord.MessageType);
+        var snapshot = AgentflowNodeStatusSnapshotReader.Read([DurableExecutionEvents.ToEntry(startRecord).Message]);
+        Assert.NotNull(snapshot);
+        Assert.Equal(turnId, snapshot.TurnId);
+        Assert.Equal(rootId, snapshot.AgentflowId);
+        Assert.Equal(3, snapshot.AgentflowRevision);
     }
 
     private static DurableExecutionManifest CreateSnapshotManifest(

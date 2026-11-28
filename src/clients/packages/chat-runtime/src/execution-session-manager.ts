@@ -19,7 +19,14 @@ import {
   type TurnFinishedStatus,
 } from "./execution-session";
 import { createUuidV7, type AiMessage } from "@agw/api";
-import { toExecutionUserInput } from "@agw/chat-core";
+import {
+  applyAgentflowNodeMessage,
+  applyAgentflowNodeStatus,
+  EMPTY_AGENTFLOW_NODE_RUN_STATE,
+  finishAgentflowNodeRun,
+  toExecutionUserInput,
+  type AgentflowNodeRunState,
+} from "@agw/chat-core";
 import {
   cloneMessage,
   getMessageStreamingScopeId,
@@ -108,6 +115,7 @@ type Entry = {
   pendingInteractions: Map<string, AiMessage>;
   reconnectState: ExecutionReconnectState | null;
   activeTurn: ActiveTurnState | null;
+  agentflowNodeRun: AgentflowNodeRunState;
   /** 最近一条 Turn 开始消息中的 turnId；Turn 结束或连接关闭后为空。The turnId of the latest turn start message; empty after the turn ends or the connection closes. */
   observedTurnId: string | null;
   /** 已发给服务端、等待送达的 Steer。Steers sent to the server and waiting for delivery. */
@@ -201,6 +209,8 @@ export class ExecutionSessionManager {
   private readonly supersededTurnListeners = new Set<(key: ExecutionSessionKey) => void>();
   private readonly queueListeners = new Set<() => void>();
   private queueVersion = 0;
+  private readonly agentflowNodeRunListeners = new Set<() => void>();
+  private agentflowNodeRunVersion = 0;
 
   /**
    * 会话列表右侧的执行状态；当前显示的会话与后台会话的 Turn 事件都写入这里。
@@ -244,6 +254,7 @@ export class ExecutionSessionManager {
         pendingInteractions: new Map(),
         reconnectState: null,
         activeTurn: null,
+        agentflowNodeRun: EMPTY_AGENTFLOW_NODE_RUN_STATE,
         observedTurnId: null,
         steers: [],
         appliedSetting: null,
@@ -402,7 +413,10 @@ export class ExecutionSessionManager {
         try {
           return await attachedEntry.client.resumeCheckpoint(args);
         } catch (error) {
-          if (!attachedEntry.client.hasRunningTurn()) this.activity.turnFinished(key, "failed");
+          if (!attachedEntry.client.hasRunningTurn()) {
+            this.finishAgentflowNodeRun(attachedEntry);
+            this.activity.turnFinished(key, "failed");
+          }
           throw error;
         }
       },
@@ -449,11 +463,7 @@ export class ExecutionSessionManager {
       },
       dispose: async () => {
         if (this.entries.get(id) !== attachedEntry) return;
-        this.entries.delete(id);
-        this.activity.remove(key);
-        this.queueVersion += 1;
-        this.notifyQueueListeners();
-        await attachedEntry.client.dispose();
+        await this.discard(key);
       },
     };
   }
@@ -474,6 +484,21 @@ export class ExecutionSessionManager {
 
   public getQueueVersion = (): number => this.queueVersion;
 
+  public subscribeAgentflowNodeRuns = (listener: () => void): (() => void) => {
+    this.agentflowNodeRunListeners.add(listener);
+    return () => this.agentflowNodeRunListeners.delete(listener);
+  };
+
+  public getAgentflowNodeRunVersion = (): number => this.agentflowNodeRunVersion;
+
+  /** 没有连接的对话返回空状态。A conversation without a connection has an empty node run state. */
+  public getAgentflowNodeRun(key: ExecutionSessionKey): AgentflowNodeRunState {
+    return (
+      this.entries.get(getExecutionSessionKey(key))?.agentflowNodeRun ??
+      EMPTY_AGENTFLOW_NODE_RUN_STATE
+    );
+  }
+
   /**
    * 释放已删除会话的连接与队列。
    * Releases the connection and queue of a deleted conversation.
@@ -486,6 +511,8 @@ export class ExecutionSessionManager {
     this.activity.remove(key);
     this.queueVersion += 1;
     this.notifyQueueListeners();
+    if (entry.agentflowNodeRun !== EMPTY_AGENTFLOW_NODE_RUN_STATE)
+      this.notifyAgentflowNodeRunChange();
     await entry.client.dispose();
   }
 
@@ -553,11 +580,21 @@ export class ExecutionSessionManager {
   };
 
   private handleStatus(entry: Entry, status: ExecutionStatusEvent): void {
+    this.updateAgentflowNodeRun(entry, applyAgentflowNodeStatus(entry.agentflowNodeRun, status));
     entry.handler?.onStatus?.(status);
-    entry.activeTurn?.statuses.push({ ...status });
+    const statuses = entry.activeTurn?.statuses;
+    if (!statuses) return;
+    if (status.type === "agentflow-node-snapshot") {
+      const previous = statuses.findIndex(
+        (event) => event.type === status.type && event.turnId === status.turnId,
+      );
+      if (previous >= 0) statuses.splice(previous, 1);
+    }
+    statuses.push({ ...status });
   }
 
   private handleMessage(entry: Entry, message: AiMessage): void {
+    this.updateAgentflowNodeRun(entry, applyAgentflowNodeMessage(entry.agentflowNodeRun, message));
     this.captureActiveTurnMessage(entry, message);
     const interaction = getPendingInteraction(message);
     // 缺少会话或 Turn 标识、或已被更新 Turn 取代的生命周期消息不更新会话状态，对应会话由快照更新。
@@ -908,6 +945,7 @@ export class ExecutionSessionManager {
     if (inFlight?.item !== item || inFlight.started || entry.client.hasRunningTurn()) return;
     entry.inFlight = null;
     entry.activeTurn = null;
+    this.finishAgentflowNodeRun(entry);
     this.activity.turnFinished(entry.key, "failed");
     const returned: QueuedExecution = {
       ...item,
@@ -944,6 +982,21 @@ export class ExecutionSessionManager {
 
   private notifyQueueListeners(): void {
     for (const listener of this.queueListeners) listener();
+  }
+
+  private finishAgentflowNodeRun(entry: Entry): void {
+    this.updateAgentflowNodeRun(entry, finishAgentflowNodeRun(entry.agentflowNodeRun));
+  }
+
+  private updateAgentflowNodeRun(entry: Entry, state: AgentflowNodeRunState): void {
+    if (state === entry.agentflowNodeRun || !this.isAttached(entry)) return;
+    entry.agentflowNodeRun = state;
+    this.notifyAgentflowNodeRunChange();
+  }
+
+  private notifyAgentflowNodeRunChange(): void {
+    this.agentflowNodeRunVersion += 1;
+    for (const listener of this.agentflowNodeRunListeners) listener();
   }
 
   private clearPendingInteraction(entry: Entry, interactionId?: string): void {
@@ -1014,6 +1067,7 @@ export class ExecutionSessionManager {
 
   private handleClose(entry: Entry, error?: Error): void {
     entry.reconnectState = null;
+    this.finishAgentflowNodeRun(entry);
     // 新连接不带原有设置，必须重新配置后才能发送队列条目。A new connection lacks the old settings and must be configured before sending queue entries.
     entry.appliedSetting = null;
     const wasActive = this.activity.isActive(entry.key);
@@ -1044,6 +1098,7 @@ export class ExecutionSessionManager {
       this.activity.turnStarted(entry.key);
       this.resendSteers(entry);
     } else {
+      this.finishAgentflowNodeRun(entry);
       const wasActive = this.activity.isActive(entry.key);
       if (wasActive) {
         this.activity.turnFinished(entry.key, "completed");

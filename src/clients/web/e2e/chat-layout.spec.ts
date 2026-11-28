@@ -34,3 +34,41 @@ test("a conversation with messages keeps the composer at the bottom", async ({ p
     1,
   );
 });
+
+test("an Agentflow conversation lists its nodes between Token usage and Todo", async ({
+  page,
+}, testInfo) => {
+  const isMobile = testInfo.project.name === "mobile-chromium";
+  if (!isMobile) await page.setViewportSize({ width: 1728, height: 900 });
+  await mockChatApi(page, { withAgentflow: true });
+  await page.goto(`/chat/?projectId=${projectId}&conversationId=${conversationId}`);
+  const card = page.getByLabel("Agentflow nodes");
+  await expect(card.locator("ol > li")).toHaveCount(40);
+  if (isMobile) {
+    await expect(card).toBeHidden();
+    return;
+  }
+
+  await expect(card).toBeVisible();
+  await expect(card.locator("ol > li").first()).toHaveText("Input");
+  const tokenUsage = page.getByText("Token usage", { exact: true }).locator("..");
+  const todo = page.getByLabel("Current turn todos");
+  await expect(todo).toBeInViewport();
+  const [tokenBox, cardBox, todoBox] = await Promise.all([
+    tokenUsage.boundingBox(),
+    card.boundingBox(),
+    todo.boundingBox(),
+  ]);
+  if (!tokenBox || !cardBox || !todoBox)
+    throw new Error("The conversation sidebar is not rendered.");
+  expect(cardBox.y).toBeGreaterThanOrEqual(tokenBox.y + tokenBox.height);
+  expect(todoBox.y).toBeGreaterThanOrEqual(cardBox.y + cardBox.height);
+
+  const list = card.locator("ol").locator("..");
+  const { clientHeight, scrollHeight } = await list.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(clientHeight).toBeLessThanOrEqual(448);
+  expect(scrollHeight).toBeGreaterThan(clientHeight);
+});

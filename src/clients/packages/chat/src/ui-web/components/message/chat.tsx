@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 import {
   buildConversationRenderModel,
+  EMPTY_AGENTFLOW_NODE_RUN_STATE,
   getCurrentTurnTodoItems,
   getUnloadedWorkSummaryKeys,
   prepareConversationHistory,
@@ -51,6 +52,7 @@ import {
   type SubmissionMode,
 } from "@agw/chat-runtime";
 import { type LineComment, type ProjectDirectoryOption } from "@agw/projects";
+import { selectAsideAgentflow } from "./aside-agentflow";
 import { ChatAside } from "./chat-aside";
 import { ChatInput } from "./chat-input";
 import { Conversation } from "./conversation";
@@ -71,6 +73,7 @@ import { getClaudeInitCommands, prepareClaudeHistory } from "../../../lib/chat/a
 import { createUuidV7 } from "@agw/api";
 import { cn } from "@agw/components";
 import { useExecutionPlatform } from "../../execution-platform";
+import { useAgentflowsQuery } from "../../use-agentflows-query";
 import type { AiMessage, ConversationHistoryTurn } from "@agw/api";
 import type { ChatTargetOption } from "@agw/api";
 import { conversationComposerStorage } from "../../../lib/chat/conversation-composer-storage";
@@ -546,6 +549,18 @@ export function Chat({
   const executionQueue = queueKey
     ? executionSessionManager.getQueue(queueKey)
     : EMPTY_EXECUTION_QUEUE;
+  React.useSyncExternalStore(
+    executionSessionManager.subscribeAgentflowNodeRuns,
+    executionSessionManager.getAgentflowNodeRunVersion,
+    executionSessionManager.getAgentflowNodeRunVersion,
+  );
+  const nodeRun = queueKey
+    ? executionSessionManager.getAgentflowNodeRun(queueKey)
+    : EMPTY_AGENTFLOW_NODE_RUN_STATE;
+  const agentflows = useAgentflowsQuery(
+    target?.type === "agentflow" || nodeRun.agentflowId !== null,
+  );
+  const asideAgentflow = selectAsideAgentflow(nodeRun, target, agentflows.data ?? []);
   const checkpointResumeDisabled =
     isExecuting || isTransitioning || isHydratingSession || isRestoringExecution || showReconnect;
   const isCurrentTurnActive =
@@ -809,6 +824,7 @@ export function Chat({
   const applyExecutionStatus = React.useCallback(
     (status: ExecutionStatusEvent, generation: number) => {
       if (generation !== executionGenerationRef.current) return;
+      if (status.type === "agentflow-node-snapshot") return;
       onExecutionStatus?.(status);
       if (status.type === "permission-status") {
         setActivePermissionMode(status.activePermissionMode);
@@ -2170,8 +2186,12 @@ export function Chat({
           </div>
 
           {/* usage 等 panel */}
-          {renderItems.length > 0 ? (
-            <ChatAside usage={conversationUsage} todos={currentTurnTodos} />
+          {renderItems.length > 0 || asideAgentflow ? (
+            <ChatAside
+              usage={conversationUsage}
+              todos={currentTurnTodos}
+              agentflow={asideAgentflow}
+            />
           ) : null}
         </div>
       </div>

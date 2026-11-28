@@ -39,6 +39,12 @@ public sealed class DurableExecutionEventRecord : BaseEntity
     public int SegmentIndex { get; set; }
 
     /// <summary>
+    /// 消息类型，用于按类型查询事件。未指定类型的消息保存为空值。
+    /// The message type used to query events by type. Messages without a type are stored with a null value.
+    /// </summary>
+    public string? MessageType { get; set; }
+
+    /// <summary>
     /// 序列化后的消息正文；其中可能包含用户数据，必须加密保存。
     /// The serialized message body; it may contain user data and must be stored encrypted.
     /// </summary>

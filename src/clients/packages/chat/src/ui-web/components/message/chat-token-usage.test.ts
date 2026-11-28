@@ -69,7 +69,9 @@ function turnMessage(
       turnSequence,
       conversationId: "conversation-1",
       streamingScopeId: "turn-1",
-      ...(type === "agw-turn-finished" ? { status: "completed" } : {}),
+      ...(type === "agw-turn-finished"
+        ? { status: "completed" }
+        : { agentId: "flow-1", agentType: "agentflow", agentflowRevision: 1 }),
     },
   };
 }
