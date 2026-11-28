@@ -270,7 +270,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-预发布版本使用 `vX.Y.Z-preview.N`、`vX.Y.Z-alpha.N` 或 `vX.Y.Z-beta.N`。[发布工作流](.github/workflows/release.yml)会为受支持的 tag 或手动传入的 `release_tag` 发布 Linux amd64/arm64 镜像，并创建包含全部 Desktop Assets 的 GitHub Release。[Desktop 构建工作流](.github/workflows/build-desktop.yml)会在相关 Pull Request、推送到 `main` 或手动运行时生成临时 Desktop 产物。[站点工作流](.github/workflows/site.yml)负责构建并验证 [`site/`](site/README.md) 中的首页和文档站点，在推送到 `main` 时把文档镜像发布到 GitHub Pages，在 `main` 上手动运行时把两个站点发布到 Cloudflare Pages。
+预发布版本使用 `vX.Y.Z-preview.N`、`vX.Y.Z-alpha.N` 或 `vX.Y.Z-beta.N`。[发布工作流](.github/workflows/release.yml)会为受支持的 tag 或手动传入的 `release_tag` 发布 Linux amd64/arm64 镜像，并创建包含全部 Desktop Assets 的 GitHub Release。在 Pull Request 和推送到 `main` 时，[CI](.github/workflows/ci.yml) 根据改动文件选择需要构建的 Desktop 安装包。手动运行 [Desktop Build](.github/workflows/build-desktop.yml) 可以为指定版本构建全部安装包。[站点工作流](.github/workflows/site.yml)负责构建并验证 [`site/`](site/README.md) 中的首页和文档站点，在推送到 `main` 时把文档镜像发布到 GitHub Pages，在 `main` 上手动运行时把两个站点发布到 Cloudflare Pages。
 
 ## 架构
 

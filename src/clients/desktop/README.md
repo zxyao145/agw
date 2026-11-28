@@ -141,7 +141,7 @@ Releases contain nine unsigned artifacts:
 
 Artifact names use `Agw-Desktop-{version}-{full|client}-{platform}-{arch}` with `-Setup.exe`, `-Portable.zip`, `.dmg`, or `.deb` as appropriate.
 
-`.github/workflows/build-desktop.yml` builds the complete matrix for relevant pull requests, pushes to `main`, and manual runs, retaining temporary Actions artifacts. `.github/workflows/release.yml` reuses that matrix for `vX.Y.Z` and supported prerelease tags, or for a manually supplied release tag, then publishes the artifacts on the matching GitHub Release.
+On relevant pull requests and pushes to `main`, CI runs the Desktop tests and uploads a Linux x64 client installer. The path rules select all eight combinations for packaging, platform-specific checks and shared build dependencies. Run Desktop Build manually to get all installers for a revision. The release workflow uses the full matrix for version tags and manual releases and publishes the files on the matching GitHub Release. [Desktop workflow](../../../.github/workflows/build-desktop.yml) · [Path rules](../../../.github/ci-paths.yml)
 
 Opening About checks GitHub's latest stable Release and offers the artifact matching the current Full/Client flavor, platform, architecture, and Windows installation shape. Downloads open in the default browser and remain user-installed; Desktop does not check in the background, download automatically, or install updates. Code signing and notarization are not currently configured.
 
