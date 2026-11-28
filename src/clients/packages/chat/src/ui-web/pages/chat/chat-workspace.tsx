@@ -944,8 +944,6 @@ function ChatWorkspaceLayout({
           {isMobile ? null : (
             <ColResizeSplit.Left
               defaultPanelWidth={sidebarDefaultWidth}
-              minWidth={268}
-              maxWidth={420}
               collapsed={!activeSidebarVisible}
             >
               <div className="flex h-full min-h-0 flex-col">

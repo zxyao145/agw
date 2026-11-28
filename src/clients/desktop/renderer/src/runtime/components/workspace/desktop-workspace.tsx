@@ -567,7 +567,7 @@ function DesktopWorkspaceLayout(props: WorkspaceRuntime & { state: WorkspaceHost
       />
       <ColResizeSplit>
         {sidebarVisible ? (
-          <ColResizeSplit.Left defaultPanelWidth={320} minWidth={268} maxWidth={420}>
+          <ColResizeSplit.Left defaultPanelWidth={320}>
             <DesktopWorkspaceSidebar
               main={main}
               getGroup={getGroup}
