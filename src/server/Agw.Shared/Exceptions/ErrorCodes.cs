@@ -462,6 +462,16 @@ public static class ErrorCodes
         "The Agentflow definition has problems.",
         HttpStatusCode.BadRequest
     );
+    public static readonly ErrorCode SkillSourceDigestInvalid = new(
+        400_0081,
+        "Skill source digest must be \"sha256:\" followed by 64 lowercase hexadecimal characters.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SkillSourceDigestRequiresArchive = new(
+        400_0082,
+        "A skill source digest requires an uploaded archive.",
+        HttpStatusCode.BadRequest
+    );
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(
         401_0001,

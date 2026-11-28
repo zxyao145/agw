@@ -7448,6 +7448,7 @@ export interface paths {
             Description?: string;
             Archive?: components["schemas"]["IFormFile"];
             RemoteUrl?: string;
+            SourceDigest?: string;
           };
         };
       };
@@ -7558,6 +7559,7 @@ export interface paths {
             Description?: string;
             Archive?: components["schemas"]["IFormFile"];
             RemoteUrl?: string;
+            SourceDigest?: string;
           };
         };
       };
@@ -10922,6 +10924,7 @@ export interface components {
       kind: components["schemas"]["SkillKind"];
       contentPath: string;
       remoteUrl: null | string;
+      sourceDigest: null | string;
       isBuiltIn: boolean;
       agentIds: string[];
       /** Format: date-time */

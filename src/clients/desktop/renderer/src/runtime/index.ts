@@ -5,6 +5,7 @@ export { DesktopWorkspaceBoundary, DesktopWorkspaceErrorState } from "./desktop-
 export { DesktopSettingsPage } from "./desktop-settings-page";
 export { DesktopAppearancePage } from "./desktop-appearance-page";
 export { DesktopExtensionsPage } from "./desktop-extensions-page";
+export { desktopLocalSkills } from "./local-skills-source";
 export { DesktopExtensionSettingsPage } from "./desktop-extension-settings-page";
 export { ExtensionHostProvider } from "./extensions/extension-host-provider";
 export {

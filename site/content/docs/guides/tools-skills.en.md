@@ -53,6 +53,18 @@ Choose a mode according to how you maintain the content:
 
 Remote Skills currently read the instructions from the package. They do not download and run its scripts or expose its other resource files. If those files are needed, use Local mode and prepare the execution environment.
 
+## Import from ~/.agents/skills
+
+Agw Desktop can scan `~/.agents/skills` on this computer and upload selected Skills to the AGW Server. This feature is available in Desktop only.
+
+- **Invalid**: The directory or `SKILL.md` has a problem and cannot be imported.
+- **New**: No Skill with this name exists on the server; importing creates it.
+- **Synced**: The local and server files match, so no update is needed.
+- **Changed**: The local and server files differ; updating replaces the server files.
+- **Conflict**: A Built-in or Remote Skill already uses this name.
+
+The server stores the files from the uploaded package. Rescan and update the Skill after changing its local files.
+
 ## Remote Skill cache
 
 AGW fetches content when a Remote Skill is created or saved and caches it in the database for **one hour**.

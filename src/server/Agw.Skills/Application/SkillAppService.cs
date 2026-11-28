@@ -10,6 +10,7 @@ using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Pagination;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
+using Agw.Skills.Application.Content;
 using Agw.Skills.Application.Persistence;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts;
@@ -20,6 +21,7 @@ using Agw.Skills.Domain.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Agw.Skills.Application;
 
@@ -38,8 +40,10 @@ public class SkillAppService
     private readonly IRemoteSkillClient _remoteSkillClient;
     private readonly IRemoteSkillRefreshLock _remoteSkillRefreshLock;
     private readonly IApplicationLock _applicationLock;
+    private readonly ISkillContentRetirement _contentRetirement;
     private readonly TimeProvider _timeProvider;
     private readonly ICurrentUser _currentUser;
+    private readonly bool _rollingUpdate;
 
     public SkillAppService(
         ISkillsDbContext dbContext,
@@ -52,7 +56,9 @@ public class SkillAppService
         IApplicationLock applicationLock,
         TimeProvider timeProvider,
         ICurrentUser currentUser,
-        IEnumerable<IAgentSkillRegistration>? skillRegistrations = null
+        ISkillContentRetirement contentRetirement,
+        IEnumerable<IAgentSkillRegistration>? skillRegistrations = null,
+        IOptions<SkillOptions>? options = null
     )
     {
         _dbContext = dbContext;
@@ -63,8 +69,10 @@ public class SkillAppService
         _remoteSkillClient = remoteSkillClient;
         _remoteSkillRefreshLock = remoteSkillRefreshLock;
         _applicationLock = applicationLock;
+        _contentRetirement = contentRetirement;
         _timeProvider = timeProvider;
         _currentUser = currentUser;
+        _rollingUpdate = options?.Value.RollingUpdate ?? true;
         _builtInSkillIds = (skillRegistrations ?? []).Select(registration => registration.Id).ToHashSet();
     }
 
@@ -121,39 +129,66 @@ public class SkillAppService
         return new SkillDetails(skill, agentIds, IsBuiltIn(skill));
     }
 
-    public async Task<string?> PrepareLocalDirectoryAsync(Guid skillId, CancellationToken cancellationToken = default)
+    public async Task<ILocalSkillDirectoryLease?> AcquireLocalDirectoryAsync(
+        Guid skillId,
+        CancellationToken cancellationToken = default
+    )
     {
-        await using var mutation = new ApplicationLockScope(
-            await _applicationLock.AcquireAsync(SkillMutationLock.GetResourceName(skillId), cancellationToken),
-            cancellationToken
-        );
-        var ownerUserId = ResolveOwnerUserId();
-        var skill = await _dbContext
-            .Skills.AsNoTracking()
-            .SingleOrDefaultAsync(
-                item => item.Id == skillId && item.Kind == SkillKind.Local && item.CreateBy == ownerUserId,
-                mutation.Token
+        ILocalSkillDirectoryLease? contentLease = null;
+        try
+        {
+            await using var mutation = new ApplicationLockScope(
+                await _applicationLock.AcquireAsync(SkillMutationLock.GetResourceName(skillId), cancellationToken),
+                cancellationToken
             );
-        if (skill == null)
+            var ownerUserId = ResolveOwnerUserId();
+            var skill = await _dbContext
+                .Skills.AsNoTracking()
+                .SingleOrDefaultAsync(
+                    item => item.Id == skillId && item.Kind == SkillKind.Local && item.CreateBy == ownerUserId,
+                    mutation.Token
+                );
+            if (skill == null)
+            {
+                return null;
+            }
+
+            var location = GetSkillContentLocation(skill);
+            if (IsDirectContentDirectory(location.Directory))
+            {
+                SkillDirectoryReplacement.Recover(location.Directory, skill.Extra.ContentRevision);
+            }
+
+            if (!Directory.Exists(location.Directory))
+            {
+                return null;
+            }
+
+            if (Path.GetFileName(location.Directory) != skill.Name)
+            {
+                location = await NormalizeLocalDirectoryAsync(skill, location.Directory, ownerUserId, mutation.Token);
+                if (location == null)
+                {
+                    return null;
+                }
+            }
+
+            contentLease = await _contentRetirement.AcquireAsync(location, mutation.Token).ConfigureAwait(false);
+        }
+        catch
         {
-            return null;
+            if (contentLease != null)
+            {
+                await contentLease.DisposeAsync().ConfigureAwait(false);
+            }
+
+            throw;
         }
 
-        var directory = GetSkillAbsolutePath(skill);
-        if (!Directory.Exists(directory))
-        {
-            return null;
-        }
-
-        if (Path.GetFileName(directory) != skill.Name)
-        {
-            return await NormalizeLocalDirectoryAsync(skill, directory, ownerUserId, mutation.Token);
-        }
-
-        return directory;
+        return contentLease;
     }
 
-    private async Task<string?> NormalizeLocalDirectoryAsync(
+    private async Task<SkillContentLocation?> NormalizeLocalDirectoryAsync(
         Skill skillSnapshot,
         string originalDirectory,
         string ownerUserId,
@@ -175,14 +210,14 @@ public class SkillAppService
             return null;
         }
 
-        var original = new LocalSkillState(skill.Name, skill.Description, skill.ContentPath);
+        var original = new LocalSkillState(skill.Name, skill.Description, skill.ContentPath, skill.Extra);
         var preparedRoot = Path.Combine(
             _dataPaths.TempDirectory,
             $"{PreparedSkillDirectoryPrefix}{Guid.CreateVersion7():N}"
         );
         await using var prepared = new PreparedSkillDirectory(preparedRoot, Path.Combine(preparedRoot, skill.Name));
         CopyDirectory(originalDirectory, prepared.DirectoryPath);
-        var contentPath = GetSkillVersionContentPath(skill);
+        var contentPath = GetRollingContentPath(skill);
         PublishDirectory(prepared.DirectoryPath, GetSkillAbsolutePath(contentPath));
         skill.ContentPath = contentPath;
         try
@@ -191,11 +226,11 @@ public class SkillAppService
         }
         catch (Exception exception)
         {
-            await RestoreLocalSkillAsync(skill, original, originalDirectory, exception);
+            await RestoreLocalSkillAsync(skill, original, originalDirectory, backupPath: null, exception);
             throw;
         }
-        DeleteDirectoryIfDifferent(originalDirectory, GetSkillAbsolutePath(skill));
-        return GetSkillAbsolutePath(skill);
+        await RetireDirectoryIfDifferentAsync(originalDirectory, GetSkillAbsolutePath(skill)).ConfigureAwait(false);
+        return GetSkillContentLocation(skill);
     }
 
     public async Task<SkillDetails> CreateAsync(
@@ -203,15 +238,16 @@ public class SkillAppService
         IFormFile? archive,
         string user,
         string? remoteUrl = null,
+        string? sourceDigest = null,
         CancellationToken cancellationToken = default
     )
     {
         ArgumentNullException.ThrowIfNull(skill);
 
         skill.RemoteUrl = remoteUrl;
-        new SkillBehavior(skill).EnsureCreatable(archive != null);
+        new SkillBehavior(skill).EnsureCreatable(archive != null, sourceDigest);
         return skill.Kind == SkillKind.Local
-            ? await CreateLocalAsync(skill, archive!, cancellationToken)
+            ? await CreateLocalAsync(skill, archive!, sourceDigest, cancellationToken)
             : await CreateRemoteAsync(skill, cancellationToken);
     }
 
@@ -222,6 +258,7 @@ public class SkillAppService
         IFormFile? archive,
         string user,
         string? remoteUrl = null,
+        string? sourceDigest = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -242,9 +279,9 @@ public class SkillAppService
 
         var behavior = new SkillBehavior(existing);
         behavior.EnsureMutable(_builtInSkillIds.Contains(existing.Id));
-        behavior.EnsureUpdatable(name, archive != null, remoteUrl);
+        behavior.EnsureUpdatable(name, archive != null, remoteUrl, sourceDigest);
         return existing.Kind == SkillKind.Local
-            ? await UpdateLocalAsync(existing, name, description, archive, cancellationToken)
+            ? await UpdateLocalAsync(existing, name, description, archive, sourceDigest, cancellationToken)
             : await UpdateRemoteAsync(existing, remoteUrl, cancellationToken);
     }
 
@@ -274,24 +311,44 @@ public class SkillAppService
             return await DeleteCoreAsync(existing, cancellationToken);
         }
 
-        return await DeleteCoreAsync(existing, cancellationToken);
+        var directory = GetSkillAbsolutePath(existing);
+        if (!IsDirectContentDirectory(directory))
+        {
+            return await DeleteCoreAsync(existing, cancellationToken);
+        }
+
+        await using var ownerMutation = await AcquireOwnerMutationAsync(cancellationToken);
+        SkillDirectoryReplacement.Recover(directory, existing.Extra.ContentRevision);
+        return await DeleteCoreAsync(existing, ownerMutation.Token);
     }
 
     private async Task<SkillDetails> CreateLocalAsync(
         Skill skill,
         IFormFile archive,
+        string? sourceDigest,
         CancellationToken cancellationToken
     )
     {
         new SkillBehavior(skill).DefineLocal(skill.Name, skill.Description);
+        await using var ownerMutation = _rollingUpdate ? null : await AcquireOwnerMutationAsync(cancellationToken);
+        cancellationToken = ownerMutation?.Token ?? cancellationToken;
         await _nameUniquenessDomainService.EnsureNameAvailableAsync(skill, cancellationToken);
         await using var preparedDirectory = await PrepareArchiveDirectoryAsync(skill.Name, skill.Description, archive);
 
         var originalContentPath = skill.ContentPath;
-        var contentPath = GetSkillVersionContentPath(skill);
+        var originalExtra = skill.Extra;
+        var contentPath = GetUploadContentPath(skill);
         var targetDirectory = GetSkillAbsolutePath(contentPath);
-        PublishDirectory(preparedDirectory.DirectoryPath, targetDirectory);
+        Guid? revision = _rollingUpdate ? null : Guid.CreateVersion7();
+        var backupPath = await PublishUploadDirectoryAsync(
+            skill.Name,
+            preparedDirectory.DirectoryPath,
+            targetDirectory,
+            revision,
+            cancellationToken
+        );
         skill.ContentPath = contentPath;
+        new SkillBehavior(skill).DefineLocalContent(sourceDigest, revision);
 
         try
         {
@@ -301,17 +358,20 @@ public class SkillAppService
         catch (Exception exception)
         {
             _dbContext.Skills.Entry(skill).State = EntityState.Detached;
-            var persistedContentPath = await GetPersistedSkillContentPathAsync(skill.Id, exception);
-            if (persistedContentPath == contentPath)
+            var persistedContent = await GetPersistedSkillContentAsync(skill.Id, exception);
+            if (persistedContent?.ContentPath == contentPath && persistedContent.ContentRevision == revision)
             {
+                SkillDirectoryReplacement.Complete(backupPath);
                 throw;
             }
 
             skill.ContentPath = originalContentPath;
-            DeleteSkillContentDirectory(targetDirectory);
+            skill.Extra = originalExtra;
+            UndoDirectoryPublication(targetDirectory, backupPath);
             throw;
         }
 
+        SkillDirectoryReplacement.Complete(backupPath);
         _logger.LogInformation("Created local skill {SkillName} at {SkillPath}", skill.Name, targetDirectory);
         return await GetAsync(skill.Id) ?? new SkillDetails(skill, [], false);
     }
@@ -340,20 +400,50 @@ public class SkillAppService
         string name,
         string description,
         IFormFile? archive,
+        string? sourceDigest,
         CancellationToken cancellationToken
     )
     {
-        var original = new LocalSkillState(existing.Name, existing.Description, existing.ContentPath);
+        var original = new LocalSkillState(existing.Name, existing.Description, existing.ContentPath, existing.Extra);
         var originalPath = GetSkillAbsolutePath(existing);
+        var originalIsDirect = IsDirectContentDirectory(originalPath);
+        await using var ownerMutation =
+            !_rollingUpdate || originalIsDirect ? await AcquireOwnerMutationAsync(cancellationToken) : null;
+        cancellationToken = ownerMutation?.Token ?? cancellationToken;
+        if (originalIsDirect)
+        {
+            SkillDirectoryReplacement.Recover(originalPath, existing.Extra.ContentRevision);
+        }
+
+        string? backupPath = null;
 
         try
         {
-            new SkillBehavior(existing).DefineLocal(name, description);
+            var behavior = new SkillBehavior(existing);
+            behavior.DefineLocal(name, description);
             await _nameUniquenessDomainService.EnsureNameAvailableAsync(existing, cancellationToken);
 
             if (archive != null)
             {
-                await PublishArchiveAsync(existing, archive);
+                await using var prepared = await PrepareArchiveDirectoryAsync(
+                    existing.Name,
+                    existing.Description,
+                    archive
+                );
+                var contentPath = GetUploadContentPath(existing);
+                var directory = GetSkillAbsolutePath(contentPath);
+                Guid? revision = _rollingUpdate ? null : Guid.CreateVersion7();
+                backupPath = await PublishUploadDirectoryAsync(
+                    existing.Name,
+                    prepared.DirectoryPath,
+                    directory,
+                    revision,
+                    cancellationToken,
+                    replacesCurrent: string.Equals(originalPath, directory, StringComparison.Ordinal)
+                );
+
+                existing.ContentPath = contentPath;
+                behavior.DefineLocalContent(sourceDigest, revision);
             }
 
             _dbContext.Skills.Entry(existing).Property(skill => skill.Name).IsModified = true;
@@ -361,51 +451,56 @@ public class SkillAppService
         }
         catch (Exception exception)
         {
-            await RestoreLocalSkillAsync(existing, original, originalPath, exception);
+            await RestoreLocalSkillAsync(existing, original, originalPath, backupPath, exception);
             throw;
         }
 
-        DeleteDirectoryIfDifferent(originalPath, GetSkillAbsolutePath(existing));
+        SkillDirectoryReplacement.Complete(backupPath);
+        await RetireDirectoryIfDifferentAsync(originalPath, GetSkillAbsolutePath(existing)).ConfigureAwait(false);
 
         _logger.LogInformation("Updated skill {SkillId} ({SkillName})", existing.Id, existing.Name);
         return await GetAsync(existing.Id);
-    }
-
-    private async Task PublishArchiveAsync(Skill skill, IFormFile archive)
-    {
-        await using var prepared = await PrepareArchiveDirectoryAsync(skill.Name, skill.Description, archive);
-        var contentPath = GetSkillVersionContentPath(skill);
-        PublishDirectory(prepared.DirectoryPath, GetSkillAbsolutePath(contentPath));
-        skill.ContentPath = contentPath;
     }
 
     private async Task RestoreLocalSkillAsync(
         Skill skill,
         LocalSkillState original,
         string originalPath,
+        string? backupPath,
         Exception saveException
     )
     {
-        var published = skill.ContentPath != original.ContentPath;
+        var published =
+            skill.ContentPath != original.ContentPath || skill.Extra.ContentRevision != original.Extra.ContentRevision;
         _dbContext.Skills.Entry(skill).State = EntityState.Detached;
         if (published)
         {
-            var persistedContentPath = await GetPersistedSkillContentPathAsync(skill.Id, saveException);
-            if (persistedContentPath == skill.ContentPath)
+            var persistedContent = await GetPersistedSkillContentAsync(skill.Id, saveException);
+            if (
+                persistedContent?.ContentPath == skill.ContentPath
+                && persistedContent.ContentRevision == skill.Extra.ContentRevision
+            )
             {
-                DeleteDirectoryIfDifferent(originalPath, GetSkillAbsolutePath(skill));
+                SkillDirectoryReplacement.Complete(backupPath);
+                await RetireDirectoryIfDifferentAsync(originalPath, GetSkillAbsolutePath(skill)).ConfigureAwait(false);
                 return;
             }
 
-            DeleteSkillContentDirectory(GetSkillAbsolutePath(skill));
+            UndoDirectoryPublication(GetSkillAbsolutePath(skill), backupPath);
         }
 
         skill.Name = original.Name;
         skill.Description = original.Description;
         skill.ContentPath = original.ContentPath;
+        skill.Extra = original.Extra;
     }
 
-    private sealed record LocalSkillState(string Name, string Description, string ContentPath);
+    private sealed record LocalSkillState(string Name, string Description, string ContentPath, SkillExtra Extra);
+
+    private sealed record LocalContentPointer(string ContentPath, SkillExtra Extra)
+    {
+        public Guid? ContentRevision => Extra.ContentRevision;
+    }
 
     private async Task<SkillDetails?> UpdateRemoteAsync(
         Skill existing,
@@ -475,11 +570,9 @@ public class SkillAppService
 
         if (existing.Kind == SkillKind.Local)
         {
-            var targetDirectory = GetSkillAbsolutePath(existing);
-            if (Directory.Exists(targetDirectory))
-            {
-                DeleteSkillContentDirectory(targetDirectory);
-            }
+            await _contentRetirement
+                .RetireAsync(GetSkillContentLocation(existing), CancellationToken.None)
+                .ConfigureAwait(false);
         }
 
         _logger.LogInformation("Deleted skill {SkillId} ({SkillName})", existing.Id, existing.Name);
@@ -749,21 +842,21 @@ public class SkillAppService
         return absolutePath;
     }
 
-    private async Task<string?> GetPersistedSkillContentPathAsync(Guid skillId, Exception saveException)
+    private async Task<LocalContentPointer?> GetPersistedSkillContentAsync(Guid skillId, Exception saveException)
     {
         try
         {
             return await _dbContext
                 .Skills.AsNoTracking()
                 .Where(skill => skill.Id == skillId)
-                .Select(skill => skill.ContentPath)
+                .Select(skill => new LocalContentPointer(skill.ContentPath, skill.Extra))
                 .SingleOrDefaultAsync(CancellationToken.None);
         }
         catch (Exception confirmationException)
         {
             _logger.LogError(
                 confirmationException,
-                "Could not verify the committed content path for skill {SkillId}",
+                "Could not verify the committed content for skill {SkillId}",
                 skillId
             );
             ExceptionDispatchInfo.Throw(saveException);
@@ -771,25 +864,62 @@ public class SkillAppService
         }
     }
 
-    private string GetSkillVersionContentPath(Skill skill)
+    private string GetUploadContentPath(Skill skill) =>
+        _rollingUpdate
+            ? GetRollingContentPath(skill)
+            : GetContentPath(SkillContentPaths.GetOwnerDirectoryName(ResolveOwnerUserId()), skill.Name);
+
+    private string GetRollingContentPath(Skill skill) =>
+        GetContentPath($"{skill.Name}-{Guid.CreateVersion7():N}", skill.Name);
+
+    private string GetContentPath(string parentDirectory, string skillName)
     {
         var skillsDirectoryPath = Path.GetRelativePath(_dataPaths.Root, _dataPaths.SkillsDirectory)
             .Replace(Path.DirectorySeparatorChar, '/');
-        return $"{skillsDirectoryPath}/{skill.Id:N}-{Guid.CreateVersion7():N}/{skill.Name}";
+        return $"{skillsDirectoryPath}/{parentDirectory}/{skillName}";
     }
 
-    private void DeleteDirectoryIfDifferent(string sourceDirectory, string targetDirectory)
+    private async Task<ApplicationLockScope> AcquireOwnerMutationAsync(CancellationToken cancellationToken) =>
+        new(
+            await _applicationLock.AcquireAsync(
+                $"skill-content-owner:{SkillContentPaths.GetOwnerDirectoryName(ResolveOwnerUserId())}",
+                cancellationToken
+            ),
+            cancellationToken
+        );
+
+    private bool IsDirectContentDirectory(string directory)
+    {
+        var parent = Directory.GetParent(directory);
+        return parent?.Parent?.FullName == Path.GetFullPath(_dataPaths.SkillsDirectory)
+            && SkillContentPaths.IsOwnerDirectoryName(parent.Name);
+    }
+
+    private async Task RetireDirectoryIfDifferentAsync(string sourceDirectory, string targetDirectory)
     {
         if (
             !string.Equals(
                 Path.GetFullPath(sourceDirectory),
                 Path.GetFullPath(targetDirectory),
                 StringComparison.Ordinal
-            ) && Directory.Exists(sourceDirectory)
+            )
         )
         {
-            DeleteSkillContentDirectory(sourceDirectory);
+            await _contentRetirement
+                .RetireAsync(GetSkillContentLocation(sourceDirectory), CancellationToken.None)
+                .ConfigureAwait(false);
         }
+    }
+
+    private SkillContentLocation GetSkillContentLocation(Skill skill) =>
+        GetSkillContentLocation(GetSkillAbsolutePath(skill));
+
+    private SkillContentLocation GetSkillContentLocation(string directory)
+    {
+        var absoluteDirectory = Path.GetFullPath(directory);
+        var contentPath = Path.GetRelativePath(_dataPaths.Root, absoluteDirectory)
+            .Replace(Path.DirectorySeparatorChar, '/');
+        return new SkillContentLocation(contentPath, absoluteDirectory);
     }
 
     private void DeleteSkillContentDirectory(string directoryPath)
@@ -797,10 +927,83 @@ public class SkillAppService
         SafeDeleteDirectory(directoryPath);
         var parent = Directory.GetParent(directoryPath);
         var skillsRoot = Path.GetFullPath(_dataPaths.SkillsDirectory);
-        if (parent?.Parent?.FullName == skillsRoot && parent.Exists && !parent.EnumerateFileSystemInfos().Any())
+        if (
+            parent?.Parent?.FullName == skillsRoot
+            && !SkillContentPaths.IsOwnerDirectoryName(parent.Name)
+            && parent.Exists
+            && !parent.EnumerateFileSystemInfos().Any()
+        )
         {
             parent.Delete();
         }
+    }
+
+    private void UndoDirectoryPublication(string directory, string? backupPath)
+    {
+        if (backupPath == null)
+        {
+            DeleteSkillContentDirectory(directory);
+        }
+        else
+        {
+            SkillDirectoryReplacement.RollBack(directory, backupPath);
+        }
+    }
+
+    private async Task<string?> PublishUploadDirectoryAsync(
+        string skillName,
+        string sourceDirectory,
+        string targetDirectory,
+        Guid? revision,
+        CancellationToken cancellationToken,
+        bool replacesCurrent = false
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (revision == null)
+        {
+            PublishDirectory(sourceDirectory, targetDirectory);
+            return null;
+        }
+
+        if (!replacesCurrent)
+        {
+            var location = GetSkillContentLocation(targetDirectory);
+            var markerPath = targetDirectory + SkillContentPaths.RetiredMarkerSuffix;
+            var isReferenced = await _dbContext.Skills.AnyAsync(
+                skill => skill.ContentPath == location.ContentPath,
+                cancellationToken
+            );
+            if (!isReferenced && !File.Exists(markerPath))
+            {
+                SkillDirectoryReplacement.Recover(targetDirectory, committedRevision: null);
+                // 回收记录已移除但尚未退役的目录，保留仍有租约的文件。
+                // Retire unreferenced content while preserving files that are still leased.
+                await _contentRetirement.RetireAsync(location, cancellationToken);
+            }
+
+            if (isReferenced || File.Exists(markerPath) || Path.Exists(targetDirectory))
+            {
+                throw new AgwException(
+                    ErrorCodes.SkillAlreadyExists,
+                    $"The directory for skill '{skillName}' is still in use."
+                );
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var backupPath = SkillDirectoryReplacement.Backup(targetDirectory, revision.Value);
+        try
+        {
+            PublishDirectory(sourceDirectory, targetDirectory);
+        }
+        catch
+        {
+            SkillDirectoryReplacement.RollBack(targetDirectory, backupPath);
+            throw;
+        }
+
+        return backupPath;
     }
 
     private static void PublishDirectory(string sourceDirectory, string targetDirectory)

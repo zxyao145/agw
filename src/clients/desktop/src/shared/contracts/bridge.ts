@@ -7,6 +7,7 @@ import type { ImageContextMenuRequest } from "./image";
 import type { DesktopNotificationFrame } from "./notification";
 import type { DecodedText, EncodedText, EncodeTextOptions, TextEncodingInfo } from "./text";
 import type { PersistedTabGroup, WorkspaceCommand } from "./workspace-tabs";
+import type { LocalSkillPackage, LocalSkillScan } from "./local-skills";
 import type {
   CreateExtensionFrameRequest,
   ExtensionActivation,
@@ -59,6 +60,10 @@ export type AgwFloatingChatHostBridge = {
 
 export type AgwDesktopBridge = {
   getRuntimeState(): Promise<DesktopRuntimeState>;
+  /** 扫描本机 ~/.agents/skills。Scans the local ~/.agents/skills directory. */
+  scanLocalSkills(): Promise<LocalSkillScan>;
+  /** 打包一个本机 Skill 用于上传。Packs one local skill for upload. */
+  packLocalSkill(directoryName: string): Promise<LocalSkillPackage>;
   checkForUpdates(): Promise<DesktopUpdateCheckResult>;
   saveSettings(settings: DesktopSettingsUpdate): Promise<DesktopRuntimeState>;
   getWorkspaceTabs(serverId: string, projectId: string): Promise<PersistedTabGroup | null>;

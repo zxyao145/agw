@@ -10,6 +10,8 @@ import type {
   ExtensionEvent,
   ExtensionPortMessage,
   ImageContextMenuRequest,
+  LocalSkillPackage,
+  LocalSkillScan,
   TurnNotificationRequest,
   UninstallRequest,
   UninstallResult,
@@ -33,6 +35,9 @@ ipcRenderer.on("agw:extension-port", (event, data: Omit<ExtensionPortMessage, "t
 const bridge: AgwDesktopBridge = {
   getRuntimeState: () =>
     ipcRenderer.invoke("agw:get-runtime-state") as Promise<DesktopRuntimeState>,
+  scanLocalSkills: () => ipcRenderer.invoke("agw:scan-local-skills") as Promise<LocalSkillScan>,
+  packLocalSkill: (directoryName: string) =>
+    ipcRenderer.invoke("agw:pack-local-skill", directoryName) as Promise<LocalSkillPackage>,
   checkForUpdates: () =>
     ipcRenderer.invoke("agw:check-for-updates") as Promise<DesktopUpdateCheckResult>,
   saveSettings: (settings: DesktopSettingsUpdate) =>

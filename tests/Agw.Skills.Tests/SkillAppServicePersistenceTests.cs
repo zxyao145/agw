@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Security.Claims;
 using Agw.Agents.Definitions.Facades;
 using Agw.Auth.Application;
@@ -20,27 +19,32 @@ using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts;
 using Agw.Skills.Domain.Services;
 using Agw.Skills.Infrastructure;
+using Agw.Skills.Infrastructure.Content;
 using Agw.Skills.Infrastructure.Remote;
 using Agw.Testing;
 using Medallion.Threading.Postgres;
 using Microsoft.Agents.AI;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using static Agw.Skills.Tests.SkillTestArchives;
 
 namespace Agw.Skills.Tests;
 
 public class SkillAppServicePersistenceTests
 {
+    private const string ValidDigest = "sha256:fd5db01f805c3fa8eaec5b16afe3d3bc9c02ebf1b9e7081ade4674d50ba3384e";
+    private const string UpdatedDigest = "sha256:0c4e8a2f6b1d3e5f7a9c0b2d4f6e8a1c3e5b7d9f0a2c4e6b8d1f3a5c7e9b0d2f";
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ResolveDirectoryAsync_LegacyLayout_PreservesResourcesAndLoadsSkill(bool versioned)
+    public async Task AcquireDirectoryAsync_LegacyLayout_PreservesResourcesAndLoadsSkill(bool versioned)
     {
         var token = TestContext.Current.CancellationToken;
         using var userScope = UserInfoUtil.Push(
@@ -82,14 +86,24 @@ public class SkillAppServicePersistenceTests
             using var services = CreateProductionServiceProvider();
             var service = CreateProductionSkillService(context, paths, new UserInfoService(), services);
             ILocalSkillContentResolver resolver = new LocalSkillContentFacade(service);
-            var resolved = Assert.IsType<string>(await resolver.ResolveDirectoryAsync(skillId, token));
+            var lease = Assert.IsAssignableFrom<ILocalSkillDirectoryLease>(
+                await resolver.AcquireDirectoryAsync(skillId, token)
+            );
+            var resolved = lease.Path;
 
             Assert.Equal(
                 "Reference content",
                 await File.ReadAllTextAsync(Path.Combine(resolved, "reference.md"), token)
             );
             Assert.False(Directory.Exists(directory));
-            Assert.Equal(resolved, Assert.IsType<string>(await resolver.ResolveDirectoryAsync(skillId, token)));
+            await using (
+                var repeatedLease = Assert.IsAssignableFrom<ILocalSkillDirectoryLease>(
+                    await resolver.AcquireDirectoryAsync(skillId, token)
+                )
+            )
+            {
+                Assert.Equal(resolved, repeatedLease.Path);
+            }
             using var source = new AgentFileSkillsSource(resolved);
             using var client = new OpenAI.Chat.ChatClient("test-model", "test-key").AsIChatClient();
             var skills = await source.GetSkillsAsync(
@@ -100,6 +114,7 @@ public class SkillAppServicePersistenceTests
             context.ChangeTracker.Clear();
             Assert.Equal(resolved, Path.Combine(root, (await context.Skills.SingleAsync(token)).ContentPath));
             context.ChangeTracker.Clear();
+            await lease.DisposeAsync();
             Assert.True(await service.DeleteAsync(skillId, token));
             Assert.Empty(Directory.EnumerateDirectories(paths.SkillsDirectory));
         }
@@ -110,7 +125,7 @@ public class SkillAppServicePersistenceTests
     }
 
     [Fact]
-    public async Task ResolveDirectoryAsync_LongLivedContextAfterLegacyMigrationAndArchiveUpdate_UsesCurrentPath()
+    public async Task AcquireDirectoryAsync_LongLivedContextAfterLegacyMigrationAndArchiveUpdate_UsesCurrentPath()
     {
         var token = TestContext.Current.CancellationToken;
         using var userScope = UserInfoUtil.Push(
@@ -161,9 +176,13 @@ public class SkillAppServicePersistenceTests
             var resolverService = CreateProductionSkillService(resolverContext, paths, user, services);
             var updateService = CreateProductionSkillService(updateContext, paths, user, services);
             ILocalSkillContentResolver resolver = new LocalSkillContentFacade(resolverService);
-            var migratedPath = Assert.IsType<string>(await resolver.ResolveDirectoryAsync(skillId, token));
+            var migrationLease = Assert.IsAssignableFrom<ILocalSkillDirectoryLease>(
+                await resolver.AcquireDirectoryAsync(skillId, token)
+            );
+            var migratedPath = migrationLease.Path;
             Assert.NotEqual(oldDirectory, migratedPath);
             Assert.False(Directory.Exists(oldDirectory));
+            await migrationLease.DisposeAsync();
 
             var updated = Assert.IsType<SkillDetails>(
                 await updateService.UpdateAsync(
@@ -177,7 +196,10 @@ public class SkillAppServicePersistenceTests
             );
             Assert.False(Directory.Exists(migratedPath));
 
-            var resolvedPath = Assert.IsType<string>(await resolver.ResolveDirectoryAsync(skillId, token));
+            await using var currentLease = Assert.IsAssignableFrom<ILocalSkillDirectoryLease>(
+                await resolver.AcquireDirectoryAsync(skillId, token)
+            );
+            var resolvedPath = currentLease.Path;
 
             Assert.Equal(Path.Combine(paths.Root, updated.Skill.ContentPath), resolvedPath);
             Assert.True(Directory.Exists(resolvedPath));
@@ -193,7 +215,7 @@ public class SkillAppServicePersistenceTests
     }
 
     [Fact]
-    public async Task ResolveDirectoryAsync_LegacyMigrationDatabaseFailure_PreservesOriginalDirectoryAndMetadata()
+    public async Task AcquireDirectoryAsync_LegacyMigrationDatabaseFailure_PreservesOriginalDirectoryAndMetadata()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var userScope = UserInfoUtil.Push(
@@ -248,7 +270,7 @@ public class SkillAppServicePersistenceTests
             ILocalSkillContentResolver resolver = new LocalSkillContentFacade(service);
 
             await Assert.ThrowsAsync<DbUpdateException>(() =>
-                resolver.ResolveDirectoryAsync(skillId, cancellationToken)
+                resolver.AcquireDirectoryAsync(skillId, cancellationToken)
             );
 
             context.ChangeTracker.Clear();
@@ -275,7 +297,7 @@ public class SkillAppServicePersistenceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ResolveDirectoryAsync_MissingContentDirectory_ReturnsNull(bool legacyLayout)
+    public async Task AcquireDirectoryAsync_MissingContentDirectory_ReturnsNull(bool legacyLayout)
     {
         var token = TestContext.Current.CancellationToken;
         using var userScope = UserInfoUtil.Push(
@@ -314,7 +336,7 @@ public class SkillAppServicePersistenceTests
             var service = CreateProductionSkillService(context, paths, user, services);
             ILocalSkillContentResolver resolver = new LocalSkillContentFacade(service);
 
-            Assert.Null(await resolver.ResolveDirectoryAsync(skillId, token));
+            Assert.Null(await resolver.AcquireDirectoryAsync(skillId, token));
         }
         finally
         {
@@ -475,7 +497,12 @@ public class SkillAppServicePersistenceTests
                 new RefreshLock(),
                 InMemoryApplicationLock.Shared,
                 clock,
-                currentUser
+                currentUser,
+                new SkillContentRetirement(
+                    paths,
+                    InMemoryApplicationLock.Shared,
+                    NullLogger<SkillContentRetirement>.Instance
+                )
             );
 
             // Act
@@ -489,7 +516,7 @@ public class SkillAppServicePersistenceTests
                 kind == SkillKind.Local ? CreateArchive() : null,
                 "tester",
                 kind == SkillKind.Remote ? "https://example.test/skill" : null,
-                cancellationToken
+                cancellationToken: cancellationToken
             );
 
             // Assert
@@ -498,7 +525,7 @@ public class SkillAppServicePersistenceTests
             Assert.NotEqual(Guid.Empty, id);
             if (kind == SkillKind.Local)
             {
-                Assert.StartsWith($"skills/{id:N}-", expectedPath);
+                Assert.StartsWith("skills/test-skill-", expectedPath);
             }
             Assert.Equal("tester", result.Skill.CreateBy);
             Assert.Equal(createdAt, result.Skill.CreateTime);
@@ -740,7 +767,7 @@ public class SkillAppServicePersistenceTests
             );
 
             var publishedContentPath = Assert.IsType<string>(observer.ContentPathAtSave);
-            Assert.StartsWith($"skills/{skill.Id:N}-", publishedContentPath);
+            Assert.StartsWith("skills/test-skill-", publishedContentPath);
             Assert.Contains("Created skill instructions", Assert.IsType<string>(observer.ContentAtSave));
             Assert.False(Directory.Exists(Path.Combine(paths.Root, publishedContentPath)));
             Assert.Equal(string.Empty, skill.ContentPath);
@@ -808,7 +835,7 @@ public class SkillAppServicePersistenceTests
             context.ChangeTracker.Clear();
             var persistedSkill = await context.Skills.SingleAsync(cancellationToken);
             var publishedContentPath = Assert.IsType<string>(persistedSkill.ContentPath);
-            Assert.StartsWith($"skills/{skill.Id:N}-", publishedContentPath);
+            Assert.StartsWith("skills/test-skill-", publishedContentPath);
             Assert.Equal(publishedContentPath, observer.ContentPathAtSave);
             Assert.True(File.Exists(Path.Combine(paths.Root, publishedContentPath, "SKILL.md")));
             Assert.Contains(
@@ -1165,7 +1192,7 @@ public class SkillAppServicePersistenceTests
     }
 
     [Fact]
-    public async Task ResolveDirectoryAsync_ConcurrentDelete_ReturnsNullAfterDeleteGetsMutationLock()
+    public async Task AcquireDirectoryAsync_ConcurrentDelete_ReturnsNullAfterDeleteGetsMutationLock()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var userScope = UserInfoUtil.Push(
@@ -1219,7 +1246,7 @@ public class SkillAppServicePersistenceTests
             var resolveService = CreateProductionSkillService(resolveContext, paths, user, services);
             ILocalSkillContentResolver resolver = new LocalSkillContentFacade(resolveService);
             Task<bool> deleteTask;
-            Task<string?> resolveTask;
+            Task<ILocalSkillDirectoryLease?> resolveTask;
             bool deleteWasBlocked;
             bool resolveWasBlocked;
 
@@ -1232,7 +1259,7 @@ public class SkillAppServicePersistenceTests
             {
                 deleteTask = deleteService.DeleteAsync(skillId, cancellationToken);
                 await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
-                resolveTask = resolver.ResolveDirectoryAsync(skillId, cancellationToken);
+                resolveTask = resolver.AcquireDirectoryAsync(skillId, cancellationToken);
                 await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
                 deleteWasBlocked = !deleteTask.IsCompleted;
                 resolveWasBlocked = !resolveTask.IsCompleted;
@@ -1318,17 +1345,21 @@ public class SkillAppServicePersistenceTests
     [Fact]
     public async Task CreateAsync_BuiltInSkill_RejectsBeforePersistence()
     {
+        var root = Path.Combine(AppContext.BaseDirectory, ".skill-test-data", Guid.CreateVersion7().ToString("N"));
+        var paths = AgwDataPaths.Resolve(root, root);
+        var applicationLock = new InMemoryApplicationLock();
         var service = new SkillAppService(
             null!,
             null!,
             null!,
-            null!,
+            paths,
             NullLogger<SkillAppService>.Instance,
             null!,
             null!,
-            InMemoryApplicationLock.Shared,
+            applicationLock,
             TimeProvider.System,
-            new TestCurrentUser("tester")
+            new TestCurrentUser("tester"),
+            new SkillContentRetirement(paths, applicationLock, NullLogger<SkillContentRetirement>.Instance)
         );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
@@ -1343,46 +1374,541 @@ public class SkillAppServicePersistenceTests
         Assert.Equal(ErrorCodes.SkillKindInvalid.Code, exception.Code);
     }
 
-    private static IFormFile CreateArchive()
+    [Fact]
+    public async Task CreateAsync_LocalWithDigest_PersistsDigest()
     {
-        var stream = new MemoryStream();
-        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
-        using (var writer = new StreamWriter(archive.CreateEntry("test-skill/SKILL.md").Open()))
-        {
-            writer.Write("---\nname: test-skill\ndescription: description\n---\nInstructions");
-        }
-        stream.Position = 0;
-        return new FormFile(stream, 0, stream.Length, "archive", "skill.zip");
+        using var userScope = PushSkillExtraTestUser();
+        var user = new UserInfoService();
+        await using var fixture = await CreateSkillServiceFixtureAsync(user, TestContext.Current.CancellationToken);
+
+        var created = await CreateLocalSkillAsync(fixture, ValidDigest);
+        var persisted = await fixture.ReloadSkillAsync(created.Skill.Id);
+
+        Assert.Equal(ValidDigest, created.Skill.Extra.SourceDigest);
+        Assert.Equal(ValidDigest, persisted.Extra.SourceDigest);
     }
 
-    private static IFormFile CreateArchive(
-        string instructions,
-        string nameKey = "name",
-        string nameValue = "test-skill",
-        string? additionalFrontmatter = null
-    )
+    [Fact]
+    public async Task CreateAsync_LocalWithoutDigest_LeavesDigestNull()
     {
-        var stream = new MemoryStream();
-        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
-        using (var writer = new StreamWriter(archive.CreateEntry("test-skill/SKILL.md").Open()))
+        using var userScope = PushSkillExtraTestUser();
+        var user = new UserInfoService();
+        await using var fixture = await CreateSkillServiceFixtureAsync(user, TestContext.Current.CancellationToken);
+
+        var created = await CreateLocalSkillAsync(fixture);
+        var persisted = await fixture.ReloadSkillAsync(created.Skill.Id);
+
+        Assert.Null(created.Skill.Extra.SourceDigest);
+        Assert.Null(persisted.Extra.SourceDigest);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ArchiveWithDigest_ReplacesDigest()
+    {
+        using var userScope = PushSkillExtraTestUser();
+        var user = new UserInfoService();
+        await using var fixture = await CreateSkillServiceFixtureAsync(user, TestContext.Current.CancellationToken);
+        var created = await CreateLocalSkillAsync(fixture, ValidDigest);
+
+        await fixture.Service.UpdateAsync(
+            created.Skill.Id,
+            "test-skill",
+            "updated description",
+            CreateArchive("Updated instructions"),
+            fixture.User.RequiredUserId,
+            sourceDigest: UpdatedDigest,
+            cancellationToken: fixture.CancellationToken
+        );
+
+        var persisted = await fixture.ReloadSkillAsync(created.Skill.Id);
+        Assert.Equal(UpdatedDigest, persisted.Extra.SourceDigest);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ArchiveWithoutDigest_ClearsDigest()
+    {
+        using var userScope = PushSkillExtraTestUser();
+        var user = new UserInfoService();
+        await using var fixture = await CreateSkillServiceFixtureAsync(user, TestContext.Current.CancellationToken);
+        var created = await CreateLocalSkillAsync(fixture, ValidDigest);
+
+        await fixture.Service.UpdateAsync(
+            created.Skill.Id,
+            "test-skill",
+            "updated description",
+            CreateArchive("Updated instructions"),
+            fixture.User.RequiredUserId,
+            cancellationToken: fixture.CancellationToken
+        );
+
+        var persisted = await fixture.ReloadSkillAsync(created.Skill.Id);
+        Assert.Null(persisted.Extra.SourceDigest);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_DescriptionOnly_KeepsDigest()
+    {
+        using var userScope = PushSkillExtraTestUser();
+        var user = new UserInfoService();
+        await using var fixture = await CreateSkillServiceFixtureAsync(user, TestContext.Current.CancellationToken);
+        var created = await CreateLocalSkillAsync(fixture, ValidDigest);
+
+        await fixture.Service.UpdateAsync(
+            created.Skill.Id,
+            "test-skill",
+            "updated description",
+            null,
+            fixture.User.RequiredUserId,
+            cancellationToken: fixture.CancellationToken
+        );
+
+        var persisted = await fixture.ReloadSkillAsync(created.Skill.Id);
+        Assert.Equal(ValidDigest, persisted.Extra.SourceDigest);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_SaveFails_RestoresExtra()
+    {
+        using var userScope = PushSkillExtraTestUser();
+        var user = new UserInfoService();
+        await using var fixture = await CreateSkillServiceFixtureAsync(user, TestContext.Current.CancellationToken);
+        var created = await CreateLocalSkillAsync(fixture, ValidDigest);
+        var trackedSkill = Assert.Single(fixture.Context.Skills.Local, skill => skill.Id == created.Skill.Id);
+        await fixture.Context.Database.ExecuteSqlRawAsync(
+            "CREATE TRIGGER reject_skill_description_update BEFORE UPDATE OF description ON skill BEGIN SELECT RAISE(ABORT, 'blocked'); END;",
+            fixture.CancellationToken
+        );
+
+        await Assert.ThrowsAsync<DbUpdateException>(() =>
+            fixture.Service.UpdateAsync(
+                created.Skill.Id,
+                "test-skill",
+                "updated description",
+                CreateArchive("Updated instructions"),
+                fixture.User.RequiredUserId,
+                sourceDigest: UpdatedDigest,
+                cancellationToken: fixture.CancellationToken
+            )
+        );
+
+        Assert.Equal(ValidDigest, trackedSkill.Extra.SourceDigest);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_DirectMode_ReplacesFilesInTheSameNamedDirectory()
+    {
+        using var userScope = PushSkillExtraTestUser();
+        await using var fixture = await CreateSkillServiceFixtureAsync(
+            new UserInfoService(),
+            TestContext.Current.CancellationToken,
+            rollingUpdate: false
+        );
+        var created = await CreateLocalSkillAsync(fixture);
+        var contentPath = created.Skill.ContentPath;
+        var directory = Path.Combine(fixture.Paths.Root, contentPath);
+        var oldResource = Path.Combine(directory, "old-resource.txt");
+        await File.WriteAllTextAsync(oldResource, "old resource", fixture.CancellationToken);
+        await using var lease = Assert.IsAssignableFrom<ILocalSkillDirectoryLease>(
+            await fixture.Service.AcquireLocalDirectoryAsync(created.Skill.Id, fixture.CancellationToken)
+        );
+
+        var updated = await fixture.Service.UpdateAsync(
+            created.Skill.Id,
+            "test-skill",
+            "description",
+            CreateArchive("Updated instructions"),
+            fixture.User.RequiredUserId,
+            cancellationToken: fixture.CancellationToken
+        );
+
+        Assert.StartsWith("skills/_user-", contentPath);
+        Assert.EndsWith("/test-skill", contentPath);
+        Assert.Equal(contentPath, updated!.Skill.ContentPath);
+        Assert.False(File.Exists(oldResource));
+        Assert.Contains(
+            "Updated instructions",
+            await File.ReadAllTextAsync(Path.Combine(lease.Path, "SKILL.md"), fixture.CancellationToken)
+        );
+        Assert.Equal(directory, Assert.Single(Directory.GetDirectories(Path.GetDirectoryName(directory)!)));
+    }
+
+    [Fact]
+    public async Task CreateAsync_DirectModeSameNameAcrossUsers_IsolatesDirectories()
+    {
+        using var userScope = PushSkillExtraTestUser();
+        await using var fixture = await CreateSkillServiceFixtureAsync(
+            new UserInfoService(),
+            TestContext.Current.CancellationToken,
+            rollingUpdate: false
+        );
+        var first = await CreateLocalSkillAsync(fixture);
+        fixture.Context.ChangeTracker.Clear();
+        using var secondUserScope = UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "other-skill-user")], "Test"))
+        );
+        var second = await CreateLocalSkillAsync(fixture);
+
+        Assert.StartsWith("skills/_user-", first.Skill.ContentPath);
+        Assert.StartsWith("skills/_user-", second.Skill.ContentPath);
+        Assert.NotEqual(first.Skill.ContentPath, second.Skill.ContentPath);
+        Assert.True(File.Exists(Path.Combine(fixture.Paths.Root, first.Skill.ContentPath, "SKILL.md")));
+        Assert.True(File.Exists(Path.Combine(fixture.Paths.Root, second.Skill.ContentPath, "SKILL.md")));
+        Assert.Null(await fixture.Service.AcquireLocalDirectoryAsync(first.Skill.Id, fixture.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateAsync_DirectModeDeletedNameWithLease_UsesPathAfterRetirement(bool deleteThrowsAfterCommit)
+    {
+        using var userScope = PushSkillExtraTestUser();
+        var postSaveFailure = new ThrowAfterSaveInterceptor();
+        await using var fixture = await CreateSkillServiceFixtureAsync(
+            new UserInfoService(),
+            TestContext.Current.CancellationToken,
+            rollingUpdate: false,
+            interceptor: postSaveFailure
+        );
+        var previous = await CreateLocalSkillAsync(fixture);
+        var previousPath = previous.Skill.ContentPath;
+        await using var lease = Assert.IsAssignableFrom<ILocalSkillDirectoryLease>(
+            await fixture.Service.AcquireLocalDirectoryAsync(previous.Skill.Id, fixture.CancellationToken)
+        );
+        fixture.Context.ChangeTracker.Clear();
+        if (deleteThrowsAfterCommit)
         {
-            var additionalFrontmatterLines = additionalFrontmatter is null
-                ? string.Empty
-                : $"{additionalFrontmatter}\n";
-            writer.Write(
-                $"---\n{nameKey}: {nameValue}\n{additionalFrontmatterLines}description: description\n---\n{instructions}"
+            postSaveFailure.ThrowOnNextSave = true;
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                fixture.Service.DeleteAsync(previous.Skill.Id, fixture.CancellationToken)
+            );
+            Assert.Null(await fixture.Service.GetAsync(previous.Skill.Id));
+            fixture.Context.ChangeTracker.Clear();
+        }
+        else
+        {
+            Assert.True(await fixture.Service.DeleteAsync(previous.Skill.Id, fixture.CancellationToken));
+        }
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() => CreateLocalSkillAsync(fixture));
+        Assert.Equal(ErrorCodes.SkillAlreadyExists.Code, exception.Code);
+        Assert.True(Directory.Exists(lease.Path));
+
+        await lease.DisposeAsync();
+        var recreated = await CreateLocalSkillAsync(fixture);
+        Assert.Equal(previousPath, recreated.Skill.ContentPath);
+        Assert.NotEqual(previous.Skill.Id, recreated.Skill.Id);
+        Assert.True(File.Exists(Path.Combine(lease.Path, "SKILL.md")));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UpdateAsync_RollingModeChanged_SwitchesLayoutAndRetiresPreviousDirectory(bool initiallyRolling)
+    {
+        using var userScope = PushSkillExtraTestUser();
+        await using var fixture = await CreateSkillServiceFixtureAsync(
+            new UserInfoService(),
+            TestContext.Current.CancellationToken,
+            rollingUpdate: initiallyRolling
+        );
+        var created = await CreateLocalSkillAsync(fixture);
+        using var alternateServices = CreateProductionServiceProvider(!initiallyRolling);
+        var service = CreateProductionSkillService(fixture.Context, fixture.Paths, fixture.User, alternateServices);
+        await using var previousLease = Assert.IsAssignableFrom<ILocalSkillDirectoryLease>(
+            await service.AcquireLocalDirectoryAsync(created.Skill.Id, fixture.CancellationToken)
+        );
+        Assert.Equal(Path.Combine(fixture.Paths.Root, created.Skill.ContentPath), previousLease.Path);
+
+        var updated = await service.UpdateAsync(
+            created.Skill.Id,
+            "test-skill",
+            "description",
+            CreateArchive("Updated instructions"),
+            fixture.User.RequiredUserId,
+            cancellationToken: fixture.CancellationToken
+        );
+
+        var newPath = updated!.Skill.ContentPath;
+        Assert.NotEqual(created.Skill.ContentPath, newPath);
+        Assert.StartsWith(initiallyRolling ? "skills/_user-" : "skills/test-skill-", newPath);
+        Assert.EndsWith("/test-skill", newPath);
+        var versionedPath = initiallyRolling ? created.Skill.ContentPath : newPath;
+        var version = versionedPath["skills/test-skill-".Length..^"/test-skill".Length];
+        Assert.Equal(7, Guid.ParseExact(version, "N").Version);
+        Assert.True(Directory.Exists(previousLease.Path));
+        Assert.Contains(
+            "Updated instructions",
+            await File.ReadAllTextAsync(
+                Path.Combine(fixture.Paths.Root, newPath, "SKILL.md"),
+                fixture.CancellationToken
+            )
+        );
+
+        await previousLease.DisposeAsync();
+        Assert.False(Directory.Exists(previousLease.Path));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UpdateAsync_DirectModeSaveThrows_KeepsFilesForPersistedRevision(bool committed)
+    {
+        using var userScope = PushSkillExtraTestUser();
+        var postSaveFailure = new ThrowAfterSaveInterceptor();
+        await using var fixture = await CreateSkillServiceFixtureAsync(
+            new UserInfoService(),
+            TestContext.Current.CancellationToken,
+            rollingUpdate: false,
+            interceptor: postSaveFailure
+        );
+        var created = await CreateLocalSkillAsync(fixture);
+        var contentPath = created.Skill.ContentPath;
+        var directory = Path.Combine(fixture.Paths.Root, contentPath);
+        var markdown = Path.Combine(directory, "SKILL.md");
+        var originalContent = await File.ReadAllTextAsync(markdown, fixture.CancellationToken);
+        if (committed)
+        {
+            postSaveFailure.ThrowOnNextSave = true;
+        }
+        else
+        {
+            await fixture.Context.Database.ExecuteSqlRawAsync(
+                "CREATE TRIGGER reject_skill_update BEFORE UPDATE ON skill BEGIN SELECT RAISE(ABORT, 'blocked'); END;",
+                fixture.CancellationToken
             );
         }
-        stream.Position = 0;
-        return new FormFile(stream, 0, stream.Length, "archive", "skill.zip");
+
+        var exception = await Record.ExceptionAsync(() =>
+            fixture.Service.UpdateAsync(
+                created.Skill.Id,
+                "test-skill",
+                "description",
+                CreateArchive("Updated instructions"),
+                fixture.User.RequiredUserId,
+                cancellationToken: fixture.CancellationToken
+            )
+        );
+
+        var persisted = await fixture.ReloadSkillAsync(created.Skill.Id);
+        var content = await File.ReadAllTextAsync(markdown, fixture.CancellationToken);
+        if (committed)
+        {
+            Assert.IsType<InvalidOperationException>(exception);
+            Assert.Contains("Updated instructions", content);
+        }
+        else
+        {
+            Assert.IsType<DbUpdateException>(exception);
+            Assert.Equal(originalContent, content);
+        }
+        Assert.Equal(contentPath, persisted.ContentPath);
+        Assert.Equal(directory, Assert.Single(Directory.GetDirectories(Path.GetDirectoryName(directory)!)));
     }
 
-    private static ServiceProvider CreateProductionServiceProvider()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task AcquireLocalDirectoryAsync_InterruptedDirectUpdate_RecoversCommittedFiles(
+        bool committed,
+        bool replacementPublished
+    )
+    {
+        using var userScope = PushSkillExtraTestUser();
+        await using var fixture = await CreateSkillServiceFixtureAsync(
+            new UserInfoService(),
+            TestContext.Current.CancellationToken,
+            rollingUpdate: false
+        );
+        var created = await CreateLocalSkillAsync(fixture);
+        var directory = Path.Combine(fixture.Paths.Root, created.Skill.ContentPath);
+        var markdown = Path.Combine(directory, "SKILL.md");
+        var original = await File.ReadAllTextAsync(markdown, fixture.CancellationToken);
+        var revision = Guid.CreateVersion7();
+        var backup = $"{directory}.backup-{revision:N}";
+        Directory.Move(directory, backup);
+        var replacement = original.Replace("Instructions", "Updated instructions", StringComparison.Ordinal);
+        if (replacementPublished)
+        {
+            Directory.CreateDirectory(directory);
+            await File.WriteAllTextAsync(markdown, replacement, fixture.CancellationToken);
+        }
+        if (committed)
+        {
+            var tracked = Assert.Single(fixture.Context.Skills.Local, skill => skill.Id == created.Skill.Id);
+            tracked.Extra = tracked.Extra with { ContentRevision = revision };
+            await fixture.Context.SaveChangesAsync(fixture.CancellationToken);
+        }
+
+        await using var lease = Assert.IsAssignableFrom<ILocalSkillDirectoryLease>(
+            await fixture.Service.AcquireLocalDirectoryAsync(created.Skill.Id, fixture.CancellationToken)
+        );
+
+        Assert.Equal(directory, lease.Path);
+        Assert.Equal(
+            committed ? replacement : original,
+            await File.ReadAllTextAsync(markdown, fixture.CancellationToken)
+        );
+        Assert.False(Directory.Exists(backup));
+    }
+
+    [Fact]
+    public async Task CreateAsync_InterruptedDirectCreate_ReusesUncommittedDirectory()
+    {
+        using var userScope = PushSkillExtraTestUser();
+        await using var fixture = await CreateSkillServiceFixtureAsync(
+            new UserInfoService(),
+            TestContext.Current.CancellationToken,
+            rollingUpdate: false
+        );
+        var previous = await CreateLocalSkillAsync(fixture);
+        var directory = Path.Combine(fixture.Paths.Root, previous.Skill.ContentPath);
+        fixture.Context.ChangeTracker.Clear();
+        Assert.True(await fixture.Service.DeleteAsync(previous.Skill.Id, fixture.CancellationToken));
+
+        var marker = $"{directory}.backup-{Guid.CreateVersion7():N}";
+        await File.WriteAllTextAsync(marker, string.Empty, fixture.CancellationToken);
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory, "uncommitted-resource"), "", fixture.CancellationToken);
+
+        var created = await CreateLocalSkillAsync(fixture);
+
+        Assert.Equal(previous.Skill.ContentPath, created.Skill.ContentPath);
+        Assert.True(File.Exists(Path.Combine(directory, "SKILL.md")));
+        Assert.False(File.Exists(Path.Combine(directory, "uncommitted-resource")));
+        Assert.False(File.Exists(marker));
+    }
+
+    private static async Task<SkillDetails> CreateLocalSkillAsync(
+        SkillServiceFixture fixture,
+        string? sourceDigest = null
+    ) =>
+        await fixture.Service.CreateAsync(
+            new Skill
+            {
+                Name = "test-skill",
+                Description = "description",
+                Kind = SkillKind.Local,
+            },
+            CreateArchive("Instructions"),
+            fixture.User.RequiredUserId,
+            sourceDigest: sourceDigest,
+            cancellationToken: fixture.CancellationToken
+        );
+
+    private static IDisposable PushSkillExtraTestUser() =>
+        UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "skill-extra-test")], "Test"))
+        );
+
+    private static async Task<SkillServiceFixture> CreateSkillServiceFixtureAsync(
+        UserInfoService user,
+        CancellationToken cancellationToken,
+        bool? rollingUpdate = null,
+        SaveChangesInterceptor? interceptor = null
+    )
+    {
+        var root = Path.Combine(AppContext.BaseDirectory, ".skill-test-data", Guid.CreateVersion7().ToString("N"));
+        var paths = AgwDataPaths.Resolve(root, root);
+        paths.EnsureCreated();
+        var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var auditUser = new AuditUserIdProvider();
+        var optionsBuilder = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityCreatorInterceptor(auditUser, TimeProvider.System),
+                new EntityModifierInterceptor(auditUser, TimeProvider.System)
+            );
+        if (interceptor != null)
+        {
+            optionsBuilder.AddInterceptors(interceptor);
+        }
+        var options = optionsBuilder.Options;
+        var context = new AgwDbContext(options);
+        await context.Database.EnsureCreatedAsync(cancellationToken);
+        var services = CreateProductionServiceProvider(rollingUpdate);
+        return new SkillServiceFixture(
+            root,
+            user,
+            paths,
+            connection,
+            options,
+            context,
+            services,
+            CreateProductionSkillService(context, paths, user, services),
+            cancellationToken
+        );
+    }
+
+    private sealed class SkillServiceFixture : IAsyncDisposable
+    {
+        private readonly string _root;
+        private readonly SqliteConnection _connection;
+        private readonly DbContextOptions<AgwDbContext> _options;
+        private readonly ServiceProvider _services;
+
+        public SkillServiceFixture(
+            string root,
+            UserInfoService user,
+            AgwDataPaths paths,
+            SqliteConnection connection,
+            DbContextOptions<AgwDbContext> options,
+            AgwDbContext context,
+            ServiceProvider services,
+            SkillAppService service,
+            CancellationToken cancellationToken
+        )
+        {
+            _root = root;
+            User = user;
+            Paths = paths;
+            _connection = connection;
+            _options = options;
+            Context = context;
+            _services = services;
+            Service = service;
+            CancellationToken = cancellationToken;
+        }
+
+        public UserInfoService User { get; }
+
+        public AgwDataPaths Paths { get; }
+
+        public AgwDbContext Context { get; }
+
+        public SkillAppService Service { get; }
+
+        public CancellationToken CancellationToken { get; }
+
+        public async Task<Skill> ReloadSkillAsync(Guid id)
+        {
+            await using var context = new AgwDbContext(_options);
+            return await context.Skills.SingleAsync(skill => skill.Id == id, CancellationToken);
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await Context.DisposeAsync();
+            _services.Dispose();
+            await _connection.DisposeAsync();
+            Directory.Delete(_root, recursive: true);
+        }
+    }
+
+    private static ServiceProvider CreateProductionServiceProvider(bool? rollingUpdate = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddOptions();
         services.AddHttpClient();
+        if (rollingUpdate.HasValue)
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection([new("Skill:RollingUpdate", rollingUpdate.Value.ToString())])
+                .Build();
+            services.AddSkills(configuration);
+        }
         return services.BuildServiceProvider();
     }
 
@@ -1409,7 +1935,13 @@ public class SkillAppServicePersistenceTests
             remoteSkillRefreshLock,
             InMemoryApplicationLock.Shared,
             TimeProvider.System,
-            user
+            user,
+            new SkillContentRetirement(
+                paths,
+                InMemoryApplicationLock.Shared,
+                NullLogger<SkillContentRetirement>.Instance
+            ),
+            options: serviceProvider.GetRequiredService<IOptions<SkillOptions>>()
         );
     }
 
@@ -1487,7 +2019,7 @@ public class SkillAppServicePersistenceTests
             CancellationToken cancellationToken = default
         )
         {
-            if (ThrowOnNextSave)
+            if (ThrowOnNextSave && result > 0)
             {
                 ThrowOnNextSave = false;
                 throw new InvalidOperationException("Post-save callback failure");

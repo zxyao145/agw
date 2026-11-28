@@ -10,6 +10,7 @@ public sealed class SkillBehavior
     private const int MaxNameLength = 64;
     private const int MaxDescriptionLength = 1024;
     private static readonly Regex SkillNamePattern = new("^[a-z0-9]+(?:-[a-z0-9]+)*$", RegexOptions.Compiled);
+    private static readonly Regex SourceDigestPattern = new("^sha256:[0-9a-f]{64}\\z", RegexOptions.Compiled);
 
     private readonly Skill _skill;
 
@@ -36,8 +37,10 @@ public sealed class SkillBehavior
     /// <para>本地技能创建时必须上传归档包且不能带远程地址；远程技能不接受归档包；其他 Kind 不能通过 API 创建。</para>
     /// <para>A local skill needs an archive and no remote URL; a remote skill takes no archive; other kinds cannot be created through the API.</para>
     /// </summary>
-    public void EnsureCreatable(bool archiveSupplied)
+    public void EnsureCreatable(bool archiveSupplied, string? sourceDigest)
     {
+        EnsureSourceDigest(archiveSupplied, sourceDigest);
+
         switch (_skill.Kind)
         {
             case SkillKind.Local:
@@ -60,8 +63,10 @@ public sealed class SkillBehavior
     /// <para>本地技能不能带远程地址，改名时必须同时上传新的归档包，SKILL.md 才能保持一致；远程技能不接受归档包。</para>
     /// <para>A local skill takes no remote URL and needs a new archive when renamed so SKILL.md stays consistent; a remote skill takes no archive.</para>
     /// </summary>
-    public void EnsureUpdatable(string name, bool archiveSupplied, string? remoteUrl)
+    public void EnsureUpdatable(string name, bool archiveSupplied, string? remoteUrl, string? sourceDigest)
     {
+        EnsureSourceDigest(archiveSupplied, sourceDigest);
+
         switch (_skill.Kind)
         {
             case SkillKind.Local:
@@ -94,6 +99,15 @@ public sealed class SkillBehavior
         Define(name, description);
         _skill.RemoteUrl = remoteUrl;
         _skill.ContentPath = string.Empty;
+    }
+
+    public void DefineLocalContent(string? sourceDigest, Guid? contentRevision = null)
+    {
+        _skill.Extra = _skill.Extra with
+        {
+            SourceDigest = string.IsNullOrWhiteSpace(sourceDigest) ? null : sourceDigest,
+            ContentRevision = contentRevision,
+        };
     }
 
     public void EnsureRemote()
@@ -129,6 +143,24 @@ public sealed class SkillBehavior
         if (archiveSupplied)
         {
             throw new AgwException(ErrorCodes.RemoteSkillArchiveNotAllowed);
+        }
+    }
+
+    private static void EnsureSourceDigest(bool archiveSupplied, string? sourceDigest)
+    {
+        if (string.IsNullOrWhiteSpace(sourceDigest))
+        {
+            return;
+        }
+
+        if (!archiveSupplied)
+        {
+            throw new AgwException(ErrorCodes.SkillSourceDigestRequiresArchive);
+        }
+
+        if (!SourceDigestPattern.IsMatch(sourceDigest))
+        {
+            throw new AgwException(ErrorCodes.SkillSourceDigestInvalid);
         }
     }
 

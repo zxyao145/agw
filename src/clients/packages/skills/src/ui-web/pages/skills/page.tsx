@@ -34,6 +34,8 @@ import { formatLocalDateTime } from "@agw/components";
 import { DEFAULT_PAGE_SIZE, getClampedPageIndex, type PagedResult } from "@agw/components";
 import { ButtonGroup } from "@agw/components";
 
+import type { LocalSkillsSource } from "../../../local-skills";
+import { LocalSkillsDialog } from "./local-skills-dialog";
 import { readSkillArchiveDescription } from "./skill-archive";
 
 type SkillDto = {
@@ -43,6 +45,7 @@ type SkillDto = {
   kind: SkillKind;
   contentPath: string;
   remoteUrl?: string | null;
+  sourceDigest?: string | null;
   isBuiltIn: boolean;
   agentIds: string[];
   createTime?: string | null;
@@ -200,13 +203,14 @@ function buildSkillFormData(
   return data;
 }
 
-export default function SkillsPage() {
+export default function SkillsPage({ localSkills }: { localSkills?: LocalSkillsSource }) {
   const queryClient = useQueryClient();
   const [pageIndex, setPageIndex] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [localSkillsOpen, setLocalSkillsOpen] = React.useState(false);
   const [createForm, setCreateForm] = React.useState<SkillFormState>(createDefaultFormState);
   const [editForm, setEditForm] = React.useState<SkillFormState>(createDefaultFormState);
   const [editingSkill, setEditingSkill] = React.useState<SkillDto | null>(null);
@@ -369,6 +373,12 @@ export default function SkillsPage() {
             Refresh
           </Button>
 
+          {localSkills ? (
+            <Button variant="outline" onClick={() => setLocalSkillsOpen(true)}>
+              Scan ~/.agents/skills
+            </Button>
+          ) : null}
+
           <Button onClick={() => setCreateOpen(true)}>Add Skill</Button>
         </div>
       </div>
@@ -527,6 +537,14 @@ export default function SkillsPage() {
         deletingSkill={deletingSkill}
         deleteMutation={deleteMutation}
       />
+
+      {localSkills ? (
+        <LocalSkillsDialog
+          source={localSkills}
+          open={localSkillsOpen}
+          onOpenChange={setLocalSkillsOpen}
+        />
+      ) : null}
     </div>
   );
 }

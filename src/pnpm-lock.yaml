@@ -590,6 +590,12 @@ importers:
       iconv-lite:
         specifier: 'catalog:'
         version: 0.7.3
+      vfile:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vfile-matter:
+        specifier: 'catalog:'
+        version: 5.0.1
     devDependencies:
       '@agw/agents':
         specifier: workspace:*

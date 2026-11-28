@@ -13,6 +13,7 @@ using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Domain.Services;
 using Agw.Skills.Infrastructure;
+using Agw.Skills.Infrastructure.Content;
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -64,6 +65,11 @@ public class SkillAppServiceBuiltInTests
                 InMemoryApplicationLock.Shared,
                 TimeProvider.System,
                 currentUser,
+                new SkillContentRetirement(
+                    dataPaths,
+                    InMemoryApplicationLock.Shared,
+                    NullLogger<SkillContentRetirement>.Instance
+                ),
                 [new TestSkillRegistration()]
             );
 

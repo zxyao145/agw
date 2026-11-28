@@ -9,6 +9,7 @@ public sealed class SkillCreateRequest
     public string Description { get; set; } = string.Empty;
     public IFormFile? Archive { get; set; }
     public string? RemoteUrl { get; set; }
+    public string? SourceDigest { get; set; }
 }
 
 public sealed class SkillUpdateRequest
@@ -17,6 +18,7 @@ public sealed class SkillUpdateRequest
     public string Description { get; set; } = string.Empty;
     public IFormFile? Archive { get; set; }
     public string? RemoteUrl { get; set; }
+    public string? SourceDigest { get; set; }
 }
 
 public sealed record SkillResponse(
@@ -26,6 +28,7 @@ public sealed record SkillResponse(
     SkillKind Kind,
     string ContentPath,
     string? RemoteUrl,
+    string? SourceDigest,
     bool IsBuiltIn,
     IReadOnlyList<Guid> AgentIds,
     DateTimeOffset CreateTime,

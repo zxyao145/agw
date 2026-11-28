@@ -9,12 +9,14 @@ import { createWriteStream } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { buffer } from "node:stream/consumers";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import electron from "electron";
 import { build } from "esbuild";
 import iconv from "iconv-lite";
 import { v7 as uuidV7 } from "uuid";
+import { ZipFile } from "yazl";
 
 import EXTENSION_IDS from "../test-fixtures/extension-ids.json" with { type: "json" };
 import {
@@ -28,10 +30,13 @@ import { buildBundledExtensions } from "./build-bundled-extensions.mjs";
 import { buildExtensionSdk } from "./build-extension-sdk.mjs";
 import { buildDesktopMain } from "./build-main.mjs";
 
+const args = process.argv.slice(2);
+if (args[0] === "--") args.shift();
 const { values } = parseArgs({
+  args,
   options: { scenario: { type: "string", default: "full" } },
 });
-if (!["full", "frame-visibility", "server-extension"].includes(values.scenario)) {
+if (!["full", "frame-visibility", "server-extension", "local-skills"].includes(values.scenario)) {
   throw new Error(`Unknown extension test scenario: ${values.scenario}`);
 }
 
@@ -489,6 +494,15 @@ async function startEchoService() {
 async function startTestService(hubProxy, echo, switchServerExtensionVersion) {
   const requests = [];
   let neverClosed = 0;
+  const remoteSkillArchive = new ZipFile();
+  remoteSkillArchive.addBuffer(
+    Buffer.from(
+      "---\nname: remote-conflict\ndescription: Remote conflict.\n---\nRemote instructions.\n",
+    ),
+    "remote-conflict/SKILL.md",
+  );
+  remoteSkillArchive.end();
+  const remoteSkillArchiveBytes = await buffer(remoteSkillArchive.outputStream);
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, "http://local");
     const headers = { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
@@ -517,6 +531,12 @@ async function startTestService(hubProxy, echo, switchServerExtensionVersion) {
     if (url.pathname === "/__test/delay-catalog") {
       hubProxy.setCatalogDelay(url.searchParams.get("enabled") === "true");
       response.writeHead(204).end();
+      return;
+    }
+    if (url.pathname === "/remote-conflict.zip") {
+      response
+        .writeHead(200, { ...headers, "content-type": "application/zip" })
+        .end(remoteSkillArchiveBytes);
       return;
     }
     requests.push(`${request.method} ${url.pathname}`);
@@ -689,6 +709,57 @@ async function prepareServerData(baseUrl, echoPort) {
     summaryAgentId: summaryAgent.id,
     projectId: project.id,
   };
+}
+
+async function prepareLocalSkills(hostUrl, token, remoteSkillUrl) {
+  const home = join(root, "local-skills-home");
+  for (const name of ["alpha", "beta", "broken", "remote-conflict"]) {
+    const directory = join(home, ".agents", "skills", name);
+    await mkdir(directory, { recursive: true });
+    if (name !== "broken") {
+      await writeFile(
+        join(directory, "SKILL.md"),
+        `---\nname: ${name}\ndescription: Local ${name}.\n---\nLocal instructions.\n`,
+      );
+    }
+  }
+
+  const archive = new ZipFile();
+  archive.addBuffer(
+    Buffer.from("---\nname: beta\ndescription: Server beta.\n---\nServer instructions.\n"),
+    "SKILL.md",
+  );
+  archive.end();
+  const form = new FormData();
+  form.set("Name", "beta");
+  form.set("Description", "Server beta.");
+  form.set("Kind", "Local");
+  form.set("Archive", new Blob([await buffer(archive.outputStream)]), "beta.zip");
+  const response = await fetch(`${hostUrl}/api/skills`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const result = await response.json();
+  if (!response.ok || result.code !== 0) {
+    throw new Error(`Failed to seed beta: ${response.status} ${JSON.stringify(result)}`);
+  }
+
+  const remoteForm = new FormData();
+  remoteForm.set("Kind", "Remote");
+  remoteForm.set("RemoteUrl", remoteSkillUrl);
+  const remoteResponse = await fetch(`${hostUrl}/api/skills`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    body: remoteForm,
+  });
+  const remoteResult = await remoteResponse.json();
+  if (!remoteResponse.ok || remoteResult.code !== 0) {
+    throw new Error(
+      `Failed to seed remote-conflict: ${remoteResponse.status} ${JSON.stringify(remoteResult)}`,
+    );
+  }
+  return home;
 }
 
 const FENCE = "```";
@@ -884,6 +955,9 @@ async function main() {
   let host;
   let currentServerExtensionVersion = "1.0.0";
   const hostUrl = `http://127.0.0.1:${hostPort}`;
+  const hostEnv = { ...process.env };
+  delete hostEnv.ASPNETCORE_ENVIRONMENT;
+  delete hostEnv.ASPNETCORE_URLS;
   async function startHost() {
     host = spawn(
       "dotnet",
@@ -906,7 +980,7 @@ async function main() {
         "--DistributedLock:Provider=inmemory",
         `--Setup:AdminPassword=${adminPassword}`,
       ],
-      { cwd: repositoryRoot, stdio: ["ignore", "pipe", "pipe"] },
+      { cwd: repositoryRoot, env: hostEnv, stdio: ["ignore", "pipe", "pipe"] },
     );
     childClosePromises.set(host, once(host, "close"));
     children.add(host);
@@ -1001,6 +1075,14 @@ async function main() {
   for (const phase of phases) {
     if (phase === "server-restart") hubProxy.setCatalogDelay(true);
     const performance = phase === "performance" ? await writePerformanceInputs() : null;
+    const home =
+      phase === "local-skills"
+        ? await prepareLocalSkills(
+            hostUrl,
+            serverData.firstToken,
+            `http://127.0.0.1:${testService.port}/remote-conflict.zip`,
+          )
+        : null;
     await writeFile(
       join(root, "config.json"),
       JSON.stringify(
@@ -1030,7 +1112,10 @@ async function main() {
       ),
     );
     console.log(`--- Electron (${phase}) ---`);
-    await run(electron, [entry], { cwd: desktopDirectory });
+    await run(electron, [entry], {
+      cwd: desktopDirectory,
+      ...(home ? { env: { ...process.env, HOME: home, USERPROFILE: home } } : {}),
+    });
     if (phase === "first" || phase === "server-extension") {
       await switchServerExtensionVersion("1.0.1");
     }

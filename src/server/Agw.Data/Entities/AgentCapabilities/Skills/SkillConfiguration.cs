@@ -14,5 +14,6 @@ public class SkillConfiguration : IEntityTypeConfiguration<Skill>
         builder.Property(e => e.Kind).HasConversion<int>();
         builder.Property(e => e.ContentPath).IsRequired().HasMaxLength(500);
         builder.Property(e => e.RemoteUrl).HasMaxLength(2048);
+        builder.Property(e => e.Extra).HasConversion(ExtraJson.Converter<SkillExtra>()).HasDefaultValueSql("'{}'");
     }
 }

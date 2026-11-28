@@ -10,6 +10,7 @@ export type IntegrationConfig = {
     | "restart"
     | "performance"
     | "frame-visibility"
+    | "local-skills"
     | "server-extension"
     | "server-restart";
   userData: string;

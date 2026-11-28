@@ -26,7 +26,12 @@ import iconv from "iconv-lite";
 import { formatTokenCount } from "@agw/api";
 import EXTENSION_IDS from "../../test-fixtures/extension-ids.json" with { type: "json" };
 import { DEFAULT_APPEARANCE } from "../shared/appearance";
-import type { AppearanceSettings, WorkspaceTabsFileContent } from "../shared/contracts";
+import type {
+  AppearanceSettings,
+  LocalSkillPackage,
+  LocalSkillScan,
+  WorkspaceTabsFileContent,
+} from "../shared/contracts";
 import { THEME_TOKEN_KINDS, THEME_TOKEN_NAMES } from "../shared/theme-tokens";
 import {
   answerConfirmation,
@@ -373,14 +378,15 @@ async function hostApi<T>(path: string): Promise<T> {
 
 /** 用第一个 token 向 Host 发送请求。Sends a request to the Host with the first token. */
 async function hostSend<T>(method: "POST" | "DELETE", path: string, body?: unknown): Promise<T> {
+  const multipart = body instanceof FormData;
   const response = await fetch(`${config.hostUrl}${path}`, {
     method,
     headers: {
       accept: "application/json",
-      "content-type": "application/json",
+      ...(multipart ? {} : { "content-type": "application/json" }),
       authorization: `Bearer ${config.firstToken}`,
     },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: multipart ? body : body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await response.text();
   assert.equal(response.ok, true, `${method} ${path} -> ${response.status} ${text}`);
@@ -654,7 +660,8 @@ async function boot(): Promise<void> {
   if (
     config.phase === "first" ||
     config.phase === "frame-visibility" ||
-    config.phase === "server-extension"
+    config.phase === "server-extension" ||
+    config.phase === "local-skills"
   ) {
     await evalHost(
       `window.agwDesktop.saveToken(${JSON.stringify(config.remoteProfile.id)}, ${JSON.stringify(config.firstToken)}).then(() => true)`,
@@ -11603,8 +11610,108 @@ async function serverExtensionRestart(): Promise<void> {
   pass("Desktop syncs the startup-discovered extension package after the Server Host restarts");
 }
 
+async function localSkillsImport(): Promise<void> {
+  type ServerSkill = {
+    name: string;
+    kind: "BuiltIn" | "Local" | "Remote";
+    isBuiltIn: boolean;
+    sourceDigest?: string | null;
+  };
+  function row(name: string): string {
+    return `[...(${OPEN_DIALOG})?.querySelectorAll('tbody tr') ?? []].find((item) => item.cells[1]?.textContent.trim() === ${JSON.stringify(name)})`;
+  }
+  function shows(name: string, text: string): string {
+    return `(${row(name)})?.textContent.includes(${JSON.stringify(text)})`;
+  }
+  function checkbox(name: string, enabledOnly = false): string {
+    return `(${row(name)})?.querySelector('[role="checkbox"]${enabledOnly ? ":not(:disabled)" : ""}')`;
+  }
+  async function importTwo(): Promise<void> {
+    await clickHostElement(
+      `[...(${OPEN_DIALOG})?.querySelectorAll('button:not(:disabled)') ?? []].find((item) => item.textContent.trim() === 'Import (2)')`,
+    );
+  }
+  await evalHost(`location.assign('/desktop/skills/'); true`);
+  await clickText("Scan ~/.agents/skills");
+  const scannedStates = [
+    shows("alpha", "New"),
+    shows("beta", "Changed"),
+    shows("broken", "Invalid"),
+    shows("remote-conflict", "Conflict"),
+    shows("remote-conflict", "A remote skill already uses this name."),
+  ].join(" && ");
+  await untilHost(scannedStates, "the scanned local skill states");
+  assert.equal(await evalHost(`${checkbox("alpha")}?.getAttribute('aria-checked')`), "true");
+  assert.equal(await evalHost(`${checkbox("beta")}?.getAttribute('aria-checked')`), "false");
+  assert.equal(await evalHost(shows("broken", "SKILL.md is missing.")), true);
+  assert.equal(await evalHost(`${checkbox("broken")}?.disabled`), true);
+  assert.equal(await evalHost(`${checkbox("remote-conflict")}?.disabled`), true);
+  assert.equal(
+    await evalHost(`${checkbox("remote-conflict")}?.getAttribute('aria-checked')`),
+    "false",
+  );
+  const remoteSkill = (await hostApi<ServerSkill[]>("/api/skills")).find(
+    ({ name }) => name === "remote-conflict",
+  );
+  assert.equal(remoteSkill?.kind, "Remote");
+  assert.equal(remoteSkill?.isBuiltIn, false);
+  pass(
+    "The local skills dialog selects New, leaves Changed unchecked, and explains Conflict and Invalid",
+  );
+
+  const scan = await evalHost<LocalSkillScan>("window.agwDesktop.scanLocalSkills()");
+  await clickHostElement(checkbox("beta", true));
+  await importTwo();
+  await untilHost(
+    `${shows("alpha", "Imported")} && ${shows("beta", "Updated")} && ${shows("alpha", "Synced")} && ${shows("beta", "Synced")}`,
+    "imported and updated skills to become Synced",
+  );
+  const serverSkills = await hostApi<ServerSkill[]>("/api/skills");
+  for (const name of ["alpha", "beta"]) {
+    const digest = scan.skills.find((skill) => skill.name === name)?.sourceDigest;
+    assert.ok(digest);
+    assert.equal(serverSkills.find((skill) => skill.name === name)?.sourceDigest, digest);
+  }
+  pass("The dialog imports alpha, updates beta, and displays both as Synced");
+
+  for (const name of ["gamma", "zeta"]) {
+    const directory = join(scan.directory, name);
+    await mkdir(directory);
+    await writeFile(
+      join(directory, "SKILL.md"),
+      `---\nname: ${name}\ndescription: Local ${name}.\n---\nLocal instructions.\n`,
+    );
+  }
+  await clickText("Rescan", OPEN_DIALOG);
+  await untilHost(`${shows("gamma", "New")} && ${shows("zeta", "New")}`, "new gamma and zeta");
+  const gamma = await evalHost<LocalSkillPackage>(`window.agwDesktop.packLocalSkill('gamma')`);
+  const form = new FormData();
+  form.set("Name", gamma.name);
+  form.set("Description", gamma.description);
+  form.set("Kind", "Local");
+  form.set("SourceDigest", gamma.sourceDigest);
+  form.set("Archive", new Blob([new Uint8Array(gamma.bytes)]), gamma.fileName);
+  await hostSend("POST", "/api/skills", form);
+
+  await importTwo();
+  await untilHost(
+    `${shows("gamma", "Skill 'gamma' already exists.")} && ${shows("gamma", "Synced")} && ${shows("zeta", "New")}`,
+    "the conflict result and the pending skill",
+  );
+  assert.equal(await evalHost(`(${row("zeta")})?.cells[5]?.textContent.trim()`), "");
+  assert.equal(
+    (await hostApi<ServerSkill[]>("/api/skills")).some(({ name }) => name === "zeta"),
+    false,
+  );
+  pass("A concurrent import reports the gamma conflict and stops before processing zeta");
+}
+
 async function run(): Promise<void> {
   await boot();
+  if (config.phase === "local-skills") {
+    await localSkillsImport();
+    return;
+  }
   if (config.phase === "server-extension") {
     await serverExtensionLifecycle();
     await serverExtensionContextSwitchRace();

@@ -9,4 +9,5 @@ public sealed class ExtensionOptions
     public int MaximumExtractedBytes { get; set; } = 1024 * 1024 * 1024;
     public string Directory { get; set; } = "./Extensions";
     public string HostRole { get; set; } = "Standalone";
+    public string? HostInstanceName { get; set; }
 }

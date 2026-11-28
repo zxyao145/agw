@@ -67,6 +67,7 @@ export type { DesktopRuntimeState, LocalServerRuntime } from "./runtime";
 export type { ImageContextMenuRequest } from "./image";
 export type { DesktopNotification, DesktopNotificationFrame } from "./notification";
 export type { DesktopPlatform, ServerProfile } from "./server-profile";
+export type { LocalSkill, LocalSkillPackage, LocalSkillScan } from "./local-skills";
 export type {
   AppearanceMode,
   AppearanceSettings,
