@@ -1,4 +1,6 @@
-import type { AgentflowNodeKind } from "../../../../types/agentflow";
+import type { components } from "@agw/api";
+
+export type AgentflowNodeKind = components["schemas"]["AgentflowNodeDto"]["kind"];
 
 export const AGENTFLOW_NODE_LABELS: Record<AgentflowNodeKind, string> = {
   input: "Input",

@@ -10,11 +10,12 @@ Clients dispatch the polymorphic `AgentRunCommand` family through:
 DispatchCommand(AgentRunCommand)
 ```
 
-The Hub also exposes provider/checkpoint queries and InProcess recovery operations:
+The Hub also exposes queries about the provider, checkpoints, and active execution:
 
 ```text
 GetExecutionProvider() -> "InProcess" | "Distributed"
 GetAgentflowCheckpoints(agentflowId) -> AgentflowCheckpointAvailability[]
+GetAgentflowNodeStatuses(projectId, conversationId, turnId) -> AgentflowNodeStatusSnapshot | null
 FindInProcessExecution(projectId, conversationId) -> originalConnectionId | null
 RecoverInProcessExecution(originalConnectionId, interrupt) -> boolean
 ```
@@ -62,7 +63,7 @@ The host may write every conversation. An extension may write only conversations
 - `DispatchCommand` with `ExecCommand`, `ResumeCheckpointCommand`, `InterruptCommand`, `HumanResponseCommand`, `SteerCommand`, `SetModeCommand`, or `SetPermissionModeCommand`;
 - `RecoverInProcessExecution(connectionId, true)`, which is checked against the `extensionId` of the calling connection and the conversation of the target connection; a missing or foreign calling connection fails with `4000001`.
 
-Reads stay available on a read-only conversation: `SettingCommand`, `SubscribeTurnCommand`, `GetAgentflowCheckpoints`, `FindInProcessExecution`, and `RecoverInProcessExecution(connectionId, false)`. The conversation list and details report the creator as `extensionId`, together with `openToExtensions`.
+Reads stay available on a read-only conversation: `SettingCommand`, `SubscribeTurnCommand`, `GetAgentflowCheckpoints`, `GetAgentflowNodeStatuses`, `FindInProcessExecution`, and `RecoverInProcessExecution(connectionId, false)`. The conversation list and details report the creator as `extensionId`, together with `openToExtensions`.
 
 ## Permission capabilities
 
@@ -113,6 +114,7 @@ Turn state is part of the `AgwMessage` protocol:
 - `additionalProperties.type = "agw-turn-start"` precedes runtime output.
 - `interaction-request` messages carry typed requests with `kind = tool-approval | workflow-gate | user-input` and a stable `interactionId`. `HumanResponseCommand.response` must match both fields; each variant carries its own decision or response data.
 - `additionalProperties.type = "agw-turn-finished"` carries `status = completed | interrupted | failed`.
+- The start and finish messages of an Agentflow turn carry `additionalProperties.agentflowRevision`, a positive integer identifying the revision used by that turn. Agent turns omit this field.
 - Durable lifecycle messages also carry `turnId`; streamed messages use a stable scope so replay and checkpoint branches merge with the correct user turn.
 
 An `interaction-request` with `kind = "workflow-gate"` includes a `source` with `nodeId`, `nodePath`, and `nodeName`, a `choices` array of `{ choiceId, label }`, and `allowResponseText`. It may include `inputPreview`. An approved `workflow-gate` response includes the selected `choiceId` and optional `responseText`. A rejected response uses `approved: false` and stops the workflow.
@@ -150,6 +152,23 @@ Support is reported by `GET /api/agents/input-capabilities?type={0|1}&id={id}`, 
 - `Distributed` stores user-owned execution state, checkpoints, pending interactions, and responses in PostgreSQL. Disconnecting only detaches the current subscription. Another connection can send `SubscribeTurnCommand` with the same authenticated user ID and replay cursor; a worker resumes runnable segments under a PostgreSQL distributed lock. Output replay uses PostgreSQL by default or Redis when configured.
 
 After reopening an existing InProcess conversation, call `FindInProcessExecution(projectId, conversationId)` before enabling Send. The calling connection is not reported for its own turn once that turn has written `turn-finished`: its client already has the result, and a command it sends next waits on the Server until the turn releases its resources. When it returns an original connection ID, retain that ID across subsequent reconnects and poll `RecoverInProcessExecution(id, false)` until it returns `false`. To stop the work, call it with `interrupt=true` and continue checking until resource cleanup finishes; a stop refused with `4030008` leaves the turn running, so the client keeps checking as well. Foreign and missing connections both return `false` without affecting another user's work. Query failures keep recovery pending with a retry option; loading history or receiving a model diagnostic is not proof of completion. Only `turn-finished` or a successful idle result clears the active state. Recovery does not survive a Server restart.
+
+`GetAgentflowNodeStatuses(projectId, conversationId, turnId)` takes GUIDs for the project and conversation. InProcess clients pass `null` for `turnId`. Distributed clients pass the GUID of the turn they are resubscribing to. The Hub returns `null` when the current user has no matching active Agentflow turn. The snapshot includes every node status event in turn sequence order.
+
+```json
+{
+  "turnId": "0195f3a2-6b90-7c11-8d3e-5a4b3c2d1e0f",
+  "agentflowId": "0194d0aa-2b3c-7d4e-9f50-61728394a5b6",
+  "agentflowRevision": 3,
+  "statuses": [
+    { "nodeId": "input", "status": "running", "interactionId": null },
+    { "nodeId": "input", "status": "completed", "interactionId": null },
+    { "nodeId": "gate", "status": "waiting", "interactionId": "0195f3a4-0d1e-7f20-8a31-4b5c6d7e8f90" }
+  ]
+}
+```
+
+InProcess clients request the snapshot each time `RecoverInProcessExecution(id, false)` reports an active turn. Distributed clients request it for the subscribed `turnId` before sending `SubscribeTurnCommand` with a non-null cursor. A null cursor replays from the start of the turn.
 
 Distributed execution is at-least-once, not exactly-once. A Tool with external side effects must use `turnId`, request identity, or a business idempotency key. There is no separate active-execution REST lifecycle; start, subscribe, interrupt, human response, and checkpoint resume remain Hub operations.
 

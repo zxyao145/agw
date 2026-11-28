@@ -107,7 +107,7 @@ internal static class SteerMessages
     ) =>
         new()
         {
-            [TurnMessageFactory.TurnIdKey] = turnId.ToString("D"),
+            [AgwMessageClassifier.TurnIdKey] = turnId.ToString("D"),
             ["conversationId"] = conversationId.ToString("D"),
             ["streamingScopeId"] = streamingScopeId,
         };

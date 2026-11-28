@@ -1,11 +1,15 @@
 using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Outbound.SignalR;
+using Agw.Agents.Execution.Runtimes.Durable;
+using Agw.Auth.Contracts;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Execution.Inbound.SignalR;
@@ -15,14 +19,20 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
 {
     private readonly ExecutionConnectionRegistry _registry;
     private readonly ExecutionProvider _executionProvider;
+    private readonly IServiceProvider _services;
 
     /// <summary>
     /// 初始化执行 Hub，并缓存当前服务端启用的执行提供程序。
     /// </summary>
-    public ExecutionHub(ExecutionConnectionRegistry registry, IOptions<ExecutionRuntimeOptions> executionOptions)
+    public ExecutionHub(
+        ExecutionConnectionRegistry registry,
+        IOptions<ExecutionRuntimeOptions> executionOptions,
+        IServiceProvider services
+    )
     {
         _registry = registry;
         _executionProvider = executionOptions.Value.Provider;
+        _services = services;
     }
 
     public override Task OnConnectedAsync()
@@ -58,6 +68,42 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
                 Context.ConnectionAborted
             )
         );
+
+    /// <summary>
+    /// 返回当前用户在指定项目和会话中的活动 Agentflow Turn 快照。
+    /// 如果当前用户在指定范围内找不到对应的活动 Agentflow Turn，则返回空值。
+    /// Returns the current user's active Agentflow turn snapshot for the project and conversation.
+    /// Returns null when the current user has no matching active Agentflow turn in that scope.
+    /// </summary>
+    public Task<AgentflowNodeStatusSnapshot?> GetAgentflowNodeStatuses(
+        Guid projectId,
+        Guid conversationId,
+        Guid? turnId
+    ) =>
+        InvokeResultAsync(async () =>
+        {
+            var cancellationToken = Context.ConnectionAborted;
+            if (_executionProvider == ExecutionProvider.Distributed)
+            {
+                using var userScope = UserInfoUtil.Push(Context.User);
+                return await _services
+                    .GetRequiredService<DurableExecutionCoordinator>()
+                    .ReadAgentflowNodeStatusesAsync(
+                        projectId,
+                        conversationId,
+                        turnId ?? throw new AgwException(ErrorCodes.InvalidParam),
+                        cancellationToken
+                    );
+            }
+
+            return await _registry.GetInProcessAgentflowNodeStatusesAsync(
+                projectId,
+                conversationId,
+                CurrentUserId,
+                Context.ConnectionId,
+                cancellationToken
+            );
+        });
 
     /// <summary>页面重新加载后，按当前用户的项目与对话发现仍在运行的进程内执行。</summary>
     public Task<string?> FindInProcessExecution(Guid projectId, Guid conversationId) =>

@@ -1,15 +1,23 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Text.Json;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Turns;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Turns;
+using Agw.Agents.Execution.Commands;
+using Agw.Agents.Execution.Commands.Abstracts;
+using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Inbound.SignalR;
+using Agw.Agents.Execution.Outbound;
+using Agw.Agents.Execution.Outbound.SignalR;
 using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
@@ -45,10 +53,13 @@ using Agw.Tools.Impl.ContextualTools.Shell;
 using Agw.Tools.Runtime;
 using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
@@ -56,6 +67,151 @@ public sealed class ExecutionWorkspaceAuthorizationTests
 {
     private const string UserId = "workspace-user";
     private const string ForeignUserId = "foreign-workspace-user";
+    private const string NodeStatusConnectionId = "connection";
+
+    [Fact]
+    public async Task GetInProcessAgentflowNodeStatusesAsync_RunningAgentflow_ReturnsSnapshotOnlyToOwnerUntilTurnEnds()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var fixture = await WorkspaceAuthorizationFixture.CreateAsync();
+        var seed = await fixture.SeedAsync();
+        var agentflowId = await fixture.SeedAgentflowWithAgentAsync(await fixture.SeedSystemAgentAsync());
+        var sink = new HoldNodeStatusSink();
+        var (connection, context) = CreateNodeStatusConnection(fixture.Services, sink, token);
+        await using var connectionLifetime = connection;
+        using var signalRHost = new HostBuilder().ConfigureServices(items => items.AddSignalR()).Build();
+        await using var registry = CreateNodeStatusRegistry(signalRHost.Services);
+        ExecutionConnectionTests.GetConnections(registry)[NodeStatusConnectionId] = connection;
+        var command = new ExecCommand(AgentRuntimeType.Agentflow, TurnPersistenceTestKit.CreateInput("input"))
+        {
+            AgentId = agentflowId,
+            ConversationId = seed.ConversationId,
+        };
+
+        try
+        {
+            await connection.DispatchAsync(new SettingCommand(seed.Project.Id, seed.ConversationId), token);
+            await connection.DispatchAsync(command, token);
+            await AssertActiveNodeStatusSnapshotAsync(registry, seed, command.TurnId, agentflowId, sink, token);
+        }
+        finally
+        {
+            try
+            {
+                if (context.HasActiveTurn)
+                    await context.InterruptTurnAsync(command.TurnId, reason: null, token);
+            }
+            finally
+            {
+                sink.Continue.TrySetResult();
+            }
+        }
+        await context.WhenIdleAsync().WaitAsync(TimeSpan.FromSeconds(10), token);
+        Assert.Null(await ReadNodeStatusSnapshotAsync(registry, seed, UserId, token));
+    }
+
+    private static (ExecutionConnection Connection, ExecutionConnectionContext Context) CreateNodeStatusConnection(
+        IServiceProvider rootServices,
+        HoldNodeStatusSink sink,
+        CancellationToken token
+    )
+    {
+        var scope = rootServices.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var context = new ExecutionConnectionContext(
+            UserId,
+            sink,
+            token,
+            services.GetRequiredService<TurnAcceptanceService>(),
+            services.GetRequiredService<IProjectTaskFacade>(),
+            services.GetRequiredService<IProjectConversationAccessFacade>(),
+            services.GetRequiredService<InProcessExecutionCoordinatorFactory>(),
+            durableCoordinator: null
+        );
+        var connection = new ExecutionConnection(
+            NodeStatusConnectionId,
+            UserId,
+            scope,
+            new ExecutionCommandDispatcher([
+                new ExecutionCommandHandlerAdapter<SettingCommand>(new SettingCommandHandler()),
+                new ExecutionCommandHandlerAdapter<ExecCommand>(new ExecCommandHandler()),
+            ]),
+            context,
+            NullLogger.Instance
+        );
+        return (connection, context);
+    }
+
+    private static ExecutionConnectionRegistry CreateNodeStatusRegistry(IServiceProvider services) =>
+        new(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            services.GetRequiredService<IHubContext<ExecutionHub, IExecutionHubClient>>(),
+            services.GetRequiredService<IHostApplicationLifetime>(),
+            NullLoggerFactory.Instance
+        );
+
+    private static async Task AssertActiveNodeStatusSnapshotAsync(
+        ExecutionConnectionRegistry registry,
+        WorkspaceSeed seed,
+        Guid? turnId,
+        Guid agentflowId,
+        HoldNodeStatusSink sink,
+        CancellationToken token
+    )
+    {
+        var first = await sink.NodeStartedOrFinished.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
+        Assert.True(
+            AgwMessageClassifier.GetMessageType(first) == AgwMessageTypes.AgentflowNodeStatus,
+            JsonUtil.Serialize(sink.Messages.ToArray())
+        );
+        var snapshot = await ReadNodeStatusSnapshotAsync(registry, seed, UserId, token);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal(turnId, snapshot.TurnId);
+        Assert.Equal(agentflowId, snapshot.AgentflowId);
+        Assert.Equal(1, snapshot.AgentflowRevision);
+        Assert.Null(await ReadNodeStatusSnapshotAsync(registry, seed, ForeignUserId, token));
+        Assert.Contains(
+            snapshot.Statuses,
+            status => status.NodeId == "input" && status.Status == AgwAgentflowNodeStatus.Running
+        );
+    }
+
+    private static Task<AgentflowNodeStatusSnapshot?> ReadNodeStatusSnapshotAsync(
+        ExecutionConnectionRegistry registry,
+        WorkspaceSeed seed,
+        string userId,
+        CancellationToken token
+    ) =>
+        registry.GetInProcessAgentflowNodeStatusesAsync(
+            seed.Project.Id,
+            seed.ConversationId,
+            userId,
+            "reloaded",
+            token
+        );
+
+    private sealed class HoldNodeStatusSink : IExecutionMessageSink
+    {
+        public ConcurrentQueue<AgwMessage> Messages { get; } = new();
+
+        public TaskCompletionSource<AgwMessage> NodeStartedOrFinished { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Continue { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken)
+        {
+            Messages.Enqueue(message);
+            if (
+                AgwMessageClassifier.GetMessageType(message) == AgwMessageTypes.AgentflowNodeStatus
+                && NodeStartedOrFinished.TrySetResult(message)
+            )
+                await Continue.Task.WaitAsync(cancellationToken);
+            else if (AgwMessageClassifier.IsTurnFinished(message))
+                NodeStartedOrFinished.TrySetResult(message);
+        }
+    }
 
     [Fact]
     public async Task StartAsync_ForeignWorkspace_RejectsBeforeStartingAgentflow()
@@ -534,7 +690,7 @@ public sealed class ExecutionWorkspaceAuthorizationTests
             return new WorkspaceSeed(project, foreign.Workspace, agentflowId, conversationId);
         }
 
-        public async Task<Guid> SeedSystemAgentAsync(Guid extensionId)
+        public async Task<Guid> SeedSystemAgentAsync(Guid? extensionId = null)
         {
             using var user = EnterUser(UserId);
             await using var scope = _services.CreateAsyncScope();
@@ -560,7 +716,7 @@ public sealed class ExecutionWorkspaceAuthorizationTests
                     Id = providerId,
                     Name = "test-provider",
                     ProviderType = ProviderType.OpenAIChatCompletions,
-                    Endpoint = "https://example.test/v1",
+                    Endpoint = extensionId is not null ? "https://example.test/v1" : "http://127.0.0.1:1/v1",
                     CreateBy = UserId,
                     AuthConfigs =
                     [
@@ -593,17 +749,19 @@ public sealed class ExecutionWorkspaceAuthorizationTests
                     DisplayName = "Compiled Extension Agent",
                     Type = AgentType.System,
                     ModelProviderId = modelProviderId,
-                    Tools =
-                    [
-                        new ToolValue
-                        {
-                            Definition = new ExtensionToolDefinition
+                    Tools = extensionId is { } toolExtensionId
+                        ?
+                        [
+                            new ToolValue
                             {
-                                ExtensionId = extensionId,
-                                ToolId = "calendar-lookup",
+                                Definition = new ExtensionToolDefinition
+                                {
+                                    ExtensionId = toolExtensionId,
+                                    ToolId = "calendar-lookup",
+                                },
                             },
-                        },
-                    ],
+                        ]
+                        : [],
                     CreateBy = UserId,
                     CreateTime = now,
                 }

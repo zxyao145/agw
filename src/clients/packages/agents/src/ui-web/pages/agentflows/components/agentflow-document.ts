@@ -1,3 +1,4 @@
+import { AGENTFLOW_NODE_LABELS } from "@agw/chat-core";
 import {
   type AgentflowBlockMember,
   type AgentflowDefinition,
@@ -9,7 +10,6 @@ import {
 } from "../../../../types/agentflow";
 import { getNewEdgeRouting } from "./agentflow-edge-routing";
 import { AGENTFLOW_NODE_SIZE } from "./agentflow-canvas-geometry";
-import { AGENTFLOW_NODE_LABELS } from "./agentflow-node-labels";
 
 export type AgentflowEditorDocument = {
   name: string;

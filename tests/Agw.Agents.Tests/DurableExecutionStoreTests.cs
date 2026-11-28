@@ -589,7 +589,8 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
             Guid.CreateVersion7(),
             Guid.CreateVersion7(),
             AgentRuntimeType.Agentflow,
-            "message-1"
+            "message-1",
+            1
         );
 
         // Act
@@ -597,7 +598,7 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
 
         // Assert
         Assert.Equal(AgwMessageTypes.TurnStart, message.AdditionalProperties?["type"]);
-        Assert.Equal(envelope.TurnId.ToString("D"), message.AdditionalProperties?[TurnMessageFactory.TurnIdKey]);
+        Assert.Equal(envelope.TurnId.ToString("D"), message.AdditionalProperties?[AgwMessageClassifier.TurnIdKey]);
         Assert.Equal(envelope.ConversationId.ToString("D"), message.AdditionalProperties?["conversationId"]);
         Assert.Equal("agentflow", message.AdditionalProperties?["agentType"]);
         Assert.Equal("message-1", message.AdditionalProperties?["streamingScopeId"]);

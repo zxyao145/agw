@@ -418,6 +418,41 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
         await database.AssertResumedDependencySnapshotAsync(resumeTurnId, acceptedSnapshot, cancellationToken);
     }
 
+    [Fact]
+    public async Task DistributedResume_StartEvent_CarriesSourceRevision()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var database = await TestDatabase.CreateAsync();
+        var fixture = await database.SeedAsync();
+        var store = database.CreateStore();
+        var recorded = await database.RecordDurableCheckpointAsync(
+            store,
+            fixture,
+            CreateRevisionSnapshot(),
+            cancellationToken
+        );
+        Assert.NotNull(recorded);
+        await database.PublishRevisionAsync(fixture.AgentflowId, revision: 2);
+
+        var resumeTurnId = Guid.CreateVersion7();
+        await database.ResumeDistributedAsync(
+            store,
+            fixture,
+            recorded.Snapshot.OccurrenceId,
+            resumeTurnId,
+            cancellationToken
+        );
+
+        await using var context = database.CreateContext();
+        var record = await context.DurableExecutionEvents.SingleAsync(
+            item => item.TurnId == resumeTurnId && item.TurnSequence == 1,
+            cancellationToken
+        );
+        Assert.Equal(AgwMessageTypes.TurnStart, record.MessageType);
+        var message = DurableExecutionEvents.ToEntry(record).Message;
+        Assert.Equal("1", message.AdditionalProperties![AgwMessageClassifier.AgentflowRevisionKey]?.ToString());
+    }
+
     [Theory]
     [InlineData("source-turn-missing")]
     [InlineData("turn-snapshot-missing")]

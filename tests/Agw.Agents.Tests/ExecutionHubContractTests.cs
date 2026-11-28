@@ -1,4 +1,5 @@
 using System.Reflection;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Inbound.SignalR;
 using Agw.Agents.Execution.Outbound.SignalR;
@@ -41,6 +42,19 @@ public class ExecutionHubContractTests
         var parameter = typeof(ExecutionHub).GetMethod(nameof(ExecutionHub.DispatchCommand))!.GetParameters().Single();
 
         Assert.Equal(typeof(AgentRunCommand), parameter.ParameterType);
+    }
+
+    [Fact]
+    public void GetAgentflowNodeStatuses_ExposedOnHub_AcceptsProjectConversationAndTurnIds()
+    {
+        var method = typeof(ExecutionHub).GetMethod(nameof(ExecutionHub.GetAgentflowNodeStatuses));
+
+        Assert.NotNull(method);
+        Assert.Equal(typeof(Task<AgentflowNodeStatusSnapshot>), method.ReturnType);
+        Assert.Equal(
+            [("projectId", typeof(Guid)), ("conversationId", typeof(Guid)), ("turnId", typeof(Guid?))],
+            method.GetParameters().Select(parameter => (parameter.Name, parameter.ParameterType))
+        );
     }
 
     [Fact]

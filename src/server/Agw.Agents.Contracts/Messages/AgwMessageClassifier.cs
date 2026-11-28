@@ -12,6 +12,14 @@ public static class AgwMessageClassifier
 {
     public const string TypeKey = "type";
     public const string StatusKey = "status";
+    public const string TurnIdKey = "turnId";
+    public const string ConversationIdKey = "conversationId";
+    public const string AgentIdKey = "agentId";
+    public const string AgentTypeKey = "agentType";
+    public const string AgentTypeValue = "agent";
+    public const string AgentflowTypeValue = "agentflow";
+    public const string StreamingScopeIdKey = "streamingScopeId";
+    public const string AgentflowRevisionKey = "agentflowRevision";
     public const string InteractionIdKey = "interactionId";
     public const string HumanAuthorName = "human";
     public const string NodeIdKey = "nodeId";

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import { HubConnectionBuilder, HubConnectionState, type IRetryPolicy } from "@microsoft/signalr";
 import type { AiMessage } from "@agw/api";
 import { createUserMessage } from "@agw/chat-core";
+import type { ExecutionStatusEvent } from "@agw/execution-core";
 import { replaceExecutionHub } from "@agw/test-harness";
 import type { ExecutionReconnectState } from "./execution-hub";
 import type { ExecutionSubmission } from "./execution-queue";
@@ -136,6 +137,7 @@ test("Retry recovers a WebSocket-only Agentflow turn when SignalR has no connect
     async invoke(method: string, ...args: unknown[]) {
       if (method === "GetExecutionProvider") return "InProcess";
       if (method === "FindInProcessExecution") return active ? "original-connection" : null;
+      if (method === "GetAgentflowNodeStatuses") return null;
       if (method === "RecoverInProcessExecution") {
         recoveryCalls.push(args);
         return active;
@@ -819,6 +821,187 @@ test("a durable start that the server confirms missing rejects as not executed",
   }
 });
 
+const nodeStatusSnapshot = {
+  turnId: "turn-1",
+  agentflowId: "flow",
+  agentflowRevision: 3,
+  statuses: [{ nodeId: "a", status: "running", interactionId: null }],
+};
+
+const nodeSnapshotEvent = {
+  type: "agentflow-node-snapshot",
+  turnId: "turn-1",
+  agentflowId: "flow",
+  agentflowRevision: 3,
+  statuses: [{ type: "agentflow-node-status", nodeId: "a", status: "running" }],
+};
+
+const recoverySetting = { projectId: "project-1", conversationId: "conversation-1" };
+
+async function createDurableNodeRecoverySession(
+  t: TestContext,
+  cursor: string | null,
+  snapshot: unknown,
+) {
+  const { ExecutionSession, getDurableExecutionStorageKey } =
+    await import("./execution-session.ts");
+  const events: ("SubscribeTurnCommand" | ExecutionStatusEvent)[] = [];
+  const connections = replaceExecutionHub(t, {
+    provider: "Distributed",
+    onInvoke({ method, args }) {
+      if (method === "GetAgentflowNodeStatuses") return snapshot;
+      if (
+        method === "DispatchCommand" &&
+        (args[0] as { type: string }).type === "SubscribeTurnCommand"
+      ) {
+        events.push("SubscribeTurnCommand");
+      }
+    },
+  });
+  const runtime = { baseUrl: "https://agw.test", token: null };
+  const values = new Map([
+    [
+      getDurableExecutionStorageKey(runtime, recoverySetting),
+      JSON.stringify({ turnId: "turn-1", cursor }),
+    ],
+  ]);
+  const session = new ExecutionSession(
+    { onMessage() {}, onStatus: (status) => events.push(status) },
+    {
+      ...runtime,
+      attachmentStore: {
+        getItem: (key) => values.get(key) ?? null,
+        setItem: (key, value) => values.set(key, value),
+        removeItem: (key) => values.delete(key),
+      },
+    },
+  );
+  t.after(() => session.dispose());
+  return { session, connections, events };
+}
+
+test("durable restore with a cursor delivers the node snapshot before resubscribing", async (t) => {
+  const { session, connections, events } = await createDurableNodeRecoverySession(
+    t,
+    "9",
+    nodeStatusSnapshot,
+  );
+
+  await session.configure(recoverySetting);
+
+  assert.deepEqual(events, [nodeSnapshotEvent, "SubscribeTurnCommand"]);
+  const calls = connections[0]!.invocations;
+  const snapshotIndex = calls.findIndex(({ method }) => method === "GetAgentflowNodeStatuses");
+  assert.deepEqual(calls[snapshotIndex]?.args, ["project-1", "conversation-1", "turn-1"]);
+  assert.ok(
+    snapshotIndex <
+      calls.findIndex(
+        ({ method, args }) =>
+          method === "DispatchCommand" &&
+          (args[0] as { type: string }).type === "SubscribeTurnCommand",
+      ),
+  );
+});
+
+test("durable restore ignores a snapshot of another turn", async (t) => {
+  const { session, connections, events } = await createDurableNodeRecoverySession(t, "9", {
+    ...nodeStatusSnapshot,
+    turnId: "another-turn",
+  });
+
+  await session.configure(recoverySetting);
+
+  assert.ok(
+    connections[0]!.invocations.some(({ method }) => method === "GetAgentflowNodeStatuses"),
+  );
+  assert.deepEqual(events, ["SubscribeTurnCommand"]);
+});
+
+test("durable restore without a cursor does not read node statuses", async (t) => {
+  const { session, connections, events } = await createDurableNodeRecoverySession(
+    t,
+    null,
+    nodeStatusSnapshot,
+  );
+
+  await session.configure(recoverySetting);
+
+  assert.deepEqual(events, ["SubscribeTurnCommand"]);
+  assert.equal(
+    connections[0]!.invocations.some(({ method }) => method === "GetAgentflowNodeStatuses"),
+    false,
+  );
+});
+
+test("a malformed node snapshot fails the restore", async (t) => {
+  const { session, events } = await createDurableNodeRecoverySession(t, "9", { turnId: "turn-1" });
+
+  await assert.rejects(session.configure(recoverySetting), TypeError);
+  assert.deepEqual(events, []);
+});
+
+test("in-process recovery delivers a node snapshot on every active poll", async (t) => {
+  const { ExecutionSession } = await import("./execution-session.ts");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const events: ExecutionStatusEvent[] = [];
+  const connections = replaceExecutionHub(t, {
+    provider: "InProcess",
+    onInvoke({ method }) {
+      if (method === "FindInProcessExecution") return "original-connection";
+      if (method === "RecoverInProcessExecution") return true;
+      if (method === "GetAgentflowNodeStatuses") return nodeStatusSnapshot;
+    },
+  });
+  const session = new ExecutionSession(
+    { onMessage() {}, onStatus: (status) => events.push(status) },
+    { baseUrl: "https://agw.test", token: null, attachmentStore: null },
+  );
+  t.after(() => session.dispose());
+
+  await session.configure(recoverySetting);
+  assert.deepEqual(events, [nodeSnapshotEvent]);
+  assert.deepEqual(
+    connections[0]!.invocations.find(({ method }) => method === "GetAgentflowNodeStatuses")?.args,
+    ["project-1", "conversation-1", null],
+  );
+  t.mock.timers.tick(1000);
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  assert.deepEqual(events, [nodeSnapshotEvent, nodeSnapshotEvent]);
+
+  await session.interrupt();
+  assert.deepEqual(connections[0]!.invocations.at(-1), {
+    method: "RecoverInProcessExecution",
+    args: ["original-connection", true],
+  });
+  assert.equal(events.length, 2);
+});
+
+test("in-process recovery ignores a snapshot after another connection takes over the conversation", async (t) => {
+  const { ExecutionSession } = await import("./execution-session.ts");
+  const events: ExecutionStatusEvent[] = [];
+  let activeConnection = "original-connection";
+  replaceExecutionHub(t, {
+    provider: "InProcess",
+    onInvoke({ method }) {
+      if (method === "FindInProcessExecution") return activeConnection;
+      if (method === "RecoverInProcessExecution") return true;
+      if (method === "GetAgentflowNodeStatuses") {
+        activeConnection = "replacement-connection";
+        return nodeStatusSnapshot;
+      }
+    },
+  });
+  const session = new ExecutionSession(
+    { onMessage() {}, onStatus: (status) => events.push(status) },
+    { baseUrl: "https://agw.test", token: null, attachmentStore: null },
+  );
+  t.after(() => session.dispose());
+
+  await session.configure(recoverySetting);
+
+  assert.deepEqual(events, []);
+});
+
 test("durable configure resumes its cursor, clears 404, and preserves temporary failures", async () => {
   const { ExecutionHubClient, getDurableExecutionStorageKey, hasPersistedDurableExecution } =
     await import("./execution-hub" + ".ts");
@@ -865,6 +1048,7 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
         command?: { type: string; turnId?: string; cursor?: string },
       ) => {
         if (methodName === "GetExecutionProvider") return "distributed";
+        if (methodName === "GetAgentflowNodeStatuses") return null;
         if (command) commands.push(command);
         if (command?.type === "SubscribeTurnCommand" && command.turnId) {
           await subscribe({ turnId: command.turnId, cursor: command.cursor }, (message) =>
@@ -1232,6 +1416,7 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
     invoke: async (method: string, ...args: unknown[]) => {
       if (method === "GetExecutionProvider") return "InProcess";
       if (method === "FindInProcessExecution") return null;
+      if (method === "GetAgentflowNodeStatuses") return null;
       if (method === "RecoverInProcessExecution") {
         recoveryCalls.push(args);
         if (recoveryError) throw recoveryError;
@@ -1274,6 +1459,8 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
         conversationId: "conversation",
         turnId: execCommands[0]!.turnId,
         turnSequence: 1,
+        agentId: "agent",
+        agentType: "agent",
       },
     });
     receive({
@@ -1412,6 +1599,7 @@ test("a fresh client discovers an in-process turn without local attachment stora
         if (discoveryError) throw new Error("State query unavailable");
         return active ? "before-reload" : null;
       }
+      if (method === "GetAgentflowNodeStatuses") return null;
       if (method === "RecoverInProcessExecution") return active;
     },
   };
@@ -1495,6 +1683,7 @@ for (const disconnected of [false, true]) {
       async invoke(method: string, ...args: unknown[]) {
         if (method === "GetExecutionProvider") return "InProcess";
         if (method === "FindInProcessExecution") return serverActive ? "original-connection" : null;
+        if (method === "GetAgentflowNodeStatuses") return null;
         if (method === "RecoverInProcessExecution") {
           recoveryCalls.push(args);
           if (args[1] === true) serverActive = false;
@@ -1589,7 +1778,13 @@ test("a Steer travels as a SteerCommand over the hub and a Hub rejection reaches
       messageId: "start",
       role: "system",
       contents: [],
-      additionalProperties: { type: "agw-turn-start", conversationId: "conversation", turnId },
+      additionalProperties: {
+        type: "agw-turn-start",
+        conversationId: "conversation",
+        turnId,
+        agentId: "agent",
+        agentType: "agent",
+      },
     });
 
     // Act

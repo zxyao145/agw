@@ -115,7 +115,7 @@ public sealed partial class DurableExecutionStoreTests
         );
         Assert.All(
             replayed,
-            entry => Assert.Equal(id.ToString("D"), entry.Message.AdditionalProperties?[TurnMessageFactory.TurnIdKey])
+            entry => Assert.Equal(id.ToString("D"), entry.Message.AdditionalProperties?[AgwMessageClassifier.TurnIdKey])
         );
     }
 

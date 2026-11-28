@@ -18,5 +18,11 @@ public sealed class DurableExecutionEventRecordConfiguration : IEntityTypeConfig
         builder.Property(item => item.SegmentIndex).IsRequired();
         builder.Property(item => item.PayloadJson).IsRequired();
         builder.HasIndex(item => new { item.TurnId, item.TurnSequence }).IsUnique();
+        builder.HasIndex(item => new
+        {
+            item.TurnId,
+            item.MessageType,
+            item.TurnSequence,
+        });
     }
 }

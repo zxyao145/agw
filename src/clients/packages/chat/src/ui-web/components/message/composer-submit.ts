@@ -24,8 +24,6 @@ export type ComposerSubmitState = {
   alternateMode: SubmissionMode | null;
   /** 另一种方式不可用时的原因。Why the other mode is unavailable. */
   alternateBlockedReason: string | null;
-  /** 偏好是 Steer 但目标不支持而回到 Queue 时的说明。Shown when the preference is Steer but the target does not support it and Queue is used. */
-  fallbackNote: string | null;
 };
 
 /**
@@ -58,7 +56,6 @@ export function resolveComposerSubmit(input: ComposerSubmitInput): ComposerSubmi
       primaryMode,
       alternateMode: null,
       alternateBlockedReason: null,
-      fallbackNote: null,
     };
   }
   const alternateMode: SubmissionMode = primaryMode === "steer" ? "queue" : "steer";
@@ -68,10 +65,6 @@ export function resolveComposerSubmit(input: ComposerSubmitInput): ComposerSubmi
     primaryMode,
     alternateMode,
     alternateBlockedReason: alternateMode === "steer" ? unsupportedReason : null,
-    fallbackNote:
-      input.preferredMode === "steer" && unsupportedReason !== null
-        ? `Steering is unavailable, so messages go to the queue. ${unsupportedReason}`
-        : null,
   };
 }
 
@@ -120,10 +113,4 @@ export function getSteerRejectionMessage(error: Error): string {
   const detail =
     /HubException: \d{7}: ([\s\S]+)$/u.exec(error.message)?.[1]?.trim() || error.message;
   return `The message was not sent to the running task. ${detail}`;
-}
-
-/** 输入框下方提示行：当前主方式和另一种方式各自的快捷键。The hint row under the input: the shortcut of the primary and of the other mode. */
-export function getSubmitShortcutHint(state: ComposerSubmitState): string | null {
-  if (state.alternateMode === null) return null;
-  return `${PRIMARY_SUBMIT_SHORTCUT} to ${SUBMIT_MODE_LABELS[state.primaryMode].toLowerCase()}, ${ALTERNATE_SUBMIT_SHORTCUT} to ${SUBMIT_MODE_LABELS[state.alternateMode].toLowerCase()}`;
 }

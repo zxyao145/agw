@@ -243,6 +243,12 @@ internal sealed class TurnBroadcast : IExecutionMessageSink
         }
     }
 
+    internal IReadOnlyList<TurnBroadcastEntry> ReadAll()
+    {
+        lock (_gate)
+            return _entries.ToArray();
+    }
+
     /// <summary>
     /// 读取缓冲中序号大于 afterSequence 的消息；缓冲的最早消息晚于 afterSequence + 1 时返回空，读者需要先从数据库补齐。
     /// Reads buffered messages after afterSequence; returns none when the earliest buffered message is later than afterSequence + 1, so the reader fills the gap from the database first.
@@ -281,7 +287,7 @@ internal sealed class TurnBroadcast : IExecutionMessageSink
             message.AdditionalProperties == null
                 ? []
                 : new AdditionalPropertiesDictionary(message.AdditionalProperties);
-        properties[TurnMessageFactory.TurnIdKey] = turnId.ToString("D");
+        properties[AgwMessageClassifier.TurnIdKey] = turnId.ToString("D");
         properties[TurnMessageFactory.TurnSequenceKey] = sequence;
         return message with { AdditionalProperties = properties };
     }

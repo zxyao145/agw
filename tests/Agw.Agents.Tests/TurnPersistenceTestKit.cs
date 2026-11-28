@@ -617,7 +617,14 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
     }
 
     public static TurnEnvelope CreateEnvelope(Guid turnId, AgentExecutionTask task, ExecutionTarget target) =>
-        new(turnId, task.ProjectConversationId, target.AgentId, target.AgentType, turnId.ToString("D"));
+        new(
+            turnId,
+            task.ProjectConversationId,
+            target.AgentId,
+            target.AgentType,
+            turnId.ToString("D"),
+            target.AgentflowRevision
+        );
 
     public static AgwUserInput CreateInput(string content) =>
         new()

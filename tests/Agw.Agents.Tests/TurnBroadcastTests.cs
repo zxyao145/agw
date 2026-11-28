@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Turns;
 using Agw.Testing;
@@ -53,6 +54,23 @@ public sealed class TurnBroadcastTests
             message => Assert.Equal(AgwMessageTypes.InteractionRequest, AgwMessageClassifier.GetMessageType(message))
         );
         Assert.Equal([1L, 2L], _sink.Messages.Select(Sequence));
+    }
+
+    [Fact]
+    public async Task ReadAll_StatusAfterPendingDelta_ReturnsDeltaThenStatus()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await _broadcast.WriteAsync(Delta("partial"), token);
+        await _broadcast.WriteAsync(
+            AgentflowMessageMapper.CreateNodeStatusMessage("input", AgwAgentflowNodeStatus.Running, null, "status"),
+            token
+        );
+
+        var entries = _broadcast.ReadAll();
+
+        Assert.Equal([1L, 2L], entries.Select(entry => entry.Sequence));
+        Assert.Equal("partial", TextOf(entries[0].Message));
+        Assert.Equal(AgwMessageTypes.AgentflowNodeStatus, AgwMessageClassifier.GetMessageType(entries[1].Message));
     }
 
     [Fact]

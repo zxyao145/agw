@@ -38,6 +38,8 @@ InProcess 连接的控制查询与后台 Runtime 使用独立的 DI scope，避�
 
 构建图、HumanGate 元数据和 Checkpoint 节点名共用一次 revision 查询。Lease 携带这些元数据的不可变快照，Runner 使用该次构建的快照；下一次执行重新构建，不建立跨执行缓存。执行过程的 `agentflow-node-status` 消息随 Turn 输出并参与 Durable 回放，不写入对话历史。
 
+页面重新载入后，客户端通过 `GetAgentflowNodeStatuses(projectId, conversationId, turnId)` 恢复运行中 Agentflow Turn 的节点状态。Distributed 传入待恢复的 Turn ID，InProcess 传入 `null`。快照包含 Turn 使用的 revision，并按 Turn 内序号返回节点状态事件。
+
 ### Agentflow revision 快照
 
 Turn 受理时，`TurnAcceptanceWriter` 在 Serializable 事务内固定根 Agentflow revision，并沿 Workflow as Agent 节点与 Block 成员展开已发布的嵌套 revision。完整快照写入 Turn 的 `extra` 和 Durable manifest；runtime 编译、后续分段、重试与 checkpoint 恢复都使用同一份快照。相同 `turnId` 的重发沿用已保存快照。旧 Durable manifest 缺少依赖快照时按冲突结束。
@@ -298,7 +300,7 @@ turn 是一次用户输入到执行结束的完整过程。`RuntimeTurnContext` 
 
 ### `Inbound/SignalR`
 
-SignalR Hub 路由为 `/api/hubs/exec`，公开命令入口、执行 Provider 探测、Agentflow checkpoint 查询，以及 InProcess 状态恢复操作：
+SignalR Hub 路由为 `/api/hubs/exec`，公开命令入口、执行 Provider 探测、Agentflow checkpoint 和节点状态查询，以及 InProcess 状态恢复操作：
 
 客户端固定使用 WebSocket 并跳过 negotiate，避免负载均衡把协商和握手分配到不同 Server。Desktop 的 Bearer Token 在 WebSocket 握手中按 SignalR 约定通过 `access_token` 查询参数传递；服务端只在该 Hub 的 WebSocket 请求中接受此参数，其他 HTTP 或 WebSocket 路径仍只接受 `Authorization` Header。反向代理访问日志不得记录查询参数。
 
@@ -306,6 +308,7 @@ SignalR Hub 路由为 `/api/hubs/exec`，公开命令入口、执行 Provider �
 DispatchCommand(AgentRunCommand)
 GetExecutionProvider() -> "InProcess" | "Distributed"
 GetAgentflowCheckpoints(agentflowId) -> AgentflowCheckpointAvailability[]
+GetAgentflowNodeStatuses(projectId, conversationId, turnId) -> AgentflowNodeStatusSnapshot | null
 FindInProcessExecution(projectId, conversationId) -> originalConnectionId | null
 RecoverInProcessExecution(originalConnectionId, interrupt) -> boolean
 ```

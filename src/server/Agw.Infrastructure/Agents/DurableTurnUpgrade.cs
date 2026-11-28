@@ -251,32 +251,24 @@ public sealed class DurableTurnUpgrade
                 if (request != null)
                     interactionIds.Add(request.InteractionId);
             }
-            if (
-                message.AdditionalProperties?.TryGetValue("type", out var type) == true
-                && type?.ToString() == "turn-start"
-            )
+            if (AgwMessageClassifier.GetMessageType(message) is "turn-start" or AgwMessageTypes.TurnStart)
             {
-                message.AdditionalProperties["type"] = AgwMessageTypes.TurnStart;
+                SetStartProperties(message.AdditionalProperties!, execution, manifest);
                 entry.PayloadJson = JsonUtil.Serialize(message);
             }
+            entry.MessageType = AgwMessageClassifier.GetMessageType(message);
         }
         if (events.Count == 0)
         {
+            var properties = new AdditionalPropertiesDictionary();
+            SetStartProperties(properties, execution, manifest);
             Append(
                 new AgwMessage(
                     Guid.CreateVersion7().ToString("D"),
                     Constants.DefaultAgentAuthor,
                     AiRole.System,
                     [new AgwTextContent { Content = "" }],
-                    new AdditionalPropertiesDictionary
-                    {
-                        ["type"] = AgwMessageTypes.TurnStart,
-                        ["turnId"] = execution.Id.ToString("D"),
-                        ["conversationId"] = manifest.Task.ProjectConversationId.ToString("D"),
-                        ["agentId"] = manifest.AgentId.ToString("D"),
-                        ["agentType"] = manifest.AgentType == AgentRuntimeType.Agentflow ? "agentflow" : "agent",
-                        ["streamingScopeId"] = manifest.StreamingScopeId ?? execution.Id.ToString("D"),
-                    }
+                    properties
                 )
             );
         }
@@ -316,11 +308,33 @@ public sealed class DurableTurnUpgrade
                     TurnSequence = ++execution.LastEventSequence,
                     LeaseEpoch = 0,
                     SegmentIndex = execution.SegmentIndex,
+                    MessageType = AgwMessageClassifier.GetMessageType(message),
                     PayloadJson = JsonUtil.Serialize(message),
                     CreateBy = execution.UserId,
                     UpdateBy = execution.UserId,
                 }
             );
+    }
+
+    private static void SetStartProperties(
+        AdditionalPropertiesDictionary properties,
+        DurableExecutionRecord execution,
+        DurableExecutionManifest manifest
+    )
+    {
+        properties[AgwMessageClassifier.TypeKey] = AgwMessageTypes.TurnStart;
+        properties[AgwMessageClassifier.TurnIdKey] = execution.Id.ToString("D");
+        properties[AgwMessageClassifier.ConversationIdKey] = manifest.Task.ProjectConversationId.ToString("D");
+        properties[AgwMessageClassifier.AgentIdKey] = manifest.AgentId.ToString("D");
+        properties[AgwMessageClassifier.AgentTypeKey] =
+            manifest.AgentType == AgentRuntimeType.Agentflow
+                ? AgwMessageClassifier.AgentflowTypeValue
+                : AgwMessageClassifier.AgentTypeValue;
+        properties[AgwMessageClassifier.StreamingScopeIdKey] = manifest.StreamingScopeId ?? execution.Id.ToString("D");
+        if (manifest.AgentType == AgentRuntimeType.Agentflow)
+            properties[AgwMessageClassifier.AgentflowRevisionKey] = manifest.AgentflowRevision;
+        else
+            properties.Remove(AgwMessageClassifier.AgentflowRevisionKey);
     }
 
     private static ChatMessage CreateInput(AgwUserInput input, Guid id, DateTimeOffset createdAt)

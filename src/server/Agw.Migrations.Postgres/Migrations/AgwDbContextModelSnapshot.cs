@@ -2034,6 +2034,10 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("lease_epoch");
 
+                    b.Property<string>("MessageType")
+                        .HasColumnType("text")
+                        .HasColumnName("message_type");
+
                     b.Property<string>("PayloadJson")
                         .IsRequired()
                         .HasColumnType("text")
@@ -2065,6 +2069,9 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasIndex("TurnId", "TurnSequence")
                         .IsUnique()
                         .HasDatabaseName("ix_execution_stream_entry_turn_id_turn_sequence");
+
+                    b.HasIndex("TurnId", "MessageType", "TurnSequence")
+                        .HasDatabaseName("ix_execution_stream_entry_turn_id_message_type_turn_sequence");
 
                     b.ToTable("execution_stream_entry", (string)null);
                 });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { AiMessage } from "@agw/api";
-import { createUserMessage } from "@agw/chat-core";
+import { createUserMessage, EMPTY_AGENTFLOW_NODE_RUN_STATE } from "@agw/chat-core";
 import {
   getTurnFinishedStatus,
   type ChatEvent,
@@ -241,6 +241,155 @@ function createTurnFinishedMessage(): AiMessage {
   };
 }
 
+const runningNodeStatus = {
+  type: "agentflow-node-status",
+  nodeId: "a",
+  status: "running",
+} as const;
+
+function attachNodeRun() {
+  let clientHandlers!: ExecutionHubHandlers;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  const handle = manager.attach(sessionKey, { onMessage() {} });
+  return { manager, handle, clientHandlers };
+}
+
+function startNodeRun(clientHandlers: ExecutionHubHandlers): void {
+  clientHandlers.onMessage({
+    messageId: "flow-turn-start",
+    role: "system",
+    contents: [],
+    additionalProperties: {
+      type: "agw-turn-start",
+      turnId: "flow-turn",
+      agentId: "flow",
+      agentType: "agentflow",
+      agentflowRevision: 3,
+    },
+  });
+}
+
+test("node run state keeps updating while no Chat is attached", () => {
+  const { manager, handle, clientHandlers } = attachNodeRun();
+  startNodeRun(clientHandlers);
+  handle.detach();
+  const versions: number[] = [];
+  const unsubscribe = manager.subscribeAgentflowNodeRuns(() => {
+    versions.push(manager.getAgentflowNodeRunVersion());
+  });
+  const version = manager.getAgentflowNodeRunVersion();
+  clientHandlers.onStatus?.(runningNodeStatus);
+
+  const run = manager.getAgentflowNodeRun(sessionKey);
+  assert.equal(run.agentflowRevision, 3);
+  assert.deepEqual(run.statusByNodeId, { a: "running" });
+  assert.deepEqual(versions, [version + 1]);
+  unsubscribe();
+});
+
+test("streaming deltas do not bump the node run version", () => {
+  const { manager, clientHandlers } = attachNodeRun();
+  startNodeRun(clientHandlers);
+  const version = manager.getAgentflowNodeRunVersion();
+
+  for (let index = 0; index < 250; index++) {
+    clientHandlers.onMessage({
+      messageId: "assistant",
+      role: "assistant",
+      contents: [{ type: "TextContent", content: String(index) }],
+    });
+  }
+
+  assert.equal(manager.getAgentflowNodeRunVersion(), version);
+});
+
+for (const [event, description] of [
+  ["onReconnected", "a reconnect without a running turn"],
+  ["onClose", "a connection close"],
+] as const) {
+  test(`${description} finishes the node run`, () => {
+    const { manager, clientHandlers } = attachNodeRun();
+    startNodeRun(clientHandlers);
+    clientHandlers.onStatus?.(runningNodeStatus);
+
+    clientHandlers[event]?.();
+
+    const run = manager.getAgentflowNodeRun(sessionKey);
+    assert.equal(run.turnActive, false);
+    assert.deepEqual(run.statusByNodeId, {});
+  });
+}
+
+test("a snapshot status sets the turn when no turn start was seen", () => {
+  const { manager, clientHandlers } = attachNodeRun();
+  clientHandlers.onStatus?.({
+    type: "agentflow-node-snapshot",
+    turnId: "flow-turn",
+    agentflowId: "flow",
+    agentflowRevision: 3,
+    statuses: [runningNodeStatus],
+  });
+
+  const run = manager.getAgentflowNodeRun(sessionKey);
+  assert.equal(run.turnId, "flow-turn");
+  assert.equal(run.agentflowId, "flow");
+  assert.equal(run.agentflowRevision, 3);
+  assert.equal(run.turnActive, true);
+  assert.deepEqual(run.statusByNodeId, { a: "running" });
+});
+
+test("an active Turn retains only the latest cumulative node snapshot", async () => {
+  const { manager, clientHandlers } = attachNodeRun();
+  let turnId = "";
+  const handle = manager.attach(sessionKey, {
+    onMessage() {},
+    onSubmissionStarted: ({ item }) => {
+      turnId = item.turnId;
+    },
+  });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  assert.equal(handle.submit(createSubmission("run")), "started");
+  assert.ok(turnId);
+
+  const prior: ExecutionStatusEvent = {
+    type: "agentflow-node-snapshot",
+    turnId,
+    agentflowId: "flow",
+    agentflowRevision: 3,
+    statuses: [runningNodeStatus],
+  };
+  const live: ExecutionStatusEvent = {
+    type: "mode-change-failed",
+    agentId: "agent",
+    mode: "review",
+    message: null,
+  };
+  const latest: ExecutionStatusEvent = {
+    ...prior,
+    statuses: [runningNodeStatus, { ...runningNodeStatus, status: "completed" }],
+  };
+  clientHandlers.onStatus?.(prior);
+  clientHandlers.onStatus?.(live);
+  clientHandlers.onStatus?.(latest);
+  clientHandlers.onStatus?.(latest);
+
+  assert.deepEqual(handle.getActiveTurnSnapshot()?.statuses, [live, latest]);
+});
+
+test("discard removes the node run state", async () => {
+  const { manager, clientHandlers } = attachNodeRun();
+  startNodeRun(clientHandlers);
+  const version = manager.getAgentflowNodeRunVersion();
+
+  await manager.discard(sessionKey);
+
+  assert.equal(manager.getAgentflowNodeRun(sessionKey), EMPTY_AGENTFLOW_NODE_RUN_STATE);
+  assert.equal(manager.getAgentflowNodeRunVersion(), version + 1);
+});
+
 test("manager marks a restored durable execution active", async () => {
   const manager = new ExecutionSessionManager(() => ({
     ...createExecutionClient(),
@@ -298,7 +447,13 @@ test("manager restores the complete active turn instead of replaying capped delt
     role: "system",
     author: "$agw",
     contents: [],
-    additionalProperties: { type: "agw-turn-start", turnId, streamingScopeId: turnId },
+    additionalProperties: {
+      type: "agw-turn-start",
+      turnId,
+      streamingScopeId: turnId,
+      agentId: "agent-1",
+      agentType: "agent",
+    },
   });
 
   const deltas = Array.from({ length: 250 }, (_, index) => String(index % 10));
@@ -588,7 +743,12 @@ function createTurnStartMessage(): AiMessage {
     role: "system",
     author: "$agw",
     contents: [],
-    additionalProperties: { type: "agw-turn-start" },
+    additionalProperties: {
+      type: "agw-turn-start",
+      turnId: "turn-1",
+      agentId: "agent-1",
+      agentType: "agent",
+    },
   };
 }
 
@@ -716,6 +876,7 @@ function createTurnLifecycleMessage(
       type,
       turnId,
       conversationId: "conversation-1",
+      ...(type === "agw-turn-start" ? { agentId: "agent-1", agentType: "agent" } : {}),
       ...(status ? { status } : {}),
     },
   };

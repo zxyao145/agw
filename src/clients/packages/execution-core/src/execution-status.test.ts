@@ -1,9 +1,51 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ExecutionMessage } from "@agw/execution-types";
-import { getExecutionStatus } from "./execution-status";
+import { getExecutionStatus, parseAgentflowNodeSnapshot } from "./execution-status";
 
 const message: ExecutionMessage = { messageId: "message", contents: [] };
+
+const snapshot = {
+  turnId: "turn-1",
+  agentflowId: "flow-1",
+  agentflowRevision: 3,
+  statuses: [
+    { nodeId: "agent", status: "running", interactionId: null },
+    { nodeId: "gate", status: "waiting", interactionId: "approval" },
+  ],
+};
+
+test("parseAgentflowNodeSnapshot accepts a snapshot", () => {
+  assert.deepEqual(parseAgentflowNodeSnapshot(snapshot), {
+    type: "agentflow-node-snapshot",
+    ...snapshot,
+    statuses: [
+      { type: "agentflow-node-status", nodeId: "agent", status: "running" },
+      {
+        type: "agentflow-node-status",
+        nodeId: "gate",
+        status: "waiting",
+        interactionId: "approval",
+      },
+    ],
+  });
+});
+
+test("parseAgentflowNodeSnapshot rejects malformed snapshots", () => {
+  for (const invalid of [
+    null,
+    { ...snapshot, turnId: undefined },
+    { ...snapshot, agentflowId: "" },
+    { ...snapshot, agentflowRevision: 0 },
+    { ...snapshot, statuses: "running" },
+    { ...snapshot, statuses: [null] },
+    { ...snapshot, statuses: [{ nodeId: "", status: "running" }] },
+    { ...snapshot, statuses: [{ nodeId: "gate", status: "paused" }] },
+    { ...snapshot, statuses: [{ nodeId: "gate", status: "waiting", interactionId: 1 }] },
+  ]) {
+    assert.throws(() => parseAgentflowNodeSnapshot(invalid), TypeError);
+  }
+});
 
 test("getExecutionStatus reads node statuses and their interaction IDs", () => {
   const status = { type: "agentflow-node-status", nodeId: "gate", status: "waiting" };

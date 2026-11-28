@@ -83,9 +83,6 @@ public sealed class NotificationStreamHostedService : BackgroundService
                     }
                     _streamHub.AdvanceWatermark(batch.UserId, _timeProvider.GetUtcNow());
                 }
-
-                if (batches.Count == 0)
-                    _logger.LogDebug("Notification stream poll has no active subscribers.");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

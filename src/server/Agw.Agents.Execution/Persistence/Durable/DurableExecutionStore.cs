@@ -154,6 +154,18 @@ internal sealed class DurableExecutionStore
         return ToSnapshot(record);
     }
 
+    internal Task<bool> IsTurnActiveAsync(
+        Guid projectId,
+        Guid conversationId,
+        Guid turnId,
+        CancellationToken cancellationToken
+    ) =>
+        _dbContext
+            .DurableExecutions.AsNoTracking()
+            .InConversation(projectId, conversationId, UserInfoUtil.RequiredUserId)
+            .Where(DurableExecutionQueries.Active)
+            .AnyAsync(item => item.Id == turnId, cancellationToken);
+
     /// <summary>
     /// 读取刚领取的记录；清单或所属范围无效的记录被隔离并返回空。
     /// Reads a just-claimed record; a record with an invalid manifest or scope is quarantined and null is returned.

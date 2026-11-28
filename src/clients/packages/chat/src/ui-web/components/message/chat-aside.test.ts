@@ -14,6 +14,7 @@ test("todo description appears in a tooltip when its title receives focus", asyn
       null,
       React.createElement(ChatAside, {
         usage: EMPTY_TOKEN_USAGE,
+        agentflow: null,
         todos: [
           {
             id: "todo-1",

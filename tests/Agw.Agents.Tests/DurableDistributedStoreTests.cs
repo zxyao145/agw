@@ -1,4 +1,5 @@
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Messaging.Durable;
@@ -26,6 +27,80 @@ public sealed class DurableDistributedStoreTests : IDisposable
     public static bool RedisEnabled => !string.IsNullOrWhiteSpace(DurableTestConnections.RedisConnectionString);
 
     public void Dispose() => _user.Dispose();
+
+    [Fact(SkipUnless = nameof(PostgresEnabled), Skip = "Requires an isolated PostgreSQL test server.")]
+    public async Task Postgres_AppendAsync_MixedMessages_StoresMessageTypes()
+    {
+        await using var kit = await TurnPersistenceTestKit.CreatePostgresAsync(
+            DurableTestConnections.PostgresConnectionString!
+        );
+        var turnId = await AcceptQueuedAsync(kit);
+
+        await AppendMixedEventsAsync(kit, turnId);
+
+        var records = await kit.ReadEventsAsync(turnId);
+        Assert.Equal(
+            [
+                AgwMessageTypes.TurnStart,
+                AgwMessageTypes.AgentflowNodeStatus,
+                null,
+                AgwMessageTypes.AgentflowNodeStatus,
+                AgwMessageTypes.TurnFinished,
+            ],
+            records.Select(record => record.MessageType)
+        );
+    }
+
+    [Fact(SkipUnless = nameof(PostgresEnabled), Skip = "Requires an isolated PostgreSQL test server.")]
+    public async Task Postgres_ReadByTypesAsync_MixedEvents_ReturnsRequestedTypesInSequence()
+    {
+        await using var kit = await TurnPersistenceTestKit.CreatePostgresAsync(
+            DurableTestConnections.PostgresConnectionString!
+        );
+        var turnId = await AcceptQueuedAsync(kit);
+        await AppendMixedEventsAsync(kit, turnId);
+        await using var scope = kit.Services.CreateAsyncScope();
+
+        var events = await DurableExecutionEvents.ReadByTypesAsync(
+            scope.ServiceProvider.GetRequiredService<IAgentsDbContext>(),
+            turnId,
+            [AgwMessageTypes.TurnStart, AgwMessageTypes.AgentflowNodeStatus],
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal([1L, 2L, 4L], events.Select(entry => entry.Sequence));
+        Assert.Equal(
+            [AgwMessageTypes.TurnStart, AgwMessageTypes.AgentflowNodeStatus, AgwMessageTypes.AgentflowNodeStatus],
+            events.Select(entry => AgwMessageClassifier.GetMessageType(entry.Message))
+        );
+    }
+
+    [Fact(
+        SkipUnless = nameof(PostgresEnabled),
+        Skip = "Configure an isolated PostgreSQL server with CREATE DATABASE permission in .scratch/postgres-tests.json."
+    )]
+    public async Task Postgres_ReadAgentflowNodeStatusesAsync_TwoActiveAgentTurns_ReturnsNull()
+    {
+        await using var kit = await TurnPersistenceTestKit.CreatePostgresAsync(
+            DurableTestConnections.PostgresConnectionString!
+        );
+        var task = await kit.SeedConversationAsync();
+        var runningTurnId = await AcceptQueuedAsync(kit, task);
+        await ClaimAsync(kit, runningTurnId, "worker-a", TimeSpan.FromSeconds(30));
+        var queuedTurnId = await AcceptQueuedAsync(kit, task);
+
+        Assert.NotEqual(runningTurnId, queuedTurnId);
+        Assert.Equal(DurableExecutionStatus.Running, (await kit.ReadExecutionAsync(runningTurnId)).Status);
+        Assert.Equal(DurableExecutionStatus.Queued, (await kit.ReadExecutionAsync(queuedTurnId)).Status);
+        Assert.Null(
+            await kit.Coordinator.ReadAgentflowNodeStatusesAsync(
+                task.ProjectId,
+                task.ProjectConversationId,
+                runningTurnId,
+                TestContext.Current.CancellationToken
+            )
+        );
+    }
 
     [Fact(
         SkipUnless = nameof(PostgresEnabled),
@@ -259,6 +334,49 @@ public sealed class DurableDistributedStoreTests : IDisposable
         Assert.Equal(0, beforeDeadline.TotalTokenCount);
         Assert.Empty(afterDeadline.UnsettledTurnIds);
         Assert.Equal(40, afterDeadline.TotalTokenCount);
+    }
+
+    private static Task AppendMixedEventsAsync(TurnPersistenceTestKit kit, Guid turnId)
+    {
+        var scopeId = turnId.ToString("D");
+        var running = AgentflowMessageMapper.CreateNodeStatusMessage(
+            "input",
+            AgwAgentflowNodeStatus.Running,
+            null,
+            scopeId
+        );
+        var completed = AgentflowMessageMapper.CreateNodeStatusMessage(
+            "input",
+            AgwAgentflowNodeStatus.Completed,
+            null,
+            scopeId
+        );
+        var text = new AgwMessage(
+            Guid.CreateVersion7().ToString("D"),
+            "agent",
+            AiRole.Assistant,
+            [new AgwTextContent { Content = "text" }]
+        );
+        return kit.Leases.RunLockedAsync(
+            turnId,
+            (services, token) =>
+                DurableExecutionEvents.AppendAsync(
+                    services.GetRequiredService<IAgentsDbContext>(),
+                    services.GetRequiredService<IDurableExecutionEventSequence>(),
+                    turnId,
+                    leaseEpoch: 0,
+                    segmentIndex: 0,
+                    [
+                        PendingExecutionEvent.Create(running),
+                        PendingExecutionEvent.Create(text),
+                        PendingExecutionEvent.Create(completed),
+                        PendingExecutionEvent.Create(TurnMessageFactory.CreateFinished(AgwTurnStatus.Completed)),
+                    ],
+                    lookupCommitted: false,
+                    token
+                ),
+            TestContext.Current.CancellationToken
+        );
     }
 
     private static async Task<Guid> AcceptQueuedAsync(

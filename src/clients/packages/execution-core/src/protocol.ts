@@ -135,6 +135,31 @@ export function isTurnStartMessage(message: ExecutionMessage): boolean {
   return message.additionalProperties?.type === TURN_START_MESSAGE_TYPE;
 }
 
+export type TurnTarget = {
+  turnId: string;
+  agentId: string;
+  agentType: "agent" | "agentflow";
+  agentflowRevision: number | null;
+};
+
+/** 读取 Turn 开始消息中的目标。Reads the target of a turn start message. */
+export function getTurnTarget(message: ExecutionMessage): TurnTarget | null {
+  const properties = message.additionalProperties;
+  if (properties?.type !== TURN_START_MESSAGE_TYPE) return null;
+
+  const turnId = readNonEmptyString(properties.turnId);
+  const agentId = readNonEmptyString(properties.agentId);
+  const { agentType, agentflowRevision } = properties;
+  if (!turnId || !agentId || (agentType !== "agent" && agentType !== "agentflow")) {
+    throw new TypeError("Invalid agw-turn-start target.");
+  }
+  if (agentType === "agent") return { turnId, agentId, agentType, agentflowRevision: null };
+  if (!isPositiveSafeInteger(agentflowRevision)) {
+    throw new TypeError("Invalid agw-turn-start agentflowRevision.");
+  }
+  return { turnId, agentId, agentType, agentflowRevision };
+}
+
 /** 读取消息所属的 Turn 与它在 Turn 内的序号；不属于 Turn 的消息返回 null。 */
 export function getTurnPosition(message: ExecutionMessage): TurnPosition | null {
   const turnId = message.additionalProperties?.turnId;
@@ -194,8 +219,12 @@ export type SteerReturned = {
   reason: string | null;
 };
 
-function readNonEmptyString(value: unknown): string | null {
+export function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+export function isPositiveSafeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
 /** 读取 steer-delivered 控制消息；其他消息返回 null。Reads a steer-delivered control message; other messages return null. */

@@ -963,7 +963,8 @@ public sealed class AgentflowCheckpointStore
                 checkpointRecord.ProjectConversationId,
                 checkpointRecord.AgentflowId,
                 AgentRuntimeType.Agentflow,
-                resumeTurnId.ToString("D")
+                resumeTurnId.ToString("D"),
+                checkpointRecord.AgentflowRevision
             )
         );
         dbContext.DurableExecutionEvents.Add(
@@ -974,6 +975,7 @@ public sealed class AgentflowCheckpointStore
                 TurnSequence = 1,
                 LeaseEpoch = 0,
                 SegmentIndex = 0,
+                MessageType = AgwMessageClassifier.GetMessageType(start),
                 PayloadJson = JsonUtil.Serialize(start),
                 CreateBy = userId,
                 UpdateBy = userId,

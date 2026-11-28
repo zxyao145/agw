@@ -961,6 +961,9 @@ importers:
       '@agw/chat':
         specifier: workspace:*
         version: link:../chat
+      '@agw/chat-core':
+        specifier: workspace:*
+        version: link:../chat-core
       '@agw/components':
         specifier: workspace:*
         version: link:../components

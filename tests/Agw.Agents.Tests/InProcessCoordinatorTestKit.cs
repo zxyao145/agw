@@ -233,12 +233,13 @@ internal sealed class TurnAgent : AIAgent, IAsyncDisposable
             ExecutionRunOptions.Read(options)
                 ?? throw new InvalidOperationException("The Agent call carries no execution data.")
         );
+        var heldTurn = _owner.HoldTurnOpen ? _owner.HeldTurn : null;
         _owner.TurnStarts.Release();
-        if (_owner.HoldTurnOpen)
+        if (heldTurn is not null)
         {
             try
             {
-                await _owner.HeldTurn.WaitAsync(cancellationToken);
+                await heldTurn.WaitAsync(cancellationToken);
             }
             catch (OperationCanceledException)
             {

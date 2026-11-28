@@ -12,7 +12,8 @@ public class TurnPipelineTests
         Guid.CreateVersion7(),
         Guid.CreateVersion7(),
         AgentRuntimeType.Agent,
-        "input-1"
+        "input-1",
+        0
     );
 
     [Fact]

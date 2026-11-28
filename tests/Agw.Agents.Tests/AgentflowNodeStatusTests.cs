@@ -3,9 +3,11 @@ using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.InProcess;
+using Agw.Agents.Execution.Turns;
 using Agw.Shared.Data.Entities.Agentflows;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -13,6 +15,47 @@ namespace Agw.Agents.Tests;
 
 public partial class AgentflowTurnExecutorTests
 {
+    [Fact]
+    public async Task Read_LinearAgentflowOutput_ReturnsEveryStatusInSequence()
+    {
+        var fixture = CreateCharacterizationFixture(
+            [AgentflowNodeKind.PromptAdapter, AgentflowNodeKind.Agent, AgentflowNodeKind.Output],
+            _ => new ScriptedAgent(["answer"])
+        );
+        var output = await CollectAsync(
+            fixture.Service.ExecuteStreamingAsync(fixture.Flow.Id, "input", TestContext.Current.CancellationToken)
+        );
+        var turnId = Guid.CreateVersion7();
+        var start = TurnMessageFactory.CreateStarted(
+            new TurnEnvelope(
+                turnId,
+                Guid.CreateVersion7(),
+                fixture.Flow.Id,
+                AgentRuntimeType.Agentflow,
+                turnId.ToString("D"),
+                1
+            )
+        );
+
+        var snapshot = AgentflowNodeStatusSnapshotReader.Read([start, .. output]);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal(turnId, snapshot.TurnId);
+        Assert.Equal(fixture.Flow.Id, snapshot.AgentflowId);
+        Assert.Equal(1, snapshot.AgentflowRevision);
+        Assert.Equal(
+            output
+                .Where(message => AgwMessageClassifier.GetMessageType(message) == AgwMessageTypes.AgentflowNodeStatus)
+                .Select(message =>
+                    (
+                        message.AdditionalProperties!["nodeId"]?.ToString(),
+                        message.AdditionalProperties["status"]?.ToString()
+                    )
+                ),
+            snapshot.Statuses.Select(item => (item.NodeId, item.Status))
+        );
+    }
+
     [Fact]
     public async Task RunAsync_LinearAgentflow_WritesRunningAndCompletedForEveryNode()
     {

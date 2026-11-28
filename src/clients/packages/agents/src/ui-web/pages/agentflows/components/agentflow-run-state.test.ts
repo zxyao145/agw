@@ -32,14 +32,32 @@ function message(messageId: string, properties: Record<string, unknown>, content
   };
 }
 
+const start = message("start", {
+  type: "agw-turn-start",
+  turnId: "turn-1",
+  agentId: "flow-1",
+  agentType: "agentflow",
+  agentflowRevision: 1,
+});
+
 test("turn start clears the state", () => {
   const started = applyAgentflowRunMessage(
-    { ...EMPTY_RUN_STATE, statusByNodeId: { agent: "completed" } },
-    message("start", { type: "agw-turn-start" }),
+    {
+      ...EMPTY_RUN_STATE,
+      statusByNodeId: { agent: "completed" },
+      latestOutputByNodeId: { agent: { messageId: "output", text: "response" } },
+      nodeIdByMessageId: { output: "agent" },
+    },
+    start,
   );
 
   assert.deepEqual(started.statusByNodeId, {});
+  assert.deepEqual(started.latestOutputByNodeId, {});
+  assert.deepEqual(started.nodeIdByMessageId, {});
   assert.equal(started.turnActive, true);
+  assert.equal(started.turnId, "turn-1");
+  assert.equal(started.agentflowId, "flow-1");
+  assert.equal(started.agentflowRevision, 1);
 });
 
 test("the last status of a node wins", () => {
@@ -80,7 +98,10 @@ test("a late completed status does not hide waiting", () => {
 });
 
 test("turn finish removes running and waiting", () => {
-  let state = applyAgentflowRunStatus(EMPTY_RUN_STATE, status("agent", "running"));
+  let state = applyAgentflowRunStatus(
+    applyAgentflowRunMessage(EMPTY_RUN_STATE, start),
+    status("agent", "running"),
+  );
   state = applyAgentflowRunStatus(state, status("gate", "waiting", "interaction-1"));
   state = applyAgentflowRunMessage(state, message("finish", { type: "agw-turn-finished" }));
 

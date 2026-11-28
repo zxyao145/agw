@@ -835,6 +835,92 @@ public class ExecutionConnectionTests
     }
 
     [Fact]
+    public async Task GetInProcessAgentflowNodeStatusesAsync_RunningAgentTurn_ReturnsNull()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
+        await using var registry = new ExecutionConnectionRegistry(
+            null!,
+            null!,
+            new TestLifetime(),
+            NullLoggerFactory.Instance
+        );
+        GetConnections(registry)["original"] = fixture.Connection;
+        await fixture.Context.StartTurnAsync(await fixture.CreateExecCommandAsync(), token);
+        await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, token);
+
+        var snapshot = await registry.GetInProcessAgentflowNodeStatusesAsync(
+            fixture.Context.ProjectId!.Value,
+            fixture.Context.ConversationId!.Value,
+            fixture.Connection.UserId,
+            "reloaded",
+            token
+        );
+
+        Assert.Null(snapshot);
+        fixture.Runtimes.ReleaseHeldTurns();
+        await fixture.Context.WhenIdleAsync().WaitAsync(TurnTimeout, token);
+    }
+
+    [Fact]
+    public async Task GetInProcessAgentflowNodeStatusesAsync_ForeignUser_ReturnsNull()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
+        await using var registry = new ExecutionConnectionRegistry(
+            null!,
+            null!,
+            new TestLifetime(),
+            NullLoggerFactory.Instance
+        );
+        GetConnections(registry)["original"] = fixture.Connection;
+        await fixture.Context.StartTurnAsync(await fixture.CreateExecCommandAsync(), token);
+        await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, token);
+
+        var snapshot = await registry.GetInProcessAgentflowNodeStatusesAsync(
+            fixture.Context.ProjectId!.Value,
+            fixture.Context.ConversationId!.Value,
+            "another-user",
+            "reloaded",
+            token
+        );
+
+        Assert.Null(snapshot);
+        fixture.Runtimes.ReleaseHeldTurns();
+        await fixture.Context.WhenIdleAsync().WaitAsync(TurnTimeout, token);
+    }
+
+    [Fact]
+    public async Task GetInProcessAgentflowNodeStatusesAsync_NoActiveTurn_ReturnsNull()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var fixture = await CreateFixtureAsync();
+        await using var registry = new ExecutionConnectionRegistry(
+            null!,
+            null!,
+            new TestLifetime(),
+            NullLoggerFactory.Instance
+        );
+        GetConnections(registry)["original"] = fixture.Connection;
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await fixture.Context.ApplySettingsAsync(
+            TurnPersistenceTestKit.CreateSettings(projectId, conversationId),
+            token
+        );
+
+        var snapshot = await registry.GetInProcessAgentflowNodeStatusesAsync(
+            projectId,
+            conversationId,
+            fixture.Connection.UserId,
+            "reloaded",
+            token
+        );
+
+        Assert.Null(snapshot);
+    }
+
+    [Fact]
     public async Task FindInProcessExecution_OwnActiveConversation_ReturnsOriginalConnectionOnly()
     {
         await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
@@ -1081,7 +1167,7 @@ public class ExecutionConnectionTests
         );
     }
 
-    private static ConcurrentDictionary<string, ExecutionConnection> GetConnections(
+    internal static ConcurrentDictionary<string, ExecutionConnection> GetConnections(
         ExecutionConnectionRegistry registry
     ) =>
         (ConcurrentDictionary<string, ExecutionConnection>)

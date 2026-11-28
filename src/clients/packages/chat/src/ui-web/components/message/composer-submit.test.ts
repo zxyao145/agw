@@ -2,11 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  ALTERNATE_SUBMIT_SHORTCUT,
   getComposerPlaceholder,
   getSteerRejectionMessage,
   getSubmitButtonLabel,
-  getSubmitShortcutHint,
   resolveComposerKey,
   resolveComposerSubmit,
   type ComposerSubmitInput,
@@ -38,7 +36,6 @@ test("an idle composer has only the plain send", () => {
       assert.equal(state.action, "send");
       assert.equal(state.alternateMode, null);
       assert.equal(state.alternateBlockedReason, null);
-      assert.equal(state.fallbackNote, null);
     }
   }
 });
@@ -62,7 +59,6 @@ test("a running turn with content and the Queue default queues and offers Steer"
     primaryMode: "queue",
     alternateMode: "steer",
     alternateBlockedReason: null,
-    fallbackNote: null,
   });
 });
 
@@ -74,30 +70,24 @@ test("a running turn with content and the Steer default steers and offers Queue"
     primaryMode: "steer",
     alternateMode: "queue",
     alternateBlockedReason: null,
-    fallbackNote: null,
   });
 });
 
-test("an unsupported target disables Steer in the menu and keeps the Queue default quiet", () => {
+test("an unsupported target disables Steer in the menu with a Queue default", () => {
   const state = resolve({ preferredMode: "queue", steer: unsupported });
 
   assert.equal(state.primaryMode, "queue");
   assert.equal(state.alternateMode, "steer");
   assert.equal(state.alternateBlockedReason, "Claude Code cannot be steered.");
-  assert.equal(state.fallbackNote, null);
 });
 
-test("a Steer default on an unsupported target falls back to Queue and says why", () => {
+test("a Steer default on an unsupported target falls back to Queue", () => {
   const state = resolve({ preferredMode: "steer", steer: unsupported });
 
   assert.equal(state.action, "split");
   assert.equal(state.primaryMode, "queue");
   assert.equal(state.alternateMode, "steer");
   assert.equal(state.alternateBlockedReason, "Claude Code cannot be steered.");
-  assert.match(
-    state.fallbackNote ?? "",
-    /Steering is unavailable.*Claude Code cannot be steered\./u,
-  );
 });
 
 test("Enter uses the primary mode and the alternate shortcut uses the other mode", () => {
@@ -147,22 +137,6 @@ test("the alternate shortcut does nothing when idle or when the input is empty",
 test("each mode has its own placeholder and button label", () => {
   assert.notEqual(getComposerPlaceholder("queue"), getComposerPlaceholder("steer"));
   assert.notEqual(getSubmitButtonLabel("queue"), getSubmitButtonLabel("steer"));
-});
-
-test("the hint row names the shortcut of both modes while a turn runs", () => {
-  assert.equal(
-    getSubmitShortcutHint(resolve({ preferredMode: "queue" })),
-    `Enter to queue, ${ALTERNATE_SUBMIT_SHORTCUT} to steer`,
-  );
-  assert.equal(
-    getSubmitShortcutHint(resolve({ preferredMode: "steer" })),
-    `Enter to steer, ${ALTERNATE_SUBMIT_SHORTCUT} to queue`,
-  );
-  assert.equal(
-    getSubmitShortcutHint(resolve({ hasContent: false })),
-    `Enter to queue, ${ALTERNATE_SUBMIT_SHORTCUT} to steer`,
-  );
-  assert.equal(getSubmitShortcutHint(resolve({ isExecuting: false })), null);
 });
 
 test("a rejected Steer shows the server's explanation without the SignalR prefix and code", () => {

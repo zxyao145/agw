@@ -39,7 +39,6 @@ import {
   getComposerPlaceholder,
   getSendOptionLabel,
   getSubmitButtonLabel,
-  getSubmitShortcutHint,
   PRIMARY_SUBMIT_SHORTCUT,
   resolveComposerKey,
   resolveComposerSubmit,
@@ -176,7 +175,6 @@ function UserInputRoot({
     }
     onSend();
   };
-  const shortcutHint = submitState ? getSubmitShortcutHint(submitState) : null;
   // 输入框为空时才显示占位文字，这时按钮是停止，所以占位文字跟随执行中的主方式而不是按钮状态。
   // The placeholder shows only while the input is empty, when the button is Stop, so it follows the running turn's primary mode and not the button state.
   const effectivePlaceholder =
@@ -294,12 +292,8 @@ function UserInputRoot({
         </div>
       </div>
       {/* Helper text */}
-      {help.length > 0 || shortcutHint || submitState?.fallbackNote ? (
-        <div className="grid shrink-0 text-xs text-muted-foreground mt-2">
-          {help}
-          {shortcutHint ? <p>{shortcutHint}</p> : null}
-          {submitState?.fallbackNote ? <p role="status">{submitState.fallbackNote}</p> : null}
-        </div>
+      {help.length > 0 ? (
+        <div className="grid shrink-0 text-xs text-muted-foreground mt-2">{help}</div>
       ) : null}
     </div>
   );

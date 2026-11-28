@@ -5,6 +5,7 @@ using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Turns;
 using Agw.Agents.Execution.Agents.Composition;
@@ -185,6 +186,36 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
             ? await _leases.CreateGuard(lease, ownership).RunAsync(WriteAsync, cancellationToken).ConfigureAwait(false)
             : await _leases.RunLockedAsync(request.TurnId, WriteAsync, cancellationToken).ConfigureAwait(false);
         await PublishAsync(request.TurnId, request.UserId, committed).ConfigureAwait(false);
+    }
+
+    internal async Task<AgentflowNodeStatusSnapshot?> ReadAgentflowNodeStatusesAsync(
+        Guid projectId,
+        Guid conversationId,
+        Guid turnId,
+        CancellationToken cancellationToken
+    )
+    {
+        if (projectId == Guid.Empty || conversationId == Guid.Empty || turnId == Guid.Empty)
+            throw new AgwException(ErrorCodes.InvalidParam);
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var isActive = await services
+            .GetRequiredService<DurableExecutionStore>()
+            .IsTurnActiveAsync(projectId, conversationId, turnId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!isActive)
+            return null;
+
+        var entries = await DurableExecutionEvents
+            .ReadByTypesAsync(
+                services.GetRequiredService<IAgentsDbContext>(),
+                turnId,
+                [AgwMessageTypes.TurnStart, AgwMessageTypes.AgentflowNodeStatus],
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return AgentflowNodeStatusSnapshotReader.Read(entries.Select(entry => entry.Message));
     }
 
     public async Task<DurableExecutionOutcome> GetOutcomeAsync(
@@ -885,7 +916,8 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
             manifest.Task.ProjectConversationId,
             manifest.AgentId,
             manifest.AgentType,
-            manifest.StreamingScopeId ?? manifest.TurnId.ToString("D")
+            manifest.StreamingScopeId ?? manifest.TurnId.ToString("D"),
+            manifest.AgentflowRevision
         );
 
     /// <summary>

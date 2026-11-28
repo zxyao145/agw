@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Contracts;
@@ -23,6 +24,96 @@ public sealed class TurnAcceptanceWriterSnapshotTests
     private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(15);
 
     public static bool PostgresEnabled => !string.IsNullOrWhiteSpace(DurableTestConnections.PostgresConnectionString);
+
+    [Fact(SkipUnless = nameof(PostgresEnabled), Skip = "Requires an isolated PostgreSQL test server.")]
+    public async Task ReadAgentflowNodeStatusesAsync_PostgresActiveThenInterrupted_ReadsOnlyWhileActive()
+    {
+        using var userScope = TurnPersistenceTestKit.EnterUser();
+        var token = TestContext.Current.CancellationToken;
+        await using var kit = await TurnPersistenceTestKit.CreatePostgresAsync(
+            DurableTestConnections.PostgresConnectionString!
+        );
+        var task = await kit.SeedConversationAsync();
+        var agentflowId = Guid.CreateVersion7();
+        await kit.SeedAgentflowAsync(agentflowId);
+        var turnId = Guid.CreateVersion7();
+        await AcceptDurableAgentflowAsync(kit, task, agentflowId, turnId, token);
+        await AppendRunningNodeStatusAsync(kit, turnId, token);
+
+        var snapshot = await ReadSnapshotAsync();
+
+        Assert.NotNull(snapshot);
+        Assert.Equal(turnId, snapshot.TurnId);
+        Assert.Equal(agentflowId, snapshot.AgentflowId);
+        Assert.Equal(1, snapshot.AgentflowRevision);
+        Assert.Equal(
+            new AgentflowNodeStatusEntry("input", AgwAgentflowNodeStatus.Running, null),
+            Assert.Single(snapshot.Statuses)
+        );
+        var records = await kit.ReadEventsAsync(turnId);
+        Assert.Equal(
+            [AgwMessageTypes.TurnStart, AgwMessageTypes.AgentflowNodeStatus],
+            records.Select(record => record.MessageType)
+        );
+
+        Assert.True(await kit.Coordinator.InterruptAsync(turnId, TurnPersistenceTestKit.UserId, reason: null, token));
+        Assert.Null(await ReadSnapshotAsync());
+
+        Task<AgentflowNodeStatusSnapshot?> ReadSnapshotAsync() =>
+            kit.Coordinator.ReadAgentflowNodeStatusesAsync(task.ProjectId, task.ProjectConversationId, turnId, token);
+    }
+
+    private static async Task AcceptDurableAgentflowAsync(
+        TurnPersistenceTestKit kit,
+        AgentExecutionTask task,
+        Guid agentflowId,
+        Guid turnId,
+        CancellationToken token
+    )
+    {
+        await using var scope = kit.Services.CreateAsyncScope();
+        var writer = scope.ServiceProvider.GetRequiredService<ITurnAcceptanceWriter>();
+        await writer.AcceptAsync(
+            CreateWrite(
+                task,
+                agentflowId,
+                turnId,
+                (snapshot, _) =>
+                    Task.FromResult(
+                        new TurnAcceptanceRegistration(
+                            [],
+                            CreateDurableRegistration(kit, task, agentflowId, turnId, snapshot!)
+                        )
+                    )
+            ),
+            token
+        );
+    }
+
+    private static Task AppendRunningNodeStatusAsync(TurnPersistenceTestKit kit, Guid turnId, CancellationToken token)
+    {
+        var status = AgentflowMessageMapper.CreateNodeStatusMessage(
+            "input",
+            AgwAgentflowNodeStatus.Running,
+            null,
+            Guid.CreateVersion7().ToString("D")
+        );
+        return kit.Leases.RunLockedAsync(
+            turnId,
+            (services, ct) =>
+                DurableExecutionEvents.AppendAsync(
+                    services.GetRequiredService<IAgentsDbContext>(),
+                    services.GetRequiredService<IDurableExecutionEventSequence>(),
+                    turnId,
+                    leaseEpoch: 0,
+                    segmentIndex: 0,
+                    [PendingExecutionEvent.Create(status)],
+                    lookupCommitted: false,
+                    ct
+                ),
+            token
+        );
+    }
 
     [Fact]
     public async Task TurnAcceptanceWriter_AcceptAsync_UsesOneSnapshotForRootAndDependencies()

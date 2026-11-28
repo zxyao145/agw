@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Commands.Checkpoint;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
@@ -137,6 +138,17 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     /// The latest in-process turn on this connection has written its finish message, which this connection delivers to its own client; only disposal and after-turn actions remain.
     /// </summary>
     internal bool HasWrittenTurnFinish => _turnBroadcast is { IsFinished: true };
+
+    internal AgentflowNodeStatusSnapshot? ReadAgentflowNodeStatuses()
+    {
+        if (_turnBroadcast is null)
+            return null;
+
+        var entries = _turnBroadcast.ReadAll();
+        return _turnBroadcast.IsFinished
+            ? null
+            : AgentflowNodeStatusSnapshotReader.Read(entries.Select(entry => entry.Message));
+    }
 
     /// <summary>
     /// 仍在运行的 Turn 拒绝新的执行或设置；正在收尾的进程内 Turn 等待空闲。

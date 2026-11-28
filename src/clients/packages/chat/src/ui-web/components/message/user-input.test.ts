@@ -605,7 +605,7 @@ test("Alt+Enter on an unsupported target only shows the reason", () => {
   assert.equal(composer().value, "try steering");
 });
 
-test("a Steer default on an unsupported target queues and explains why", () => {
+test("a Steer default on an unsupported target silently queues on Enter", () => {
   const executed: Array<{ value: string; mode: string }> = [];
   renderSplitComposer({
     executed,
@@ -614,8 +614,8 @@ test("a Steer default on an unsupported target queues and explains why", () => {
   });
   type("still goes through");
 
-  assert.match(screen.getByRole("status").textContent ?? "", /Claude Code cannot be steered\./u);
-  fireEvent.click(screen.getByRole("button", { name: "Queue message" }));
+  assert.equal(screen.queryByRole("status")?.textContent, undefined);
+  fireEvent.keyDown(composer(), { key: "Enter" });
 
   assert.deepEqual(executed, [{ value: "still goes through", mode: "queue" }]);
 });
@@ -645,19 +645,10 @@ test("a running turn with an empty input stays the stop button and shows each mo
   assert.notEqual(composer().placeholder, queuePlaceholder);
 });
 
-test("the hint row names both shortcuts while a turn runs and disappears when idle", () => {
-  const { rerender } = renderSplitComposer();
+test("a running turn omits the shortcut hint below the input", () => {
+  renderSplitComposer();
 
-  assert.ok(screen.getByText("Enter to queue, Alt+Enter to steer"));
-
-  rerender(
-    React.createElement(UserInput, {
-      expandOverlay: true,
-      isExecuting: false,
-      steerAvailability: { supported: true },
-    } as never),
-  );
-  assert.equal(screen.queryByText(/Alt\+Enter/u), null);
+  assert.equal(screen.queryByText("Enter to queue, Alt+Enter to steer")?.textContent, undefined);
 });
 
 test("an idle composer keeps the plain send even with Steer information", () => {
