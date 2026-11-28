@@ -3800,6 +3800,13 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("description");
 
+                    b.Property<string>("Extra")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasColumnName("extra")
+                        .HasDefaultValueSql("'{}'");
+
                     b.Property<int>("Kind")
                         .HasColumnType("integer")
                         .HasColumnName("kind");

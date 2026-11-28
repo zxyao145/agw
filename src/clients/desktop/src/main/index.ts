@@ -2,7 +2,7 @@ import { DesktopOidcLogin } from "./oidc-login";
 
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
-import { release } from "node:os";
+import { homedir, release } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -71,6 +71,7 @@ import { getServerDataDirectory } from "./runtime/server-data-directory";
 import { resolveServerExecutablePath } from "./runtime/server-executable-path";
 import { DesktopNotificationStream, type DesktopNotificationProfile } from "./notification-stream";
 import { getTurnNotificationText, normalizeTurnNotificationRequest } from "./turn-notification";
+import { packLocalSkill, scanLocalSkills } from "./local-skills/local-skills";
 import { DesktopSettingsStore, type SecretCodec } from "./settings/settings-store";
 import { WorkspaceTabsFile } from "./settings/workspace-tabs-file";
 import { trayIconFileName } from "./tray-icon";
@@ -806,6 +807,14 @@ function windowsDistribution(): "squirrel" | "portable" {
 }
 
 function registerIpc(): void {
+  ipcMain.handle("agw:scan-local-skills", (event) => {
+    assertTrustedSender(senderUrl(event));
+    return scanLocalSkills(homedir());
+  });
+  ipcMain.handle("agw:pack-local-skill", (event, directoryName: string) => {
+    assertTrustedSender(senderUrl(event));
+    return packLocalSkill(homedir(), directoryName);
+  });
   ipcMain.handle("agw:image-context-menu", (event, request: ImageContextMenuRequest) => {
     assertTrustedSender(senderUrl(event));
     showImageContextMenu(event.sender, request, reportMainProcessError);

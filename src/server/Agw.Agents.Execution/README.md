@@ -253,6 +253,9 @@ Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动�
 
 Definition Agent 的 Skill provider 明确把 Skill 内容与 Project Workspace 分开：模型通过 `load_skill`、`read_skill_resource` 和 `run_skill_script` 访问 Skill，不应使用 Shell 或 Project 文件工具寻找 Skill 文件。只读的 load/read Tool 自动批准；脚本执行仍受 Tool 审批策略控制。Local Skill 只发现 `.py`、`.js` 和 `.cs` 脚本，`Agw.Skills.Execution.LocalSkillScriptRunner` 在 Skill 根目录内校验路径，以无 Shell 的 `ArgumentList` 传递字符串参数，并使用 30 秒超时。Plugin Skill 不允许执行脚本。
 
+构建 Agent 时会获取 Local Skill 内容目录的租约，并在 Agent 释放时归还。更新或删除 Skill 后，旧目录会在最后一个内容租约归还时删除。
+Agent construction acquires a content lease for each Local Skill directory and returns it when the Agent is disposed. After a Skill is updated or deleted, its old directory is deleted when the last content lease is returned.
+
 `AgentflowRuntime` 保存 Agentflow id、task、settings 和 `AgentflowRuntimeService`。每个 Agentflow turn 都会创建新的 `InProcessInteractionSession`，workflow 本身由 `AgentflowWorkflowCompiler` 生成。
 
 `RuntimeFactory` 负责把已解析好的 execution/turn 输入对应到具体 runtime，并将 runtime 输出接入统一的 `TurnPipeline`。task 与 workspace 的解析由 `ExecutionConnectionContext` 统一完成。Agent runtime 只有在 project、context、generation 和 Agent definition 版本仍兼容时才会复用；settings 或 target 变化会先释放旧 runtime。

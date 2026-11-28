@@ -214,5 +214,20 @@ public sealed class FilePathLocksTests : IDisposable
             _beforeAcquire();
             return _inner.AcquireAsync(resourceName, cancellationToken);
         }
+
+        public Task<IApplicationLockLease> AcquireSharedAsync(string resourceName, CancellationToken cancellationToken)
+        {
+            _beforeAcquire();
+            return _inner.AcquireSharedAsync(resourceName, cancellationToken);
+        }
+
+        public Task<IApplicationLockLease?> TryAcquireExclusiveAsync(
+            string resourceName,
+            CancellationToken cancellationToken
+        )
+        {
+            _beforeAcquire();
+            return _inner.TryAcquireExclusiveAsync(resourceName, cancellationToken);
+        }
     }
 }

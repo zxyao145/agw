@@ -60,6 +60,8 @@ public class SkillsController : ControllerBase
     [HttpPost]
     [Consumes("multipart/form-data")]
     [RequestFormLimits(MultipartBodyLengthLimit = 104857600)]
+    [RequestSizeLimit(104857600)]
+    [SkillUploadLimit]
     [ProducesApiResult(typeof(SkillResponse))]
     public async Task<IActionResult> CreateAsync(
         [FromForm] SkillCreateRequest request,
@@ -81,6 +83,7 @@ public class SkillsController : ControllerBase
                 request.Archive,
                 user,
                 request.RemoteUrl,
+                request.SourceDigest,
                 cancellationToken
             );
             return ApiResult.Ok(Map(created));
@@ -94,6 +97,8 @@ public class SkillsController : ControllerBase
     [HttpPut("{id:guid}")]
     [Consumes("multipart/form-data")]
     [RequestFormLimits(MultipartBodyLengthLimit = 104857600)]
+    [RequestSizeLimit(104857600)]
+    [SkillUploadLimit]
     [ProducesApiResult(typeof(SkillResponse))]
     public async Task<IActionResult> UpdateAsync(
         Guid id,
@@ -111,6 +116,7 @@ public class SkillsController : ControllerBase
                 request.Archive,
                 user,
                 request.RemoteUrl,
+                request.SourceDigest,
                 cancellationToken
             );
             return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(Map(updated));
@@ -139,6 +145,7 @@ public class SkillsController : ControllerBase
             skill.Kind,
             skill.ContentPath,
             skill.RemoteUrl,
+            skill.Extra.SourceDigest,
             detail.IsBuiltIn,
             detail.AgentIds,
             skill.CreateTime,

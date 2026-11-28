@@ -53,6 +53,18 @@ Local 中的“本地”指 AGW 服务端，不是浏览器所在的电脑。Rem
 
 Remote Skill 当前读取包内的说明，不会下载并运行包中的脚本，也不会提供包内其他资源文件。需要这些文件时应选择 Local 模式，并准备好执行环境。
 
+## 从 ~/.agents/skills 导入
+
+Agw Desktop 可以扫描当前电脑的 `~/.agents/skills`，并把选中的 Skill 上传到 AGW Server。Web 页面不提供此功能。
+
+- **Invalid**：目录或 `SKILL.md` 有问题，无法导入。
+- **New**：服务器上没有同名 Skill，导入会创建 Skill。
+- **Synced**：本机文件与服务器文件相同，无需更新。
+- **Changed**：本机文件与服务器文件不同，更新会替换服务器文件。
+- **Conflict**：服务器上已有同名 Built-in 或 Remote Skill，无法导入。
+
+服务器保存上传时的文件。本机文件有改动后，请重新扫描并更新 Skill。
+
 ## Remote Skill 缓存
 
 AGW 在创建或保存 Remote Skill 时获取内容，并将其缓存到数据库中，缓存有效期为 **1 小时**。

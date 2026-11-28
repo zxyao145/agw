@@ -7,6 +7,8 @@ namespace Agw.Skills.Tests;
 
 public class SkillBehaviorTests
 {
+    private const string ValidDigest = "sha256:fd5db01f805c3fa8eaec5b16afe3d3bc9c02ebf1b9e7081ade4674d50ba3384e";
+
     [Theory]
     [InlineData("Expense-Report")]
     [InlineData("expense_report")]
@@ -92,9 +94,65 @@ public class SkillBehaviorTests
         };
         var skill = new Skill { Kind = kind, RemoteUrl = remoteUrl };
 
-        var exception = Assert.Throws<AgwException>(() => new SkillBehavior(skill).EnsureCreatable(archiveSupplied));
+        var exception = Assert.Throws<AgwException>(() =>
+            new SkillBehavior(skill).EnsureCreatable(archiveSupplied, null)
+        );
 
         Assert.Equal(expected.Code, exception.Code);
+    }
+
+    [Fact]
+    public void EnsureCreatable_DigestWithoutArchive_Throws()
+    {
+        var skill = new Skill { Kind = SkillKind.Local };
+
+        var exception = Assert.Throws<AgwException>(() => new SkillBehavior(skill).EnsureCreatable(false, ValidDigest));
+
+        Assert.Equal(ErrorCodes.SkillSourceDigestRequiresArchive.Code, exception.Code);
+    }
+
+    [Theory]
+    [InlineData("sha256:FD5DB01F805C3FA8EAEC5B16AFE3D3BC9C02EBF1B9E7081ADE4674D50BA3384E")]
+    [InlineData("sha256:fd5db01f")]
+    [InlineData("fd5db01f805c3fa8eaec5b16afe3d3bc9c02ebf1b9e7081ade4674d50ba3384e")]
+    [InlineData(ValidDigest + "\n")]
+    public void EnsureCreatable_InvalidDigest_Throws(string digest)
+    {
+        var skill = new Skill { Kind = SkillKind.Local };
+
+        var exception = Assert.Throws<AgwException>(() => new SkillBehavior(skill).EnsureCreatable(true, digest));
+
+        Assert.Equal(ErrorCodes.SkillSourceDigestInvalid.Code, exception.Code);
+    }
+
+    [Fact]
+    public void EnsureUpdatable_RemoteWithDigest_Throws()
+    {
+        var skill = new Skill { Kind = SkillKind.Remote };
+
+        var exception = Assert.Throws<AgwException>(() =>
+            new SkillBehavior(skill).EnsureUpdatable(
+                "remote-skill",
+                archiveSupplied: false,
+                remoteUrl: null,
+                ValidDigest
+            )
+        );
+
+        Assert.Equal(ErrorCodes.SkillSourceDigestRequiresArchive.Code, exception.Code);
+    }
+
+    [Fact]
+    public void DefineLocalContent_BlankDigest_StoresNull()
+    {
+        var skill = new Skill { Kind = SkillKind.Local };
+        var behavior = new SkillBehavior(skill);
+
+        behavior.DefineLocalContent("  ");
+        Assert.Null(skill.Extra.SourceDigest);
+
+        behavior.DefineLocalContent(ValidDigest);
+        Assert.Equal(ValidDigest, skill.Extra.SourceDigest);
     }
 
     [Fact]
@@ -103,7 +161,12 @@ public class SkillBehaviorTests
         var skill = new Skill { Kind = SkillKind.Local, Name = "expense-report" };
 
         var exception = Assert.Throws<AgwException>(() =>
-            new SkillBehavior(skill).EnsureUpdatable("travel-report", archiveSupplied: false, remoteUrl: null)
+            new SkillBehavior(skill).EnsureUpdatable(
+                "travel-report",
+                archiveSupplied: false,
+                remoteUrl: null,
+                sourceDigest: null
+            )
         );
 
         Assert.Equal(ErrorCodes.SkillNameUpdateRequiresArchive.Code, exception.Code);
@@ -114,7 +177,12 @@ public class SkillBehaviorTests
     {
         var skill = new Skill { Kind = SkillKind.Local, Name = "expense-report" };
 
-        new SkillBehavior(skill).EnsureUpdatable("  expense-report ", archiveSupplied: false, remoteUrl: null);
+        new SkillBehavior(skill).EnsureUpdatable(
+            "  expense-report ",
+            archiveSupplied: false,
+            remoteUrl: null,
+            sourceDigest: null
+        );
     }
 
     [Theory]

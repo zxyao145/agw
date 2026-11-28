@@ -9031,6 +9031,9 @@
                   },
                   "RemoteUrl": {
                     "type": "string"
+                  },
+                  "SourceDigest": {
+                    "type": "string"
                   }
                 }
               }
@@ -9181,6 +9184,9 @@
                     "$ref": "#/components/schemas/IFormFile"
                   },
                   "RemoteUrl": {
+                    "type": "string"
+                  },
+                  "SourceDigest": {
                     "type": "string"
                   }
                 }
@@ -21468,6 +21474,7 @@
           "kind",
           "contentPath",
           "remoteUrl",
+          "sourceDigest",
           "isBuiltIn",
           "agentIds",
           "createTime",
@@ -21494,6 +21501,12 @@
             "type": "string"
           },
           "remoteUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sourceDigest": {
             "type": [
               "null",
               "string"

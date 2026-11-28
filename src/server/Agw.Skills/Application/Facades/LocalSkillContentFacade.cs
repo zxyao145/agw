@@ -11,6 +11,8 @@ public sealed class LocalSkillContentFacade : ILocalSkillContentResolver
         _skillAppService = skillAppService;
     }
 
-    public Task<string?> ResolveDirectoryAsync(Guid skillId, CancellationToken cancellationToken = default) =>
-        _skillAppService.PrepareLocalDirectoryAsync(skillId, cancellationToken);
+    public Task<ILocalSkillDirectoryLease?> AcquireDirectoryAsync(
+        Guid skillId,
+        CancellationToken cancellationToken = default
+    ) => _skillAppService.AcquireLocalDirectoryAsync(skillId, cancellationToken);
 }

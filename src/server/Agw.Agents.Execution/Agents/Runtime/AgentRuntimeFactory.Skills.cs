@@ -50,7 +50,7 @@ public partial class AgentRuntimeFactory
             .Cast<IAgentSkillRegistration>()
             .DistinctBy(registration => registration.Id)
             .ToArray();
-        var userSkillPaths = await ResolveLocalSkillPathsAsync(skills, cancellationToken);
+        var userSkillPaths = await ResolveLocalSkillPathsAsync(skills, capabilities, cancellationToken);
         var remoteSkills =
             _remoteSkillContentResolver == null
                 ? []
@@ -186,6 +186,7 @@ public partial class AgentRuntimeFactory
 
     private async Task<string[]> ResolveLocalSkillPathsAsync(
         IReadOnlyList<SkillReferenceSnapshot> skills,
+        AgentCapabilityComposition capabilities,
         CancellationToken cancellationToken
     )
     {
@@ -196,10 +197,11 @@ public partial class AgentRuntimeFactory
             )
         )
         {
-            var path = await _localSkillContentResolver.ResolveDirectoryAsync(skill.Id, cancellationToken);
-            if (path != null)
+            var lease = await _localSkillContentResolver.AcquireDirectoryAsync(skill.Id, cancellationToken);
+            if (lease != null)
             {
-                paths.Add(path);
+                capabilities.Own(lease);
+                paths.Add(lease.Path);
             }
         }
         return paths.ToArray();

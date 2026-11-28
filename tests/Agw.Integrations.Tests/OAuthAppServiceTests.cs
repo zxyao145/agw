@@ -731,6 +731,25 @@ public sealed class OAuthAppServiceTests
             return new Lease(await _inner.AcquireAsync(resourceName, cancellationToken), Lost.Token);
         }
 
+        public async Task<IApplicationLockLease> AcquireSharedAsync(
+            string resourceName,
+            CancellationToken cancellationToken
+        )
+        {
+            Requests.Writer.TryWrite(resourceName);
+            return new Lease(await _inner.AcquireSharedAsync(resourceName, cancellationToken), Lost.Token);
+        }
+
+        public async Task<IApplicationLockLease?> TryAcquireExclusiveAsync(
+            string resourceName,
+            CancellationToken cancellationToken
+        )
+        {
+            Requests.Writer.TryWrite(resourceName);
+            var lease = await _inner.TryAcquireExclusiveAsync(resourceName, cancellationToken);
+            return lease is null ? null : new Lease(lease, Lost.Token);
+        }
+
         public void Dispose() => Lost.Dispose();
 
         private sealed class Lease : IApplicationLockLease

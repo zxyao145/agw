@@ -32,7 +32,9 @@
   "dependencies": {
     "chardet": "catalog:",
     "eventsource-parser": "catalog:",
-    "iconv-lite": "catalog:"
+    "iconv-lite": "catalog:",
+    "vfile": "catalog:",
+    "vfile-matter": "catalog:"
   },
   "devDependencies": {
     "@agw/agents": "workspace:*",

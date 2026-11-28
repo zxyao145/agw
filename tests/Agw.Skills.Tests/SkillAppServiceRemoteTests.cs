@@ -12,11 +12,13 @@ using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts;
 using Agw.Skills.Domain.Services;
 using Agw.Skills.Infrastructure;
+using Agw.Skills.Infrastructure.Content;
 using Agw.Testing;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Skills.Tests;
 
@@ -41,7 +43,7 @@ public class SkillAppServiceRemoteTests
             archive: null,
             "remote-admin",
             "https://example.com/skills/expense-report",
-            TestContext.Current.CancellationToken
+            cancellationToken: TestContext.Current.CancellationToken
         );
 
         Assert.Equal("expense-report", result.Skill.Name);
@@ -69,7 +71,7 @@ public class SkillAppServiceRemoteTests
             archive: null,
             "remote-admin",
             "https://user:password@example.com/skills/expense-report?token=secret#fragment",
-            TestContext.Current.CancellationToken
+            cancellationToken: TestContext.Current.CancellationToken
         );
 
         var message = Assert.Single(fixture.Logger.Messages);
@@ -94,7 +96,7 @@ public class SkillAppServiceRemoteTests
                 archive,
                 "remote-admin",
                 "https://example.com/skill",
-                TestContext.Current.CancellationToken
+                cancellationToken: TestContext.Current.CancellationToken
             )
         );
 
@@ -156,7 +158,7 @@ public class SkillAppServiceRemoteTests
             archive: null,
             "remote-admin",
             "https://new.example.com/skill",
-            TestContext.Current.CancellationToken
+            cancellationToken: TestContext.Current.CancellationToken
         );
 
         Assert.NotNull(result);
@@ -196,7 +198,7 @@ public class SkillAppServiceRemoteTests
                 archive: null,
                 "remote-admin",
                 "https://example.com/remote",
-                TestContext.Current.CancellationToken
+                cancellationToken: TestContext.Current.CancellationToken
             )
         );
 
@@ -285,7 +287,12 @@ public class SkillAppServiceRemoteTests
                 RefreshLock,
                 InMemoryApplicationLock.Shared,
                 new TestTimeProvider(UtcNow),
-                currentUser
+                currentUser,
+                new SkillContentRetirement(
+                    dataPaths,
+                    InMemoryApplicationLock.Shared,
+                    NullLogger<SkillContentRetirement>.Instance
+                )
             );
         }
 

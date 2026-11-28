@@ -15,4 +15,5 @@ public class Skill : BaseEntity, IAggregateRoot
     public SkillKind Kind { get; set; } = SkillKind.Local;
     public string ContentPath { get; set; } = string.Empty;
     public string? RemoteUrl { get; set; }
+    public SkillExtra Extra { get; set; } = new();
 }

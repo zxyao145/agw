@@ -35,6 +35,15 @@ public static class DependencyInjection
                     && options.MaximumExtractedBytes >= options.MaximumPackageBytes,
                 "Extension lifecycle intervals and package limits must be positive and consistent."
             )
+            .Validate(
+                options =>
+                    options.HostInstanceName is null
+                    || options.HostInstanceName is { Length: >= 1 and <= 64 } name
+                        && name.All(character =>
+                            char.IsAsciiLetterLower(character) || char.IsAsciiDigit(character) || character == '-'
+                        ),
+                "Extensions:HostInstanceName must contain 1 to 64 lowercase ASCII letters, digits, or hyphens."
+            )
             .ValidateOnStart();
         services.AddSingleton<ExtensionHostIdentity>();
         services.AddSingleton<IExtensionHostIdentity>(provider => provider.GetRequiredService<ExtensionHostIdentity>());

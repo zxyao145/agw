@@ -163,5 +163,15 @@ public sealed partial class AgentflowAppServiceTests
 
             return await _inner.AcquireAsync(resourceName, cancellationToken).ConfigureAwait(false);
         }
+
+        public Task<IApplicationLockLease> AcquireSharedAsync(
+            string resourceName,
+            CancellationToken cancellationToken
+        ) => _inner.AcquireSharedAsync(resourceName, cancellationToken);
+
+        public Task<IApplicationLockLease?> TryAcquireExclusiveAsync(
+            string resourceName,
+            CancellationToken cancellationToken
+        ) => _inner.TryAcquireExclusiveAsync(resourceName, cancellationToken);
     }
 }

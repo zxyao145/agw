@@ -3793,6 +3793,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("description");
 
+                    b.Property<string>("Extra")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("extra")
+                        .HasDefaultValueSql("'{}'");
+
                     b.Property<int>("Kind")
                         .HasColumnType("INTEGER")
                         .HasColumnName("kind");

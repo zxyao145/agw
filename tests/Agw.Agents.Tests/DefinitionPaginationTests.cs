@@ -12,11 +12,13 @@ using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Runtime;
 using Agw.Skills.Application;
+using Agw.Skills.Application.Content;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts;
 using Agw.Skills.Controllers;
 using Agw.Skills.Domain.Services;
 using Agw.Skills.Infrastructure;
+using Agw.Skills.Infrastructure.Content;
 using Agw.Testing;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
@@ -235,17 +237,20 @@ public class DefinitionPaginationTests
         database.Context.AgentSkillRelations.Add(new AgentSkillRelation { AgentId = agent.Id, SkillId = skill.Id });
         await database.Context.SaveChangesAsync(cancellationToken);
 
+        var paths = AgwDataPaths.Resolve(Path.Combine(Path.GetTempPath(), "agw-pagination-tests"), Path.GetTempPath());
+        var applicationLock = Agw.Shared.Coordination.InMemoryApplicationLock.Shared;
         var service = new SkillAppService(
             database.Context,
             new AgentCatalogFacade(database.Context, new TestUserInfoService()),
             new SkillNameUniquenessDomainService(new SkillRepository(database.Context, new TestUserInfoService())),
-            AgwDataPaths.Resolve(Path.Combine(Path.GetTempPath(), "agw-pagination-tests"), Path.GetTempPath()),
+            paths,
             NullLogger<SkillAppService>.Instance,
             new TestRemoteSkillClient(),
             new TestRemoteSkillRefreshLock(),
-            Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+            applicationLock,
             TimeProvider.System,
-            new TestUserInfoService()
+            new TestUserInfoService(),
+            new SkillContentRetirement(paths, applicationLock, NullLogger<SkillContentRetirement>.Instance)
         );
 
         var result = await service.ListPageAsync(1, 10, cancellationToken);

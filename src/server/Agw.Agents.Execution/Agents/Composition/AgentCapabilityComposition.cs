@@ -253,6 +253,11 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
         _lease.Add(resource);
     }
 
+    internal void Own(IAsyncDisposable resource)
+    {
+        _lease.Add(resource);
+    }
+
     public ValueTask DisposeAsync()
     {
         return _lease.DisposeAsync();

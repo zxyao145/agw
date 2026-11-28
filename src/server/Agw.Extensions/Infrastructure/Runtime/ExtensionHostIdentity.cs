@@ -17,8 +17,10 @@ public sealed class ExtensionHostIdentity : IExtensionHostIdentity, IDisposable
         Role = options.Value.HostRole;
         if (Role is not ("Standalone" or "ControlPlane" or "DataPlane"))
             throw new AgwException(ErrorCodes.InvalidParam);
+        var instanceName = options.Value.HostInstanceName;
+        var identityName = instanceName is null ? Role : $"{Role}-{instanceName}";
         Directory.CreateDirectory(paths.RuntimeDirectory);
-        var identityPath = Path.Combine(paths.RuntimeDirectory, $"extension-host-{Role}.json");
+        var identityPath = Path.Combine(paths.RuntimeDirectory, $"extension-host-{identityName}.json");
         try
         {
             _ownership = new FileStream(

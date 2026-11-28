@@ -1,4 +1,5 @@
 using System.Collections;
+using System.IO.Compression;
 using System.Linq.Expressions;
 using System.Net.Http.Headers;
 using System.Reflection;
@@ -14,6 +15,7 @@ using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
+using Agw.Agents.Execution.Runtimes;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Extensions.Contracts;
@@ -46,6 +48,7 @@ using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Domain.Services;
 using Agw.Skills.Execution;
 using Agw.Skills.Infrastructure;
+using Agw.Skills.Infrastructure.Content;
 using Agw.Skills.Infrastructure.Remote;
 using Agw.Testing;
 using Agw.Tools.Abstractions;
@@ -54,6 +57,7 @@ using Agw.Tools.ToolBlocks;
 using Medallion.Threading.Postgres;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -869,10 +873,15 @@ public class AgentRuntimeFactorySystemCompositionTests
             var resolveMethod = typeof(AgentRuntimeFactory).GetMethod(
                 "ResolveLocalSkillPathsAsync",
                 BindingFlags.Instance | BindingFlags.NonPublic,
-                [typeof(IReadOnlyList<SkillReferenceSnapshot>), typeof(CancellationToken)]
+                [
+                    typeof(IReadOnlyList<SkillReferenceSnapshot>),
+                    typeof(AgentCapabilityComposition),
+                    typeof(CancellationToken),
+                ]
             );
             Assert.NotNull(resolveMethod);
 
+            await using var capabilities = AgwAgentTestHost.Capabilities();
             var lease = await InMemoryApplicationLock.Shared.AcquireAsync(
                 SkillMutationLock.GetResourceName(skillId),
                 cancellationToken
@@ -896,6 +905,7 @@ public class AgentRuntimeFactorySystemCompositionTests
                                     contentPath
                                 ),
                             },
+                            capabilities,
                             cancelled.Token,
                         ]
                     )
@@ -912,6 +922,109 @@ public class AgentRuntimeFactorySystemCompositionTests
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task CreateRuntimeAsync_LocalSkillUpdated_OldDirectoryKeptUntilRuntimeDisposed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = ExternalAgentHarness.EnterUser();
+        await using var harness = await ExternalAgentHarness.CreateAsync(
+            new Agent
+            {
+                Name = "skill-runtime-fixture",
+                DisplayName = "Skill runtime fixture",
+                Type = AgentType.External,
+                ExternalAgentKind = EngineKind.Pi,
+            },
+            new AgentCreateCommand()
+        );
+
+        var service = harness.Services.GetRequiredService<SkillAppService>();
+        var userId = UserInfoUtil.RequiredUserId;
+        var created = await service.CreateAsync(
+            new Skill
+            {
+                Name = "local-skill",
+                Description = "Description",
+                Kind = SkillKind.Local,
+            },
+            CreateLocalSkillArchive("Original instructions"),
+            userId,
+            cancellationToken: cancellationToken
+        );
+        var agentId = Guid.CreateVersion7();
+        await harness.QueryAsync(db =>
+        {
+            var provider = new Provider
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "local-skill-provider",
+                Endpoint = "https://example.test/v1",
+                ProviderType = ProviderType.OpenAIChatCompletions,
+                AuthConfigs = [new ProviderAuthConfig { ApiKey = "test-key" }],
+            };
+            var model = new AgwAiModel { Id = Guid.CreateVersion7(), Name = "test-model" };
+            var relation = new ModelProviderRelation
+            {
+                Id = Guid.CreateVersion7(),
+                Model = model,
+                Provider = provider,
+            };
+            db.ModelProviders.Add(relation);
+            db.Agents.Add(
+                new Agent
+                {
+                    Id = agentId,
+                    Name = "local-skill-agent",
+                    DisplayName = "Local Skill Agent",
+                    ModelProviderId = relation.Id,
+                    AgentSkillRelations = [new AgentSkillRelation { SkillId = created.Skill.Id }],
+                }
+            );
+            return db.SaveChangesAsync(cancellationToken);
+        });
+
+        var factory = harness.Services.GetRequiredService<AgentRuntimeFactory>();
+        await using var runtime = Assert.IsType<AgentRuntime>(
+            await factory.CreateRuntimeAsync(
+                agentId,
+                new AgentExecutionTask
+                {
+                    ProjectId = harness.ProjectId,
+                    ProjectConversationId = harness.ConversationId,
+                    ContextId = ExternalAgentHarness.ContextId,
+                },
+                new ExecutionSettings(harness.ProjectId, harness.ConversationId),
+                cancellationToken
+            )
+        );
+        var paths = harness.Services.GetRequiredService<AgwDataPaths>();
+        var oldDirectory = Path.Combine(paths.Root, created.Skill.ContentPath);
+        await service.UpdateAsync(
+            created.Skill.Id,
+            "local-skill",
+            "Description",
+            CreateLocalSkillArchive("Updated instructions"),
+            userId,
+            cancellationToken: cancellationToken
+        );
+
+        Assert.True(Directory.Exists(oldDirectory));
+        await runtime.DisposeAsync();
+        Assert.False(Directory.Exists(oldDirectory));
+    }
+
+    private static IFormFile CreateLocalSkillArchive(string instructions)
+    {
+        var stream = new MemoryStream();
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        using (var writer = new StreamWriter(zip.CreateEntry("SKILL.md").Open()))
+        {
+            writer.Write($"---\nname: local-skill\ndescription: Description\n---\n{instructions}");
+        }
+        stream.Position = 0;
+        return new FormFile(stream, 0, stream.Length, "Archive", "local-skill.zip");
     }
 
     private static AgentAppService CreateAgentAppService(AgwDbContext dbContext)
@@ -1042,7 +1155,12 @@ public class AgentRuntimeFactorySystemCompositionTests
                     refreshLock,
                     InMemoryApplicationLock.Shared,
                     TimeProvider.System,
-                    user
+                    user,
+                    new SkillContentRetirement(
+                        paths,
+                        InMemoryApplicationLock.Shared,
+                        NullLogger<SkillContentRetirement>.Instance
+                    )
                 )
             );
         });
