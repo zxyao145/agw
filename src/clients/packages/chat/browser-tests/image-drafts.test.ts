@@ -24,13 +24,23 @@ before(async () => {
     loader: { ".css": "empty" },
     define: { "process.env.NODE_ENV": '"development"', "process.env": "{}" },
   });
+  const styles = await build({
+    entryPoints: ["src/image-preview.css"],
+    bundle: true,
+    write: false,
+  });
   server = createServer((request, response) => {
     if (request.url === "/fixture.js") {
       response.writeHead(200, { "content-type": "text/javascript" });
       response.end(bundle.outputFiles[0].contents);
+    } else if (request.url === "/image-preview.css") {
+      response.writeHead(200, { "content-type": "text/css" });
+      response.end(styles.outputFiles[0].contents);
     } else if (request.url === "/") {
       response.writeHead(200, { "content-type": "text/html" });
-      response.end('<!doctype html><div id="root"></div><script src="/fixture.js"></script>');
+      response.end(
+        '<!doctype html><link rel="stylesheet" href="/image-preview.css"><div id="root"></div><script src="/fixture.js"></script>',
+      );
     } else {
       response.writeHead(404);
       response.end();
@@ -147,6 +157,35 @@ test("refreshing and restarting Chromium restore saved images and removals", asy
       .evaluate((image: HTMLImageElement) => image.naturalWidth),
     1,
   );
+});
+
+test("draft image thumbnails open the shared preview and regain focus on close", async (t) => {
+  const { page } = await openFixture(t);
+  await paste(page, "first.png");
+  await paste(page, "second.png");
+  await page.locator("textarea").fill("Keep this draft");
+
+  const thumbnail = page.getByRole("button", { name: "Preview image: second.png" });
+  const preview = page.getByRole("dialog", { name: "Image preview" });
+  await thumbnail.click();
+  await preview.getByRole("img", { name: "second.png", exact: true }).waitFor();
+  await preview.getByRole("button", { name: "Zoom in" }).click();
+  const zoomLevel = await preview.getByLabel("Zoom level").textContent();
+  assert.ok(Number.parseInt(zoomLevel!, 10) > 100);
+  await page.keyboard.press("Escape");
+  await preview.waitFor({ state: "detached" });
+  assert.equal(await thumbnail.evaluate((button) => button === document.activeElement), true);
+  assert.equal(await page.locator("textarea").inputValue(), "Keep this draft");
+
+  await page.getByRole("button", { name: "Expand input" }).click();
+  await thumbnail.press("Enter");
+  await preview.getByRole("img", { name: "second.png", exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+  await preview.waitFor({ state: "detached" });
+  await page.getByRole("button", { name: "Remove second.png", exact: true }).click();
+  await ready(page);
+  assert.deepEqual(await names(page), ["first.png"]);
+  assert.equal(await preview.count(), 0);
 });
 
 test("submission acceptance clears only submitted images and rejection keeps the draft", async (t) => {

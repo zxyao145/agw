@@ -28,6 +28,8 @@ import { ChatInputQueue } from "./chat-input-queue";
 import type { SteerAvailability } from "./composer-submit";
 import { ChatInputToolbar } from "./chat-input-toolbar";
 import type { ExtensionMenuItem } from "./chat-extension-types";
+import type { ConversationImageSource } from "./conversation-image";
+import { ConversationImagePreview } from "./conversation-image-preview";
 import { UserInput, type UserInputRef } from "./user-input";
 
 interface ChatInputProps {
@@ -239,28 +241,12 @@ export function ChatInput({
                 aria-label="Pasted images"
               >
                 {imageAttachments.map((attachment) => (
-                  <li
+                  <DraftImageThumbnail
                     key={attachment.id}
-                    className="group relative size-20 shrink-0 overflow-hidden rounded-xl border bg-muted shadow-xs"
-                  >
-                    <img
-                      src={attachment.dataUrl}
-                      alt={attachment.name}
-                      className="size-full object-cover"
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="icon-sm"
-                      className="absolute right-1 top-1 size-6 rounded-full border border-white/20 bg-black/75 text-white shadow-sm hover:bg-black"
-                      onClick={() => onRemoveImage(attachment.id)}
-                      disabled={isTransitioning || isImageDraftBusy}
-                      aria-label={`Remove ${attachment.name}`}
-                      title={`Remove ${attachment.name}`}
-                    >
-                      <X className="size-3.5" />
-                    </Button>
-                  </li>
+                    attachment={attachment}
+                    removeDisabled={isTransitioning || isImageDraftBusy}
+                    onRemove={onRemoveImage}
+                  />
                 ))}
               </ul>
             ) : null}
@@ -392,5 +378,51 @@ export function ChatInput({
         </UserInput.Sender>
       ) : null}
     </UserInput>
+  );
+}
+
+function DraftImageThumbnail({
+  attachment,
+  removeDisabled,
+  onRemove,
+}: {
+  attachment: ChatImageAttachment;
+  removeDisabled: boolean;
+  onRemove: (id: string) => void;
+}) {
+  const [preview, setPreview] = React.useState<{
+    image: ConversationImageSource;
+    trigger: HTMLButtonElement;
+  } | null>(null);
+  const { dataUrl, name, id } = attachment;
+
+  return (
+    <li className="group relative size-20 shrink-0 overflow-hidden rounded-xl border bg-muted shadow-xs">
+      <button
+        type="button"
+        className="block size-full cursor-pointer rounded-xl focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+        aria-label={`Preview image: ${name}`}
+        aria-haspopup="dialog"
+        onClick={(event) => {
+          event.currentTarget.focus({ preventScroll: true });
+          setPreview({ image: { src: dataUrl, alt: name, name }, trigger: event.currentTarget });
+        }}
+      >
+        <img src={dataUrl} alt={name} className="size-full object-cover" />
+      </button>
+      <Button
+        type="button"
+        variant="secondary"
+        size="icon-sm"
+        className="absolute right-1 top-1 size-6 rounded-full border border-white/20 bg-black/75 text-white shadow-sm hover:bg-black"
+        onClick={() => onRemove(id)}
+        disabled={removeDisabled}
+        aria-label={`Remove ${name}`}
+        title={`Remove ${name}`}
+      >
+        <X className="size-3.5" />
+      </Button>
+      {preview ? <ConversationImagePreview {...preview} onClose={() => setPreview(null)} /> : null}
+    </li>
   );
 }

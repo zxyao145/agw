@@ -14,8 +14,8 @@ export function ConversationImagePreview({
   onClose,
 }: {
   image: ConversationImageSource;
-  trigger: HTMLImageElement;
-  scrollElementRef: React.RefObject<HTMLDivElement | null>;
+  trigger: HTMLElement;
+  scrollElementRef?: React.RefObject<HTMLDivElement | null>;
   onClose: () => void;
 }) {
   const restoreScroll = React.useRef<() => void>(() => {});
@@ -36,7 +36,7 @@ export function ConversationImagePreview({
     <ImagePreview
       image={image}
       onClose={() => {
-        const target = trigger.isConnected ? trigger : scrollElementRef.current;
+        const target = trigger.isConnected ? trigger : scrollElementRef?.current;
         target?.focus({ preventScroll: true });
         restoreScroll.current();
         onClose();
