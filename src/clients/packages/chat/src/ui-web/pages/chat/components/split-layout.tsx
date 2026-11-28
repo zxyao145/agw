@@ -59,9 +59,8 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }: ColSplitProps) =>
 
       const newWidth = e.clientX - containerRect.left;
       const minWidth = leftProps?.minWidth ?? 200;
-      const maxWidth = leftProps?.maxWidth ?? 600;
+      const maxWidth = leftProps?.maxWidth ?? containerRect.width - 200;
 
-      // Clamp between min 200px and max 600px
       setPanelWidth(Math.max(minWidth, Math.min(maxWidth, newWidth)));
     };
 

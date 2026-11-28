@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [providers, setProviders] = React.useState<OidcProvider[]>([]);
   const [loadingProviders, setLoadingProviders] = React.useState(true);
   const [providerError, setProviderError] = React.useState(false);
+  const [isHydrated, setIsHydrated] = React.useState(false);
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
@@ -35,6 +36,7 @@ export default function LoginPage() {
   }, []);
 
   React.useEffect(() => {
+    setIsHydrated(true);
     const loginError = new URLSearchParams(window.location.search).get("error");
     if (loginError?.startsWith("oidc-")) {
       setError(
@@ -128,6 +130,7 @@ export default function LoginPage() {
                   type="password"
                   autoComplete="current-password"
                   className="pl-9"
+                  disabled={!isHydrated}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   required

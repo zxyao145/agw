@@ -56,11 +56,24 @@ test("login failure stays editable and a successful retry returns to the request
         : { json: { code: 0, title: "OK" } },
     );
   });
-  await page.goto("/login/?returnUrl=%2Fagentflows%2F");
-  await page.getByLabel("Administrator password").fill("incorrect");
+  const scripts = Promise.withResolvers<void>();
+  await page.route("**/_next/static/**", async (route) => {
+    if (route.request().resourceType() === "script") await scripts.promise;
+    await route.fallback();
+  });
+
+  const password = page.getByLabel("Administrator password");
+  try {
+    await page.goto("/login/?returnUrl=%2Fagentflows%2F", { waitUntil: "commit" });
+    await expect(password).toBeDisabled();
+  } finally {
+    scripts.resolve();
+  }
+
+  await password.fill("incorrect");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page.getByText("The administrator password was not accepted.")).toBeVisible();
-  await page.getByLabel("Administrator password").fill("correct");
+  await password.fill("correct");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.waitForURL(/\/agentflows\/?$/u, { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Agentflows", exact: true })).toBeVisible();
