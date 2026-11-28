@@ -17369,6 +17369,12 @@
           "displayName": {
             "type": "string"
           },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "targets": {
             "$ref": "#/components/schemas/ExtensionTarget"
           },

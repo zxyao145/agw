@@ -56,6 +56,7 @@ public static partial class ExtensionManifestReader
             Id = root.GetProperty("id").GetString()!,
             Name = "",
             DisplayName = root.GetProperty("name").GetString()!,
+            Author = root.TryGetProperty("author", out var author) ? author.GetString() : null,
             Version = root.GetProperty("version").GetString()!,
             Targets = ExtensionTarget.Desktop,
             Desktop = root.Clone(),

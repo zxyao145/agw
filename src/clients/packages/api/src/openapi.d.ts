@@ -9823,6 +9823,7 @@ export interface components {
       id: string;
       name: string;
       displayName: string;
+      author?: null | string;
       targets: components["schemas"]["ExtensionTarget"];
       currentVersion?: null | string;
       isEnabled: boolean;

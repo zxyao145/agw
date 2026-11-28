@@ -50,6 +50,39 @@ public sealed class ExtensionManifestTests
         Assert.Equal("019a4c17-5f00-7a80-8b3d-2b732f48a100", manifest.Id);
     }
 
+    [Fact]
+    public void Parse_ManifestV2WithAuthor_PreservesAuthor()
+    {
+        var value = System.Text.Json.Nodes.JsonNode.Parse(CreateManifest(1))!;
+        value["author"] = "Agw";
+        var manifest = ExtensionManifestReader.Parse(value.ToJsonString());
+        Assert.Equal("Agw", manifest.Author);
+    }
+
+    [Fact]
+    public void Parse_DesktopV1WithAuthor_PreservesAuthor()
+    {
+        var json =
+            """{"manifestVersion":1,"id":"019a4c17-5f00-7a80-8b3d-2b732f48a100","name":"预约管理","version":"1.0.0","author":"Agw","apiVersion":1,"contributes":{}}""";
+        var manifest = ExtensionManifestReader.Parse(json);
+        Assert.Equal("Agw", manifest.Author);
+    }
+
+    [Fact]
+    public void Parse_ManifestWithoutAuthor_ReturnsNullAuthor()
+    {
+        var manifest = ExtensionManifestReader.Parse(CreateManifest(1));
+        Assert.Null(manifest.Author);
+    }
+
+    [Fact]
+    public void Parse_NonStringAuthor_RejectsManifest()
+    {
+        var value = System.Text.Json.Nodes.JsonNode.Parse(CreateManifest(1))!;
+        value["author"] = 1;
+        Assert.Throws<AgwException>(() => ExtensionManifestReader.Parse(value.ToJsonString()));
+    }
+
     [Theory]
     [InlineData("name")]
     [InlineData("files")]

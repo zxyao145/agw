@@ -94,6 +94,7 @@ public sealed class ExtensionManagementService
             Id = extensionId,
             Name = entry.Manifest!.Name,
             DisplayName = entry.Manifest.DisplayName,
+            Author = entry.Manifest.Author,
             Targets = entry.Manifest.Targets,
             CurrentVersion = entry.Manifest.Version,
             IsEnabled = enablement.Enabled,
