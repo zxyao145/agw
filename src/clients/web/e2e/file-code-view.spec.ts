@@ -9,7 +9,7 @@ import {
   STAGED_FILE,
   WORKING_FILE,
 } from "./standalone-file-project";
-import { fetchFromStandaloneHost } from "./standalone-host";
+import { fetchFromStandaloneHost, readApiResult } from "./standalone-host";
 
 const SOURCE = '[data-code-view="source"]';
 const DIFF = '[data-code-view="diff"]';
@@ -204,7 +204,20 @@ fileProjectTest(
     await openProjectDiff(page, fileProject.id);
     const staged = changedFile(page, "Staged", "calc.ts");
     const unstaged = changedFile(page, "Unstaged", "calc.ts");
-    await staged.click();
+    const [response] = await Promise.all([
+      page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return (
+          url.pathname === "/api/files/diff" &&
+          url.searchParams.get("path") === "calc.ts" &&
+          url.searchParams.get("scope") === "staged"
+        );
+      }),
+      staged.click(),
+    ]);
+    expect(await readApiResult<{ modifiedContent: string }>(response)).toMatchObject({
+      modifiedContent: STAGED_FILE,
+    });
     await expectModifiedText(page, STAGED_FILE);
     expect(reads.map((url) => url.searchParams.get("scope"))).toEqual(["staged"]);
 
