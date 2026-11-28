@@ -1,53 +1,81 @@
-name: Server Build
+name: CI
 
 on:
   pull_request:
   push:
-    branches: [ "main" ]
-
+    branches: [main]
   workflow_dispatch:
-    
-jobs:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
   changes:
-    name: server changes
+    name: Select checks
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pull-requests: read
     outputs:
-      # push / workflow_dispatch 始终运行完整构建；PR 只在改到服务端路径时运行
-      # push / workflow_dispatch always run the full build; PRs run only when server paths change
-      server: ${{ github.event_name != 'pull_request' || steps.filter.outputs.server == 'true' }}
+      boundaries: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.boundaries == 'true' }}
+      server: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.server == 'true' }}
+      docker: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.docker == 'true' }}
+      web: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.web == 'true' }}
+      web_packages: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.web_packages == 'true' }}
+      desktop: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.desktop == 'true' }}
+      installers: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.installers == 'true' }}
     steps:
+      - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
         id: filter
-        if: github.event_name == 'pull_request'
+        if: github.event_name != 'workflow_dispatch'
         with:
-          filters: |
-            server:
-              - 'Dockerfile'
-              - '.dockerignore'
-              - 'src/extensions/feishu/**'
-              - 'src/extensions/taskpilot/**'
-              - 'src/server/**'
-              - 'src/sdks/**'
-              - 'tests/**'
-              - 'Agw.slnx'
-              - '.github/workflows/build-server.yml'
-              - '.github/scripts/**'
-              - '.github/postgres-tests.json'
+          base: ${{ github.event_name == 'push' && github.ref || '' }}
+          filters: .github/ci-paths.yml
 
-  build:
-    name: test
+  boundaries:
+    name: Client import boundaries
+    needs: changes
+    # Desktop 测试也会检查整个工作区的导入规则。Desktop tests include the workspace-wide import check.
+    if: needs.changes.outputs.boundaries == 'true' && needs.changes.outputs.desktop != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-pnpm
+      - run: pnpm install --frozen-lockfile
+        working-directory: src
+      - run: pnpm test:boundaries
+        working-directory: src
+
+  web:
+    name: Web
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    uses: ./.github/workflows/build-web.yml
+    with:
+      package-checks: ${{ needs.changes.outputs.web_packages == 'true' }}
+
+  desktop:
+    name: Desktop
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
+    uses: ./.github/workflows/build-desktop.yml
+    with:
+      smoke-only: ${{ needs.changes.outputs.installers != 'true' }}
+
+  server:
+    name: Server tests
     needs: changes
     if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     environment: prod
-    
+
     steps:
     - uses: actions/checkout@v7
-      
-
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
@@ -56,16 +84,7 @@ jobs:
     - name: Audit dependencies
       run: dotnet restore Agw.slnx -p:NuGetAudit=true -p:NuGetAuditMode=all -p:WarningsAsErrors=NU1900%3BNU1903%3BNU1904
 
-    - uses: pnpm/action-setup@v6
-      with:
-        package_json_file: src/package.json
-
-    - name: Setup Node.js for extensions and external CLI tests
-      uses: actions/setup-node@v6
-      with:
-        node-version: 24
-        cache: pnpm
-        cache-dependency-path: src/pnpm-lock.yaml
+    - uses: ./.github/actions/setup-pnpm
 
     - name: Install Pi CLI startup test dependency
       run: npm ci --prefix src/sdks/pi-agent-sdk-csharp/tests/fixtures/pi-cli --ignore-scripts --no-audit --no-fund
@@ -86,12 +105,17 @@ jobs:
         pnpm --filter @agw/extension-feishu --filter @agw/extension-taskpilot
         --workspace-concurrency=1 run build
 
-    - name: build
-      run: |
-        dotnet test ./Agw.slnx -c Release --no-restore
+    - name: Run solution tests
+      run: dotnet test ./Agw.slnx -c Release --no-restore
 
-    - name: Build Docker image
-      run: docker build --tag agw:ci .
+  docker:
+    name: Build Docker image
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build --tag agw:ci .
 
   windows:
     name: Windows file systems
@@ -193,3 +217,15 @@ jobs:
           -failSkips
       - name: Require actual PostgreSQL test execution
         run: python3 .github/scripts/verify-postgres-tests.py TestResults/Postgres
+
+  test:
+    needs: [changes, boundaries, server, windows, postgres, docker, web, desktop]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check selected job results
+        env:
+          JOBS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key) = \(.value.result)"' <<< "$JOBS"
+          jq -e '.changes.result == "success" and all(.[]; .result == "success" or .result == "skipped")' <<< "$JOBS"

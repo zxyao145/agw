@@ -1,77 +1,61 @@
 name: Web Build
 
 on:
-  pull_request:
-    paths:
-      - "src/clients/web/**"
-      - "src/clients/packages/**"
-      - "src/server/Agw.Files/**"
-      - "src/server/Agw.Projects/**"
-      - "src/extensions/**"
-      - "src/package.json"
-      - "src/pnpm-workspace.yaml"
-      - "src/pnpm-lock.yaml"
-      - "src/turbo.json"
-      - ".github/workflows/build-web.yml"
-  push:
-    branches: ["main"]
-    paths:
-      - "src/clients/web/**"
-      - "src/clients/packages/**"
-      - "src/server/Agw.Files/**"
-      - "src/server/Agw.Projects/**"
-      - "src/extensions/**"
-      - "src/package.json"
-      - "src/pnpm-workspace.yaml"
-      - "src/pnpm-lock.yaml"
-      - "src/turbo.json"
-      - ".github/workflows/web.yml"
+  workflow_call:
+    inputs:
+      package-checks:
+        description: Run Web package checks, component tests and the production build
+        type: boolean
+        default: true
+
+defaults:
+  run:
+    working-directory: src
 
 jobs:
-  test:
-    name: test
+  checks:
+    name: Package checks and production build
+    if: inputs.package-checks
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: src/clients
-
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          package_json_file: src/package.json
+      - uses: ./.github/actions/setup-pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec turbo run format:check lint --filter=@agw/web...
+      - run: pnpm exec turbo run test --filter=@agw/web... --concurrency=4
+      - run: pnpm exec turbo run build --filter=@agw/web...
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: src/pnpm-lock.yaml
-
+  browser:
+    name: Browser tests (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        suite: [components, agentflow, other-e2e]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-pnpm
+      - run: pnpm install --frozen-lockfile
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test:boundaries
       - run: pnpm --filter @agw/web exec playwright install --with-deps chromium
-      - run: pnpm exec turbo run format:check --filter=@agw/web...
-      - run: pnpm exec turbo run lint --filter=@agw/web...
-      - run: pnpm exec turbo run test --filter=@agw/web...
-      - run: pnpm --filter @agw/chat test:browser
-      - name: Build image test Server
-        run: dotnet build src/server/Agw.Standalone.Host
+      - name: Build Standalone Host
         working-directory: .
-      - run: pnpm --filter @agw/chat test:server-images
-      - run: pnpm --filter @agw/code-view test:browser
-      - run: pnpm --filter @agw/projects test:browser
-      - run: pnpm --filter @agw/web test:e2e
-      - run: pnpm --filter @agw/web test:e2e:export
-      - run: pnpm exec turbo run build --filter=@agw/web...
-
-      # - uses: actions/upload-artifact@v4
-      #   if: failure()
-      #   with:
-      #     name: playwright-results
-      #     path: src/clients/web/test-results
-      #     if-no-files-found: ignore
-      #     retention-days: 7
+        run: dotnet build src/server/Agw.Standalone.Host
+      - name: Test browser components
+        if: matrix.suite == 'components' && inputs.package-checks
+        run: |
+          pnpm --filter @agw/chat test:browser
+          pnpm --filter @agw/code-view test:browser
+          pnpm --filter @agw/projects test:browser
+      - name: Test Server images and static export
+        if: matrix.suite == 'components'
+        run: |
+          pnpm --filter @agw/chat test:server-images
+          pnpm --filter @agw/web test:e2e:export
+      - name: Test Web end to end
+        if: matrix.suite != 'components'
+        run: >-
+          pnpm --filter @agw/web test:e2e
+          ${{ matrix.suite == 'agentflow' && '--grep' || '--grep-invert' }}
+          'agentflow-.*\.spec\.ts'
